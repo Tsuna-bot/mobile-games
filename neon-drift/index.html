@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07021a">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Neon Drift — un jeu d'arcade 3D néon à jouer d'une main : glisse, esquive, frôle.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Neon Drift">
+  <meta name="format-detection" content="telephone=no">
+  <title>Neon Drift</title>
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Inter:wght@400;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+      }
+    }
+  </script>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.core.js" crossorigin>
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <main id="app">
+    <canvas id="scene" aria-label="Neon Drift, scène 3D du jeu"></canvas>
+    <div id="vignette" aria-hidden="true"></div>
+    <div id="flash" aria-hidden="true"></div>
+    <div id="touch-surface" aria-hidden="true"></div>
+
+    <div id="hud" class="hud">
+      <div class="hud__score">
+        <span id="hud-score" class="hud__value">0</span>
+        <span id="hud-combo" class="hud__combo">x2</span>
+      </div>
+      <button id="btn-pause" class="icon-btn hud__pause" type="button" aria-label="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+      </button>
+    </div>
+
+    <div id="popups" class="popups" aria-live="polite"></div>
+
+    <div id="tutorial" class="tutorial" aria-hidden="true">
+      <div class="tutorial__track"><span class="tutorial__thumb"></span></div>
+      <p>Glisse pour piloter</p>
+    </div>
+
+    <section id="screen-menu" class="screen screen--menu" aria-labelledby="title">
+      <div class="brand">
+        <p class="brand__kicker">Arcade · une main</p>
+        <h1 id="title" class="brand__title">Neon<span>Drift</span></h1>
+        <p class="brand__tagline">Esquive. Frôle. Accélère.</p>
+      </div>
+      <div class="panel">
+        <p class="best">Record <strong id="menu-best">0</strong></p>
+        <button id="btn-play" class="btn btn--primary" type="button">Jouer</button>
+        <ul class="howto">
+          <li><span class="howto__icon">↔</span>Glisse ton pouce n'importe où pour piloter</li>
+          <li><span class="howto__icon howto__icon--shard">◆</span>Ramasse les cristaux pour le combo</li>
+          <li><span class="howto__icon howto__icon--near">✦</span>Frôle les blocs pour des bonus</li>
+        </ul>
+      </div>
+      <div class="settings" role="group" aria-label="Réglages">
+        <button class="chip" type="button" data-setting="sound" aria-pressed="true">Son <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="haptics" aria-pressed="true">Vibrations <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+      </div>
+    </section>
+
+    <section id="screen-pause" class="screen" aria-labelledby="pause-title">
+      <h2 id="pause-title" class="screen__title">Pause</h2>
+      <div class="panel">
+        <button id="btn-resume" class="btn btn--primary" type="button">Reprendre</button>
+        <button id="btn-restart" class="btn" type="button">Recommencer</button>
+        <button id="btn-quit" class="btn btn--ghost" type="button">Menu</button>
+      </div>
+      <div class="settings" role="group" aria-label="Réglages">
+        <button class="chip" type="button" data-setting="sound" aria-pressed="true">Son <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="haptics" aria-pressed="true">Vibrations <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+      </div>
+    </section>
+
+    <section id="screen-over" class="screen" aria-labelledby="over-title">
+      <p id="over-title" class="screen__kicker">Crash</p>
+      <p id="over-score" class="over__score">0</p>
+      <p id="over-record" class="over__record">Nouveau record !</p>
+      <dl class="stats">
+        <div><dt>Record</dt><dd id="over-best">0</dd></div>
+        <div><dt>Distance</dt><dd id="over-distance">0 m</dd></div>
+        <div><dt>Cristaux</dt><dd id="over-shards">0</dd></div>
+        <div><dt>Frôlés</dt><dd id="over-near">0</dd></div>
+      </dl>
+      <div class="panel panel--row">
+        <button id="btn-menu" class="btn btn--ghost" type="button">Menu</button>
+        <button id="btn-retry" class="btn btn--primary" type="button">Rejouer</button>
+      </div>
+    </section>
+
+    <div id="loading" class="overlay is-visible" role="status">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Chargement…</p>
+    </div>
+
+    <div id="context-lost" class="overlay" role="alert">
+      <p>Restauration des graphismes…</p>
+    </div>
+
+    <div id="fatal" class="overlay" role="alert">
+      <p class="overlay__title">Oups</p>
+      <p id="fatal-message">Le jeu n'a pas pu se charger.</p>
+      <button class="btn btn--primary" type="button" onclick="location.reload()">Réessayer</button>
+    </div>
+  </main>
+
+  <script>
+    // Module loading failures (offline on first visit, blocked CDN, very old browser)
+    // cannot be caught from inside the module graph: show a friendly message instead.
+    setTimeout(function () {
+      if (window.__neonDriftBooted) return;
+      document.getElementById('loading').classList.remove('is-visible');
+      document.getElementById('fatal-message').textContent =
+        "Le jeu n'a pas pu se charger. Vérifie ta connexion ou utilise un navigateur récent.";
+      document.getElementById('fatal').classList.add('is-visible');
+    }, 15000);
+  </script>
+</body>
+</html>
