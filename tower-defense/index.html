@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1b2140">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Bastion — tower defense 3D pour mobile : construis, améliore et défends ton château contre l'invasion d'ovnis.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bastion">
+  <meta name="format-detection" content="telephone=no">
+  <title>Bastion</title>
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+      }
+    }
+  </script>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.core.js" crossorigin>
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <main id="app">
+    <canvas id="scene" aria-label="Bastion, carte 3D du jeu"></canvas>
+    <div id="damage-vignette" aria-hidden="true"></div>
+
+    <header id="hud" class="hud">
+      <div class="hud__stats">
+        <div class="stat stat--lives" id="stat-lives" title="Vies du château">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.5.7-1.3 2.2-2.5 4.3-2.5 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>
+          <span id="hud-lives">20</span>
+        </div>
+        <div class="stat stat--gold" id="stat-gold" title="Or">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="coin-mark" d="M12 7.5v9M9.5 9.8c0-1.2 1.1-2 2.5-2s2.5.8 2.5 1.9c0 2.6-5 1.6-5 4.3 0 1.1 1.1 1.9 2.5 1.9s2.5-.8 2.5-2"/></svg>
+          <span id="hud-gold">0</span>
+        </div>
+      </div>
+      <div class="hud__wave">
+        <span>Vague</span>
+        <strong id="hud-wave">0/10</strong>
+      </div>
+      <div class="hud__actions">
+        <button id="btn-speed" class="round-btn" type="button" aria-label="Vitesse de jeu">x1</button>
+        <button id="btn-pause" class="round-btn" type="button" aria-label="Pause">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <footer id="dock" class="dock">
+      <button id="btn-wave" class="wave-btn" type="button">
+        <span class="wave-btn__progress" id="wave-progress"></span>
+        <span class="wave-btn__text">
+          <span class="wave-btn__title" id="wave-title">Lancer la vague 1</span>
+          <span class="wave-btn__meta" id="wave-meta"></span>
+        </span>
+        <span class="wave-btn__preview" id="wave-preview"></span>
+      </button>
+    </footer>
+
+    <section id="sheet-build" class="sheet" aria-labelledby="build-title">
+      <div class="sheet__head">
+        <h2 id="build-title">Construire</h2>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <div class="build-grid" id="build-grid"></div>
+      <p class="sheet__hint" id="build-hint">Touche une tour pour voir sa portée, puis touche-la encore pour construire.</p>
+    </section>
+
+    <section id="sheet-tower" class="sheet" aria-labelledby="tower-name">
+      <div class="sheet__head">
+        <div class="tower-id">
+          <img id="tower-image" alt="" width="64" height="64">
+          <div>
+            <h2 id="tower-name">Baliste</h2>
+            <div class="pips" id="tower-level" aria-label="Niveau"></div>
+          </div>
+        </div>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <dl class="tower-stats" id="tower-stats"></dl>
+      <div class="segmented" id="tower-targeting" role="group" aria-label="Cible prioritaire"></div>
+      <div class="sheet__actions">
+        <button id="btn-sell" class="btn btn--ghost" type="button">Vendre</button>
+        <button id="btn-upgrade" class="btn btn--gold" type="button">Améliorer</button>
+      </div>
+    </section>
+
+    <div id="banner" class="banner" aria-live="polite"></div>
+    <div id="floaters" class="floaters" aria-hidden="true"></div>
+    <div id="coach" class="coach" role="status"></div>
+
+    <section id="screen-menu" class="screen screen--menu" aria-labelledby="title">
+      <div class="brand">
+        <p class="brand__kicker">Tower defense</p>
+        <h1 id="title" class="brand__title">Bastion</h1>
+        <p class="brand__tagline">Les ovnis débarquent. Ton château doit tenir.</p>
+      </div>
+      <div class="levels" id="levels"></div>
+      <div class="settings" role="group" aria-label="Réglages">
+        <button class="chip" type="button" data-setting="sound">Sons <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="music">Musique <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+      </div>
+      <p class="credits">Modèles 3D : Tower Defense Kit de Kenney (CC0)</p>
+    </section>
+
+    <section id="screen-pause" class="screen" aria-labelledby="pause-title">
+      <h2 id="pause-title" class="screen__title">Pause</h2>
+      <div class="panel">
+        <button id="btn-resume" class="btn btn--primary" type="button">Reprendre</button>
+        <button id="btn-restart" class="btn" type="button">Recommencer</button>
+        <button id="btn-quit" class="btn btn--ghost" type="button">Menu</button>
+      </div>
+      <div class="settings" role="group" aria-label="Réglages">
+        <button class="chip" type="button" data-setting="sound">Sons <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="music">Musique <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+      </div>
+    </section>
+
+    <section id="screen-end" class="screen" aria-labelledby="end-title">
+      <p class="screen__kicker" id="end-kicker">Prairie</p>
+      <h2 id="end-title" class="screen__title">Victoire !</h2>
+      <div class="end-stars" id="end-stars"></div>
+      <dl class="end-stats" id="end-stats"></dl>
+      <div class="panel">
+        <button id="btn-next" class="btn btn--primary" type="button">Niveau suivant</button>
+        <button id="btn-retry" class="btn" type="button">Rejouer</button>
+        <button id="btn-menu" class="btn btn--ghost" type="button">Menu</button>
+      </div>
+    </section>
+
+    <div id="loading" class="overlay is-visible" role="status">
+      <p class="overlay__brand">Bastion</p>
+      <div class="progress"><span id="loading-bar"></span></div>
+      <p id="loading-text">Chargement des modèles 3D…</p>
+    </div>
+
+    <div id="context-lost" class="overlay overlay--dim" role="alert">
+      <p>Restauration des graphismes…</p>
+    </div>
+
+    <div id="fatal" class="overlay" role="alert">
+      <p class="overlay__brand">Oups</p>
+      <p id="fatal-message">Le jeu n'a pas pu se charger.</p>
+      <button id="btn-reload" class="btn btn--primary" type="button">Réessayer</button>
+    </div>
+  </main>
+
+  <script>
+    // Import failures (offline first visit, blocked CDN, old browser) cannot be
+    // caught inside the module graph: show a readable message instead.
+    document.getElementById('btn-reload').addEventListener('click', function () { location.reload(); });
+    setTimeout(function () {
+      if (window.__bastionBooted) return;
+      document.getElementById('loading').classList.remove('is-visible');
+      document.getElementById('fatal-message').textContent =
+        "Le jeu n'a pas pu se charger. Vérifie ta connexion ou utilise un navigateur récent.";
+      document.getElementById('fatal').classList.add('is-visible');
+    }, 20000);
+  </script>
+</body>
+</html>

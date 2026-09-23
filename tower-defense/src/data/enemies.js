@@ -1,0 +1,50 @@
+// Enemy catalogue. Speeds in tiles per second, hp before wave scaling.
+
+export const ENEMIES = {
+  scout: {
+    id: 'scout',
+    name: 'Éclaireur',
+    model: 'enemy-ufo-a',
+    hp: 70,
+    speed: 1.1,
+    armor: 0,
+    reward: 6,
+    leak: 1,
+    scale: 1,
+  },
+  runner: {
+    id: 'runner',
+    name: 'Rapide',
+    model: 'enemy-ufo-b',
+    hp: 45,
+    speed: 2.0,
+    armor: 0,
+    reward: 5,
+    leak: 1,
+    scale: 0.85,
+  },
+  tank: {
+    id: 'tank',
+    name: 'Blindé',
+    model: 'enemy-ufo-c',
+    hp: 210,
+    speed: 0.75,
+    armor: 6,
+    reward: 14,
+    leak: 2,
+    scale: 1.15,
+  },
+  boss: {
+    id: 'boss',
+    name: 'Vaisseau-mère',
+    model: 'enemy-ufo-d',
+    hp: 950,
+    speed: 0.55,
+    armor: 10,
+    reward: 110,
+    leak: 5,
+    scale: 1.7,
+    // On death, releases these at its position.
+    spawnsOnDeath: { type: 'runner', count: 4 },
+  },
+};
