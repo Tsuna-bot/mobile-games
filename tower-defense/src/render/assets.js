@@ -38,9 +38,14 @@ export class Assets {
   async load(onProgress) {
     const names = modelList();
     const loader = new GLTFLoader();
+    // Optional single-file bundle ({ name: base64 GLB }) for hosts that cannot serve .glb files.
+    const bundleUrl = window.BASTION_MODEL_BUNDLE;
+    const bundle = bundleUrl ? await (await fetch(bundleUrl)).json() : null;
     let loaded = 0;
     await Promise.all(names.map(async (name) => {
-      const gltf = await loader.loadAsync(`${BASE_URL}${name}.glb`);
+      const gltf = bundle
+        ? await loader.parseAsync(Uint8Array.from(atob(bundle[name]), (c) => c.charCodeAt(0)).buffer, BASE_URL)
+        : await loader.loadAsync(`${BASE_URL}${name}.glb`);
       this.register(name, gltf.scene);
       onProgress?.(++loaded / names.length);
     }));
