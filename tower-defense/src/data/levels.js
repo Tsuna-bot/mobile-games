@@ -2,13 +2,14 @@
 //   .  grass, buildable        #  path
 //   S  enemy spawn (path start) B  your castle (path end)
 //   T  trees   R  rocks   C  crystals   H  hill   (decoration, not buildable)
+// `theme` picks the look (see themes.js): sky, light, water, ambient particles.
 
 export const LEVELS = [
   {
     id: 'meadow',
     name: 'Prairie',
     subtitle: 'Les premiers ovnis arrivent.',
-    theme: 'grass',
+    theme: 'meadow',
     waves: 10,
     startGold: 220,
     hpScale: 1,
@@ -50,13 +51,36 @@ export const LEVELS = [
     ],
   },
   {
+    id: 'dusk',
+    name: 'Forêt du crépuscule',
+    subtitle: 'Chemin court : chaque tour compte.',
+    theme: 'dusk',
+    waves: 12,
+    startGold: 260,
+    hpScale: 1.1,
+    map: [
+      '.T...S.',
+      'T....#.',
+      '.#####.',
+      '.#..R.T',
+      '.#.....',
+      '.#####.',
+      'T....#.',
+      '..C..#T',
+      '...###.',
+      'R..#...',
+      '.###.T.',
+      '.B..T.R',
+    ],
+  },
+  {
     id: 'canyon',
     name: 'Canyon cristallin',
     subtitle: 'Long, sinueux et sans pitié.',
-    theme: 'grass',
+    theme: 'crystal',
     waves: 15,
     startGold: 280,
-    hpScale: 1.45,
+    hpScale: 1.65,
     map: [
       'S..T...R',
       '#.#####.',
@@ -73,4 +97,54 @@ export const LEVELS = [
       '.B..T..R',
     ],
   },
+  {
+    id: 'citadel',
+    name: 'Citadelle nocturne',
+    subtitle: "L'assaut final, sous la lune.",
+    theme: 'night',
+    waves: 18,
+    startGold: 300,
+    hpScale: 1.55,
+    map: [
+      'TS..T..R',
+      '.#....C.',
+      '.######.',
+      'R.T...#.',
+      '.######.',
+      '.#..T..C',
+      '.######.',
+      'T.R...#.',
+      '.######.',
+      '.#...R.T',
+      '.######.',
+      'C..T..#.',
+      'T.R...B.',
+    ],
+  },
 ];
+
+/** Endless mode: unlocked after the third level, waves never stop. */
+export const SURVIVAL = {
+  id: 'survival',
+  name: 'Survie',
+  subtitle: 'Vagues infinies. Jusqu’où tiendras-tu ?',
+  theme: 'crystal',
+  endless: true,
+  waves: Infinity,
+  startGold: 320,
+  hpScale: 1.6,
+  unlockAfter: 2,
+  map: [
+    'T..R..S.',
+    '.C....#T',
+    '.######.',
+    '.#..T...',
+    '.#..###.',
+    '.#..#.#.',
+    '.####.#.',
+    'T.R...#.',
+    '.######.',
+    '.#..C..T',
+    'RB..T...',
+  ],
+};

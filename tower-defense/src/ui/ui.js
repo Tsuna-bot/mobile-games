@@ -1,14 +1,20 @@
 import { ENEMIES } from '../data/enemies.js';
+import { PERKS } from '../data/perks.js';
+import { SPELLS, SPELL_ORDER } from '../data/spells.js';
 import { TARGETING, TARGETING_LABELS, TOWERS, TOWER_ORDER } from '../data/towers.js';
 
 const QUALITY_LABELS = { auto: 'Auto', high: 'Haute', medium: 'Moyenne', low: 'Basse' };
 const STAR_PATH = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const FLOATER_POOL = 14;
+const COIN_POOL = 24;
 const number = new Intl.NumberFormat('fr-FR');
 
 const MAP_COLORS = {
-  grass: { '.': '#5ad07a', T: '#2f8a4a', R: '#8e8aa8', C: '#b47cf0', H: '#49b068', '#': '#e8935a', S: '#8a6cff', B: '#ff5d5d' },
+  meadow: { '.': '#5ad07a', T: '#2f8a4a', R: '#8e8aa8', C: '#b47cf0', H: '#49b068', '#': '#e8935a', S: '#8a6cff', B: '#ff5d5d' },
   snow: { '.': '#e9f1f8', T: '#8fb2c9', R: '#9aa3b8', C: '#b47cf0', H: '#d3e2ee', '#': '#b9d7ee', S: '#8a6cff', B: '#ff5d5d' },
+  dusk: { '.': '#6fb85a', T: '#3c6b3a', R: '#8e7a98', C: '#c07cf0', H: '#5a9a4a', '#': '#ff9e6b', S: '#8a6cff', B: '#ff5d5d' },
+  crystal: { '.': '#5ad0a0', T: '#2f8a6a', R: '#8e8aa8', C: '#d08cff', H: '#49b088', '#': '#c9a0ff', S: '#8a6cff', B: '#ff5d5d' },
+  night: { '.': '#3f7a6a', T: '#244a44', R: '#5a5a78', C: '#9f7cff', H: '#35685a', '#': '#6d7fbf', S: '#b58cff', B: '#ff7d7d' },
 };
 
 function starSvg(on) {
@@ -24,7 +30,7 @@ export class UI {
   constructor(doc = document) {
     const $ = (id) => doc.getElementById(id);
     this.$ = $;
-    this.screens = { menu: $('screen-menu'), pause: $('screen-pause'), end: $('screen-end') };
+    this.screens = { menu: $('screen-menu'), pause: $('screen-pause'), end: $('screen-end'), perks: $('screen-perks') };
     this.hud = $('hud');
     this.dock = $('dock');
     this.lives = $('hud-lives');
@@ -58,7 +64,35 @@ export class UI {
     });
     this.floaterCursor = 0;
 
-    for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell']) {
+    this.coins = Array.from({ length: COIN_POOL }, () => {
+      const el = doc.createElement('div');
+      el.className = 'coin';
+      el.addEventListener('transitionend', (event) => {
+        if (event.propertyName !== 'transform') return;
+        el.classList.remove('is-flying');
+        el.style.transform = '';
+        this.restartAnimation(this.statGold, 'bump');
+      });
+      $('coins').append(el);
+      return el;
+    });
+    this.coinCursor = 0;
+
+    this.spellButtons = {};
+    for (const button of doc.querySelectorAll('[data-spell]')) {
+      const id = button.dataset.spell;
+      this.spellButtons[id] = {
+        button,
+        cooldown: button.querySelector('.spell__cooldown'),
+        time: button.querySelector('.spell__time'),
+        shown: '',
+      };
+      button.addEventListener('click', () => this.handlers.spell?.(id));
+    }
+    this.spellHint = $('spell-hint');
+    this.screenFlash = $('screen-flash');
+
+    for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -113,33 +147,83 @@ export class UI {
     if (!visible) this.closeSheets();
   }
 
-  renderLevels(levels, save, onSelect) {
+  /**
+   * @param entries [{ def, unlocked, stars, crown, heroicAvailable, lockText, info }]
+   */
+  renderLevels(entries, onSelect) {
     const container = this.$('levels');
     container.replaceChildren();
-    levels.forEach((level, index) => {
-      const record = save.levels[level.id];
-      const unlocked = index === 0 || (save.levels[levels[index - 1].id]?.stars ?? 0) > 0;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'level-card';
-      button.disabled = !unlocked;
-      const stars = [1, 2, 3].map((n) => starSvg((record?.stars ?? 0) >= n)).join('');
-      button.innerHTML = `
-        <canvas width="${level.map[0].length}" height="${level.map.length}"></canvas>
+    entries.forEach((entry, index) => {
+      const { def } = entry;
+      const card = document.createElement('div');
+      card.className = `level-card${def.endless ? ' level-card--survival' : ''}`;
+      const play = document.createElement('button');
+      play.type = 'button';
+      play.className = 'level-card__play';
+      play.disabled = !entry.unlocked;
+      const stars = `<span class="stars" aria-label="${entry.stars} étoiles sur 3">${[1, 2, 3].map((n) => starSvg(entry.stars >= n)).join('')}</span>`;
+      play.innerHTML = `
+        <canvas width="${def.map[0].length}" height="${def.map.length}"></canvas>
         <span>
-          <span class="level-card__name">${index + 1}. ${level.name}</span>
-          <span class="level-card__info">${unlocked ? `${level.waves} vagues · ${level.subtitle}` : `${level.waves} vagues · termine le niveau ${index} pour débloquer`}</span>
+          <span class="level-card__name">${def.endless ? '∞' : index + 1}. ${def.name}</span>
+          <span class="level-card__info">${entry.unlocked ? entry.info : entry.lockText}</span>
         </span>
-        ${unlocked ? `<span class="stars" aria-label="${record?.stars ?? 0} étoiles sur 3">${stars}</span>` : '<span class="level-card__lock" aria-label="Verrouillé">🔒</span>'}`;
-      this.drawMinimap(button.querySelector('canvas'), level);
-      button.addEventListener('click', () => onSelect(index));
-      container.append(button);
+        ${entry.unlocked ? stars : '<span class="level-card__lock" aria-label="Verrouillé">🔒</span>'}`;
+      this.drawMinimap(play.querySelector('canvas'), def);
+      play.addEventListener('click', () => onSelect(entry, false));
+      card.append(play);
+      if (entry.heroicAvailable) {
+        const heroic = document.createElement('button');
+        heroic.type = 'button';
+        heroic.className = `level-card__heroic${entry.crown ? ' is-done' : ''}`;
+        heroic.textContent = entry.crown ? '👑 Héroïque réussi' : '👑 Héroïque';
+        heroic.setAttribute('aria-label', `Mode héroïque : ${def.name}`);
+        heroic.addEventListener('click', () => onSelect(entry, true));
+        card.append(heroic);
+      }
+      container.append(card);
     });
+  }
+
+  setStarTotal(available, total, canBuy) {
+    this.$('star-count').textContent = String(available);
+    this.$('star-total').title = `${available} étoile(s) à dépenser, ${total} gagnée(s) au total`;
+    this.$('perks-badge').hidden = !canBuy;
+  }
+
+  renderPerks(ranks, available, onBuy) {
+    this.$('perks-stars').textContent = available;
+    this.$('perks-stars-label').textContent = available > 1 ? 'étoiles disponibles' : 'étoile disponible';
+    const list = this.$('perks');
+    list.replaceChildren();
+    for (const perk of PERKS) {
+      const rank = ranks[perk.id] ?? 0;
+      const maxed = rank >= perk.costs.length;
+      const cost = maxed ? 0 : perk.costs[rank];
+      const row = document.createElement('div');
+      row.className = 'perk';
+      row.innerHTML = `
+        <span class="perk__icon" aria-hidden="true">${perk.icon}</span>
+        <span>
+          <span class="perk__name">${perk.name}</span>
+          <span class="perk__effect">${rank > 0 ? perk.effect(rank) : 'Pas encore acheté'}${maxed ? '' : ` → ${perk.effect(rank + 1)}`}</span>
+          <span class="pips">${perk.costs.map((_, i) => `<i class="${i < rank ? 'on' : ''}"></i>`).join('')}</span>
+        </span>`;
+      const buy = document.createElement('button');
+      buy.type = 'button';
+      buy.className = 'btn btn--gold perk__buy';
+      buy.disabled = maxed || available < cost;
+      buy.textContent = maxed ? 'Max' : `${cost} ★`;
+      buy.setAttribute('aria-label', maxed ? `${perk.name} : niveau maximum` : `Acheter ${perk.name} pour ${cost} étoiles`);
+      buy.addEventListener('click', () => onBuy(perk.id));
+      row.append(buy);
+      list.append(row);
+    }
   }
 
   drawMinimap(canvas, level) {
     const ctx = canvas.getContext('2d');
-    const colors = MAP_COLORS[level.theme] ?? MAP_COLORS.grass;
+    const colors = MAP_COLORS[level.theme] ?? MAP_COLORS.meadow;
     level.map.forEach((row, r) => {
       [...row].forEach((char, c) => {
         ctx.fillStyle = colors[char] ?? colors['.'];
@@ -148,9 +232,10 @@ export class UI {
     });
   }
 
-  showEnd({ victory, levelName, stars, stats, hasNext }) {
+  showEnd({ victory, title, levelName, stars, stats, hasNext, reward }) {
     this.$('end-kicker').textContent = levelName;
-    this.$('end-title').textContent = victory ? 'Victoire !' : 'Défaite…';
+    this.$('end-title').textContent = title ?? (victory ? 'Victoire !' : 'Défaite…');
+    this.$('end-reward').textContent = reward ?? '';
     const starsEl = this.$('end-stars');
     starsEl.hidden = !victory;
     starsEl.innerHTML = [1, 2, 3].map((n) => starSvg(stars >= n)).join('');
@@ -167,6 +252,7 @@ export class UI {
   // ------------------------------------------------------------ HUD
 
   setStats(lives, gold, waveNumber, waveTotal) {
+    if (waveTotal === Infinity) waveTotal = '∞';
     if (lives !== this.shown.lives) {
       if (lives < this.shown.lives) this.restartAnimation(this.statLives, 'hurt');
       this.shown.lives = lives;
@@ -308,6 +394,55 @@ export class UI {
     sell.classList.toggle('btn--danger', confirmSell);
     sell.classList.toggle('btn--ghost', !confirmSell);
     sell.innerHTML = confirmSell ? `Confirmer <span class="gold-inline">+${tower.sellValue}</span>` : `Vendre <span class="gold-inline">+${tower.sellValue}</span>`;
+  }
+
+  /** @param charges { id: 0..1 }, remaining { id: seconds }, armed id|null, enabled */
+  setSpells(charges, remaining, armed, enabled) {
+    for (const id of SPELL_ORDER) {
+      const ui = this.spellButtons[id];
+      const ready = charges[id] >= 1;
+      const seconds = ready ? '' : String(Math.ceil(remaining[id]));
+      const key = `${ready}|${seconds}|${armed === id}|${enabled}|${Math.round(charges[id] * 60)}`;
+      if (key === ui.shown) continue;
+      ui.shown = key;
+      ui.cooldown.style.setProperty('--remaining', String(1 - charges[id]));
+      ui.time.textContent = seconds;
+      ui.button.classList.toggle('is-ready', ready && enabled);
+      ui.button.classList.toggle('is-armed', armed === id);
+      ui.button.disabled = !enabled;
+    }
+  }
+
+  showSpellHint(id) {
+    const spell = SPELLS[id];
+    this.$('spell-hint-text').innerHTML = spell ? `Touche la carte : <b>${spell.name}</b>` : '';
+    this.spellHint.classList.toggle('is-visible', Boolean(spell));
+  }
+
+  flash(variant = '') {
+    this.screenFlash.dataset.variant = variant;
+    this.restartAnimation(this.screenFlash, 'is-playing');
+  }
+
+  /** Coins fly from a screen point to the gold counter. */
+  flyCoins(x, y, count) {
+    const target = this.statGold.getBoundingClientRect();
+    const tx = target.left + 16;
+    const ty = target.top + target.height / 2;
+    for (let i = 0; i < count; i++) {
+      const el = this.coins[this.coinCursor];
+      this.coinCursor = (this.coinCursor + 1) % this.coins.length;
+      const sx = x + (Math.random() - 0.5) * 30;
+      const sy = y + (Math.random() - 0.5) * 20;
+      el.classList.remove('is-flying');
+      el.style.transitionDelay = `${i * 0.05}s`;
+      el.style.left = `${sx}px`;
+      el.style.top = `${sy}px`;
+      el.style.transform = 'translate(0, 0) scale(1)';
+      void el.offsetWidth;
+      el.classList.add('is-flying');
+      el.style.transform = `translate(${tx - sx}px, ${ty - sy}px) scale(0.7)`;
+    }
   }
 
   closeSheets() {

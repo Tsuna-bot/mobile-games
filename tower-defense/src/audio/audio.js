@@ -277,6 +277,41 @@ export class AudioEngine {
     [7, 3, 0, -5].forEach((step, i) => this.tone({ type: 'triangle', freq: midi(62 + step), start: t + i * 0.22, duration: 0.5, gain: 0.12 }));
   }
 
+  meteorFall() {
+    const t = this.gate('meteor');
+    if (t === null) return;
+    this.noise({ start: t, duration: 0.8, gain: 0.25, filter: 'bandpass', freq: 2400, freqEnd: 300, q: 1.5 });
+    this.tone({ type: 'sawtooth', freq: 900, freqEnd: 120, start: t, duration: 0.75, gain: 0.05 });
+  }
+
+  meteorImpact() {
+    const t = this.gate('meteorImpact');
+    if (t === null) return;
+    this.tone({ type: 'sine', freq: 70, freqEnd: 25, start: t, duration: 1.1, gain: 0.7, attack: 0.003 });
+    this.noise({ start: t + 0.05, duration: 1.3, gain: 0.35, filter: 'lowpass', freq: 900, freqEnd: 80 });
+  }
+
+  blizzard() {
+    const t = this.gate('blizzard');
+    if (t === null) return;
+    this.noise({ start: t, duration: 1.2, gain: 0.25, filter: 'highpass', freq: 3000, freqEnd: 8000 });
+    [0, 3, 7, 12, 15].forEach((step, i) => this.tone({ type: 'sine', freq: midi(84 + step), start: t + i * 0.04, duration: 0.8, gain: 0.05, attack: 0.005 }));
+  }
+
+  lightning() {
+    const t = this.gate('lightning');
+    if (t === null) return;
+    this.noise({ start: t, duration: 0.12, gain: 0.5, filter: 'highpass', freq: 1500 });
+    this.noise({ start: t + 0.08, duration: 1.2, gain: 0.4, filter: 'lowpass', freq: 600, freqEnd: 60 });
+    this.tone({ type: 'square', freq: 1800, freqEnd: 200, start: t, duration: 0.15, gain: 0.06 });
+  }
+
+  combo(count) {
+    const t = this.gate('combo');
+    if (t === null) return;
+    [0, 4, 7, 12].slice(0, Math.min(4, count - 1)).forEach((step, i) => this.tone({ type: 'triangle', freq: midi(79 + step), start: t + i * 0.05, duration: 0.2, gain: 0.08 }));
+  }
+
   click() {
     const t = this.gate('click');
     if (t === null) return;

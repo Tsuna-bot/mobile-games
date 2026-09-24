@@ -8,12 +8,15 @@ const MODELS = {
 };
 
 const SCALE = { arrow: 0.7, cannonball: 0.8, bullet: 0.55, boulder: 1.1 };
+// Trail particles emitted per second of flight.
+const TRAIL_RATE = { arrow: 40, cannonball: 45, bullet: 30, boulder: 40 };
 
 /** Pooled projectile meshes following the simulated projectiles. */
 export class ProjectileViews {
-  constructor(scene, assets) {
+  constructor(scene, assets, effects) {
     this.scene = scene;
     this.assets = assets;
+    this.effects = effects;
     this.pools = new Map();
     this.active = new Set();
     this.lookTarget = new THREE.Vector3();
@@ -25,11 +28,12 @@ export class ProjectileViews {
     if (!pool) this.pools.set(kind, (pool = []));
     let view = pool.pop();
     if (!view) {
-      view = { kind, object: this.assets.clone(MODELS[kind]), projectile: null };
+      view = { kind, object: this.assets.clone(MODELS[kind]), projectile: null, trail: 0 };
       view.object.scale.setScalar(SCALE[kind]);
       view.object.traverse((o) => { o.castShadow = kind === 'boulder' || kind === 'cannonball'; });
     }
     view.projectile = projectile;
+    view.trail = 0;
     view.object.position.set(projectile.x, projectile.y, projectile.z);
     this.scene.add(view.object);
     projectile.view = view;
@@ -50,6 +54,11 @@ export class ProjectileViews {
     for (const view of this.active) {
       const p = view.projectile;
       view.object.position.set(p.x, p.y, p.z);
+      view.trail += dt * TRAIL_RATE[p.kind] * this.effects.scale;
+      while (view.trail >= 1) {
+        view.trail -= 1;
+        this.effects.trail(p.kind, p.x, p.y, p.z);
+      }
       if (p.kind === 'boulder' || p.kind === 'cannonball') {
         view.object.rotation.x += dt * 9;
         view.object.rotation.y += dt * 5;

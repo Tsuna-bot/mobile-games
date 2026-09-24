@@ -14,6 +14,10 @@ export const CONFIG = {
     earlyCallBonusPerSecond: 1,
     waveClearBonusBase: 15,
     waveClearBonusPerWave: 3,
+    // Extra gold (plus the wave number) when no enemy got through.
+    perfectWaveBonus: 8,
+    // Gold per kill beyond the second when several enemies die at once.
+    multiKillBonus: 3,
   },
 
   waves: {
@@ -29,9 +33,9 @@ export const CONFIG = {
   },
 
   stars: {
-    // Remaining lives needed for 3 and 2 stars.
-    three: 18,
-    two: 10,
+    // Lives lost allowed for 3 and 2 stars.
+    maxLostForThree: 2,
+    maxLostForTwo: 10,
   },
 
   world: {

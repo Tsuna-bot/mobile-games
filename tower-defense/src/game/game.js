@@ -1,26 +1,31 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { FixedLoop } from '../core/loop.js';
-import { QUALITY_SETTINGS, writeSave } from '../core/storage.js';
-import { LEVELS } from '../data/levels.js';
+import { QUALITY_SETTINGS, earnedStars, writeSave } from '../core/storage.js';
+import { LEVELS, SURVIVAL } from '../data/levels.js';
+import { PERKS, buildModifiers, spentStars } from '../data/perks.js';
+import { SPELLS, SPELL_ORDER } from '../data/spells.js';
 import { TOWERS } from '../data/towers.js';
 import { PointerInput } from '../input/pointer.js';
 import { CameraRig } from '../render/cameraRig.js';
 import { Effects } from '../render/effects.js';
 import { EnemyViews } from '../render/enemyViews.js';
 import { ProjectileViews } from '../render/projectileViews.js';
+import { SpellViews } from '../render/spellViews.js';
 import { TowerViews } from '../render/towerViews.js';
 import { FrameRateMonitor, detectInitialQuality, lowerQuality } from '../render/view.js';
 import { World } from '../render/world.js';
 import { Level } from '../sim/level.js';
 import { SIM_STATE, Simulation } from '../sim/simulation.js';
 
-const MODE = Object.freeze({ MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', ENDED: 'ended' });
+const MODE = Object.freeze({ MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', ENDED: 'ended', PERKS: 'perks' });
 const END_SCREEN_DELAY = 1.6;
+const MULTI_KILL_WINDOW = 0.35;
+const SURVIVAL_STAR_EVERY = 10;
 const TUTORIAL = [
   "Touche une case d'herbe pour construire ta première tour.",
   'Bien joué ! Touche « Lancer la vague 1 » quand tu es prêt.',
-  "Touche une tour pour l'améliorer ou choisir sa cible.",
+  'Tes sorts se rechargent en bas à gauche : touche-en un, puis la carte.',
 ];
 
 /** Glue between the simulation, the 3D views, the UI, audio and input. */
@@ -35,10 +40,11 @@ export class Game {
 
     const scene = view.scene;
     this.world = new World(scene, assets);
+    this.effects = new Effects(scene, assets);
     this.towerViews = new TowerViews(scene, assets);
     this.enemyViews = new EnemyViews(scene, assets);
-    this.projectileViews = new ProjectileViews(scene, assets);
-    this.effects = new Effects(scene, assets);
+    this.projectileViews = new ProjectileViews(scene, assets, this.effects);
+    this.spellViews = new SpellViews(scene, assets, this.effects, view.camera);
     this.rig = new CameraRig(view.camera);
     this.input = new PointerInput(view.canvas);
     this.monitor = new FrameRateMonitor();
@@ -46,15 +52,20 @@ export class Game {
 
     this.mode = MODE.MENU;
     this.sim = null;
-    this.levelIndex = 0;
+    this.current = null; // { def, index, heroic }
     this.speed = 1;
     this.selection = null;
+    this.armedSpell = null;
     this.sheetGold = -1;
     this.renderTime = 0;
     this.endTimer = 0;
     this.tutorialStep = -1;
     this.tutorialTimer = 0;
     this.previewCache = new Map();
+    this.recentKills = [];
+    this.smokeTimer = 0;
+    this.spellCharges = {};
+    this.spellRemaining = {};
     this.tmp = new THREE.Vector3();
     this.resizeQueued = false;
 
@@ -81,6 +92,10 @@ export class Game {
     this.showMenu();
   }
 
+  get snowy() {
+    return this.current?.def.theme === 'snow';
+  }
+
   // ------------------------------------------------------------ simulation events
 
   createListener() {
@@ -91,9 +106,12 @@ export class Game {
         this.audio.setIntensity(1);
         if (this.tutorialStep === 1) this.advanceTutorial();
       },
-      onWaveCleared: (index, bonus) => {
-        this.ui.showBanner('Vague repoussée', `+${bonus} or`);
+      onWaveCleared: (index, bonus, perfect) => {
+        if (perfect) this.ui.showBanner('Vague parfaite !', `+${bonus} or · aucun ovni n’est passé`);
+        else this.ui.showBanner('Vague repoussée', `+${bonus} or`);
         this.audio.waveCleared();
+        const base = this.sim.level.base;
+        this.flyCoinsFrom(base.x, 1, base.z, perfect ? 8 : 5);
         if (!this.sim.enemies.some((e) => e.active) && this.sim.spawners.length === 0) this.audio.setIntensity(0);
       },
       onEnemySpawn: (enemy) => {
@@ -104,11 +122,14 @@ export class Game {
       onEnemyKilled: (enemy) => {
         const big = enemy.def.id === 'boss';
         this.enemyViews.positionOf(enemy, this.tmp);
-        this.effects.enemyDeath(this.tmp.x, this.tmp.y, this.tmp.z, big);
-        this.floatAt(this.tmp.x, this.tmp.y + 0.4, this.tmp.z, `+${enemy.def.reward}`);
+        const { x, y, z } = this.tmp;
+        this.effects.enemyDeath(x, y, z, big);
+        this.floatAt(x, y + 0.4, z, `+${enemy.def.reward}`);
+        this.flyCoinsFrom(x, y, z, big ? 6 : 1);
         this.enemyViews.release(enemy);
         this.audio.enemyDeath(big);
         this.audio.coin();
+        this.registerKill(x, y, z);
         if (big) {
           this.rig.shake(0.5);
           this.haptics.pulse(CONFIG.haptics.build);
@@ -147,7 +168,7 @@ export class Game {
         this.projectileViews.acquire(projectile);
         this.towerViews.fired(tower);
         this.audio.shoot(tower.def.id);
-        if (tower.def.id === 'cannon' || tower.def.id === 'catapult') this.effects.muzzle(tower.x, projectile.y, tower.z);
+        if (tower.def.id !== 'ballista') this.effects.muzzle(tower.x, projectile.y, tower.z);
       },
       onImpact: (projectile) => {
         this.projectileViews.release(projectile);
@@ -167,9 +188,51 @@ export class Game {
         this.effects.frostPulse(tower.x, tower.z, tower.stats.range);
         this.audio.shoot('frost');
       },
+      onSpellCast: (id, x, z, targets) => {
+        const spell = SPELLS[id];
+        this.haptics.pulse(CONFIG.haptics.build);
+        if (id === 'meteor') {
+          this.spellViews.castMeteor(x, z, spell.delay);
+          this.audio.meteorFall();
+        } else if (id === 'blizzard') {
+          this.spellViews.blizzard(x, z, spell.radius);
+          this.ui.flash('frost');
+          this.audio.blizzard();
+          this.rig.shake(0.2);
+        } else if (id === 'lightning') {
+          this.spellViews.lightning(x, z, targets, (enemy, out) => this.enemyViews.positionOf(enemy, out));
+          this.ui.flash('lightning');
+          this.audio.lightning();
+          this.rig.shake(0.25);
+        }
+      },
+      onSpellImpact: (id, x, z) => {
+        if (id !== 'meteor') return;
+        this.spellViews.meteorImpact(x, z, SPELLS.meteor.radius);
+        this.ui.flash('');
+        this.audio.explosion(true);
+        this.audio.meteorImpact();
+        this.rig.shake(0.7);
+        this.haptics.pulse(CONFIG.haptics.leak);
+      },
       onVictory: (stars) => this.finish(true, stars),
       onDefeat: () => this.finish(false, 0),
     };
+  }
+
+  /** Several kills in a short window grant a bonus: rewards splash towers and spells. */
+  registerKill(x, y, z) {
+    const now = this.sim.time;
+    this.recentKills.push(now);
+    while (this.recentKills.length && now - this.recentKills[0] > MULTI_KILL_WINDOW) this.recentKills.shift();
+    const count = this.recentKills.length;
+    if (count >= 3) {
+      const bonus = CONFIG.economy.multiKillBonus;
+      this.sim.addGold(bonus);
+      const label = count >= 6 ? 'CARNAGE' : count >= 5 ? 'QUINTUPLÉ' : count >= 4 ? 'QUADRUPLÉ' : 'TRIPLÉ';
+      this.floatAt(x, y + 0.9, z, `${label} ! +${bonus}`, 'combo');
+      if (count === 3 || count === 5) this.audio.combo(count);
+    }
   }
 
   // ------------------------------------------------------------ wiring
@@ -178,19 +241,27 @@ export class Game {
     const ui = this.ui;
     ui.on('btn-pause', () => this.pause());
     ui.on('btn-resume', () => this.resume());
-    ui.on('btn-restart', () => this.startLevel(this.levelIndex));
+    ui.on('btn-restart', () => this.startLevel(this.current));
     ui.on('btn-quit', () => this.showMenu());
     ui.on('btn-menu', () => this.showMenu());
-    ui.on('btn-retry', () => this.startLevel(this.levelIndex));
-    ui.on('btn-next', () => this.startLevel(Math.min(this.levelIndex + 1, LEVELS.length - 1)));
+    ui.on('btn-retry', () => this.startLevel(this.current));
+    ui.on('btn-next', () => {
+      const next = this.current.index + 1;
+      if (next < LEVELS.length) this.startLevel({ def: LEVELS[next], index: next, heroic: false });
+    });
     ui.on('btn-speed', () => this.toggleSpeed());
     ui.on('btn-wave', () => this.callWave());
     ui.on('btn-upgrade', () => this.upgradeSelected());
     ui.on('btn-sell', () => this.sellSelected());
+    ui.on('btn-perks', () => this.showPerks());
+    ui.on('btn-perks-back', () => this.showMenu());
+    ui.on('btn-perks-reset', () => this.resetPerks());
+    ui.on('btn-spell-cancel', () => this.armSpell(null));
     ui.on('close', () => this.deselect());
     ui.on('buildCard', (type) => this.chooseTower(type));
     ui.on('targeting', (mode) => this.setTargeting(mode));
     ui.on('setting', (key) => this.toggleSetting(key));
+    ui.on('spell', (id) => this.armSpell(this.armedSpell === id ? null : id));
     ui.renderSettings(this.save.settings, this.haptics.supported);
   }
 
@@ -204,11 +275,17 @@ export class Game {
     };
     this.handleKey = (event) => {
       if (event.code === 'Escape' || event.code === 'KeyP') {
-        if (this.mode === MODE.PLAYING) this.pause();
+        if (this.armedSpell) this.armSpell(null);
+        else if (this.mode === MODE.PLAYING) this.pause();
         else if (this.mode === MODE.PAUSED) this.resume();
-      } else if (event.code === 'Space' && this.mode === MODE.PLAYING && !(document.activeElement instanceof HTMLButtonElement)) {
-        event.preventDefault();
-        this.callWave();
+      } else if (this.mode === MODE.PLAYING && !(document.activeElement instanceof HTMLButtonElement)) {
+        if (event.code === 'Space') {
+          event.preventDefault();
+          this.callWave();
+        } else if (['Digit1', 'Digit2', 'Digit3'].includes(event.code)) {
+          const id = SPELL_ORDER[Number(event.code.slice(-1)) - 1];
+          this.armSpell(this.armedSpell === id ? null : id);
+        }
       }
     };
     window.addEventListener('keydown', this.handleKey);
@@ -242,57 +319,153 @@ export class Game {
     window.visualViewport?.addEventListener('resize', this.handleWindowResize);
   }
 
+  // ------------------------------------------------------------ progression
+
+  levelStars(def) {
+    return this.save.levels[def.id]?.stars ?? 0;
+  }
+
+  isUnlocked(index) {
+    return index === 0 || this.levelStars(LEVELS[index - 1]) > 0;
+  }
+
+  get availableStars() {
+    return earnedStars(this.save) - spentStars(this.save.perks);
+  }
+
+  get maxStars() {
+    return LEVELS.length * 4 + 3;
+  }
+
+  canBuyPerk() {
+    const available = this.availableStars;
+    return PERKS.some((perk) => {
+      const rank = this.save.perks[perk.id] ?? 0;
+      return rank < perk.costs.length && perk.costs[rank] <= available;
+    });
+  }
+
+  menuEntries() {
+    const entries = LEVELS.map((def, index) => {
+      const record = this.save.levels[def.id];
+      return {
+        def,
+        index,
+        unlocked: this.isUnlocked(index),
+        stars: record?.stars ?? 0,
+        crown: record?.crown ?? false,
+        heroicAvailable: (record?.stars ?? 0) >= 3,
+        info: `${def.waves} vagues · ${def.subtitle}`,
+        lockText: 'Termine le niveau précédent',
+      };
+    });
+    const survivalUnlocked = this.levelStars(LEVELS[SURVIVAL.unlockAfter]) > 0;
+    entries.push({
+      def: SURVIVAL,
+      index: SURVIVAL.unlockAfter,
+      unlocked: survivalUnlocked,
+      stars: this.save.survival.stars,
+      crown: false,
+      heroicAvailable: false,
+      info: this.save.survival.bestWave > 0 ? `Record : vague ${this.save.survival.bestWave} · 1 ★ toutes les ${SURVIVAL_STAR_EVERY} vagues` : SURVIVAL.subtitle,
+      lockText: `Termine le niveau ${SURVIVAL.unlockAfter + 1} pour débloquer`,
+    });
+    return entries;
+  }
+
   // ------------------------------------------------------------ flow
 
   showMenu() {
     this.mode = MODE.MENU;
     this.sim = null;
+    this.armSpell(null);
     this.clearEntities();
-    const unlocked = LEVELS.findLastIndex((level, i) => i === 0 || (this.save.levels[LEVELS[i - 1].id]?.stars ?? 0) > 0);
+    const unlocked = LEVELS.findLastIndex((_, i) => this.isUnlocked(i));
+    this.current = { def: LEVELS[unlocked], index: unlocked, heroic: false };
     const backdrop = new Level(LEVELS[unlocked], unlocked);
     this.world.build(backdrop);
-    this.snowy = backdrop.def.theme === 'snow';
+    this.view.renderer.toneMappingExposure = this.world.exposure;
     this.frame(backdrop);
     this.rig.setOrbit(0.25);
     this.loop.timeScale = 1;
     this.ui.setPlayingUi(false);
     this.ui.coach(null);
-    this.ui.renderLevels(LEVELS, this.save, (index) => this.startLevel(index));
+    this.ui.renderLevels(this.menuEntries(), (entry, heroic) => this.startLevel({ def: entry.def, index: entry.index, heroic }));
+    this.ui.setStarTotal(this.availableStars, earnedStars(this.save), this.canBuyPerk());
     this.ui.showScreen('menu');
     this.audio.setIntensity(0);
     this.audio.duck(false);
     this.loop.start();
   }
 
-  startLevel(index) {
+  showPerks() {
+    this.mode = MODE.PERKS;
+    this.renderPerks();
+    this.ui.showScreen('perks');
+    this.audio.click();
+  }
+
+  renderPerks() {
+    this.ui.renderPerks(this.save.perks, this.availableStars, (id) => this.buyPerk(id));
+  }
+
+  buyPerk(id) {
+    const perk = PERKS.find((p) => p.id === id);
+    const rank = this.save.perks[id] ?? 0;
+    if (!perk || rank >= perk.costs.length || perk.costs[rank] > this.availableStars) {
+      this.audio.denied();
+      return;
+    }
+    this.save.perks[id] = rank + 1;
+    writeSave(this.save);
+    this.audio.upgrade();
+    this.haptics.pulse(CONFIG.haptics.build);
+    this.renderPerks();
+  }
+
+  resetPerks() {
+    if (spentStars(this.save.perks) === 0) return;
+    this.save.perks = {};
+    writeSave(this.save);
+    this.audio.sell();
+    this.renderPerks();
+  }
+
+  startLevel(target) {
+    if (!target) return;
     this.audio.unlock();
+    this.armSpell(null);
     this.clearEntities();
-    this.levelIndex = index;
-    this.sim = new Simulation(LEVELS[index], index, this.listener);
+    this.current = target;
+    const { def, index, heroic } = target;
+    this.sim = new Simulation(def, index, this.listener, { heroic, modifiers: buildModifiers(this.save.perks) });
     this.world.build(this.sim.level);
-    this.snowy = LEVELS[index].theme === 'snow';
+    this.view.renderer.toneMappingExposure = this.world.exposure;
     this.frame(this.sim.level);
     this.rig.setOrbit(0);
     this.speed = 1;
     this.loop.timeScale = 1;
     this.ui.setSpeed(1);
     this.endTimer = 0;
+    this.recentKills.length = 0;
     this.mode = MODE.PLAYING;
     this.ui.resetStats();
     this.ui.showScreen(null);
     this.ui.setPlayingUi(true);
-    this.ui.showBanner(LEVELS[index].name, `${LEVELS[index].waves} vagues · ${LEVELS[index].subtitle}`);
+    const detail = def.endless ? 'Vagues infinies' : `${def.waves} vagues · ${heroic ? 'Héroïque : 5 vies, ennemis renforcés' : def.subtitle}`;
+    this.ui.showBanner(heroic ? `👑 ${def.name}` : def.name, detail, heroic ? 'danger' : '');
     this.audio.setIntensity(0);
     this.audio.duck(false);
     this.audio.click();
     this.monitor.reset();
-    this.tutorialStep = index === 0 && !this.save.tutorialDone ? 0 : -1;
+    this.tutorialStep = index === 0 && !heroic && !def.endless && !this.save.tutorialDone ? 0 : -1;
     this.ui.coach(this.tutorialStep >= 0 ? TUTORIAL[0] : null);
     this.loop.start();
   }
 
   frame(level) {
-    this.rig.setBounds(level.width, level.height);
+    // Frame the island rim too, with a glimpse of sea around it.
+    this.rig.setBounds(level.width + 1.1, level.height + 1.1);
     this.rig.reset();
     this.rig.fit(this.view.width, this.view.height);
     this.world.setViewDistance(this.rig.fitDistance);
@@ -303,6 +476,7 @@ export class Game {
     this.enemyViews.clear();
     this.projectileViews.clear();
     this.towerViews.clear();
+    this.spellViews.clear();
     this.effects.clear();
     this.input.reset();
   }
@@ -310,6 +484,7 @@ export class Game {
   pause() {
     if (this.mode !== MODE.PLAYING) return;
     this.mode = MODE.PAUSED;
+    this.armSpell(null);
     this.loop.stop();
     this.input.reset();
     this.ui.showScreen('pause');
@@ -327,43 +502,75 @@ export class Game {
   finish(victory, stars) {
     this.mode = MODE.ENDED;
     this.deselect();
-    // The simulation stops here: remove shots still in flight so none hang in the air.
+    this.armSpell(null);
+    this.ui.coach(null);
     for (const projectile of this.sim.projectiles) projectile.active = false;
     this.projectileViews.clear();
-    this.ui.coach(null);
     this.speed = 1;
     this.loop.timeScale = 1;
     this.endTimer = END_SCREEN_DELAY;
     this.audio.setIntensity(0);
-    if (victory) {
-      const id = LEVELS[this.levelIndex].id;
-      const previous = this.save.levels[id]?.stars ?? 0;
-      this.save.levels[id] = { stars: Math.max(previous, stars) };
-      writeSave(this.save);
+    const { def, heroic } = this.current;
+    const before = earnedStars(this.save);
+
+    if (def.endless) {
+      const reached = Math.max(0, this.sim.nextWave - 1);
+      const record = reached > this.save.survival.bestWave;
+      this.save.survival.bestWave = Math.max(this.save.survival.bestWave, reached);
+      this.save.survival.stars = Math.min(3, Math.max(this.save.survival.stars, Math.floor(this.save.survival.bestWave / SURVIVAL_STAR_EVERY)));
+      this.endInfo = { record, reached };
+      this.audio.defeat();
+      this.ui.showBanner(record ? 'Nouveau record !' : 'Survie terminée', `Vague ${reached}`, record ? '' : 'danger');
+    } else if (victory) {
+      const record = this.save.levels[def.id] ?? { stars: 0, crown: false };
+      this.save.levels[def.id] = { stars: Math.max(record.stars, stars), crown: record.crown || heroic };
       this.audio.victory();
       this.haptics.pulse(CONFIG.haptics.victory);
-      this.ui.showBanner('Victoire !', '★'.repeat(stars) + '☆'.repeat(3 - stars));
+      this.ui.showBanner(heroic ? 'Couronne gagnée !' : 'Victoire !', '★'.repeat(stars) + '☆'.repeat(3 - stars));
     } else {
       this.audio.defeat();
       this.haptics.pulse(CONFIG.haptics.leak);
       this.ui.showBanner('Le château est tombé', '', 'danger');
     }
+    this.newStars = earnedStars(this.save) - before;
+    writeSave(this.save);
   }
 
   showEndScreen() {
     const sim = this.sim;
+    const { def, index, heroic } = this.current;
     const victory = sim.state === SIM_STATE.WON;
     this.ui.setPlayingUi(false);
+    const reward = this.newStars > 0 ? `+${this.newStars} ★ gagnée${this.newStars > 1 ? 's' : ''} · dépense-les dans Améliorations` : '';
+    if (def.endless) {
+      this.ui.showEnd({
+        victory: false,
+        title: this.endInfo.record ? 'Nouveau record !' : 'Survie terminée',
+        levelName: 'Survie',
+        stars: 0,
+        hasNext: false,
+        reward,
+        stats: [
+          ['Vague atteinte', this.endInfo.reached],
+          ['Record', this.save.survival.bestWave],
+          ['Ovnis détruits', sim.stats.kills],
+          ['Vagues parfaites', sim.stats.perfectWaves],
+        ],
+      });
+      return;
+    }
     this.ui.showEnd({
       victory,
-      levelName: LEVELS[this.levelIndex].name,
+      title: victory && heroic ? 'Couronne !' : undefined,
+      levelName: heroic ? `${def.name} · Héroïque` : def.name,
       stars: sim.stars,
-      hasNext: this.levelIndex < LEVELS.length - 1,
+      hasNext: !heroic && index < LEVELS.length - 1,
+      reward,
       stats: [
-        ['Vagues', `${victory ? sim.waves.length : Math.max(0, sim.nextWave - 1)}/${sim.waves.length}`],
-        ['Vies restantes', sim.lives],
+        ['Vagues', `${victory ? sim.waveCount : Math.max(0, sim.nextWave - 1)}/${sim.waveCount}`],
+        ['Vies restantes', `${sim.lives}/${sim.startLives}`],
         ['Ovnis détruits', sim.stats.kills],
-        ['Tours construites', sim.stats.towersBuilt],
+        ['Vagues parfaites', sim.stats.perfectWaves],
       ],
     });
   }
@@ -386,9 +593,34 @@ export class Game {
     this.audio.click();
   }
 
+  armSpell(id) {
+    if (id && (!this.sim || this.mode !== MODE.PLAYING)) return;
+    if (id && !this.sim.spellReady(id)) {
+      this.audio.denied();
+      return;
+    }
+    this.armedSpell = id;
+    if (id) {
+      this.deselect();
+      this.audio.click();
+    }
+    this.ui.showSpellHint(id);
+    if (!id) this.effects.hideRange();
+  }
+
   handleTap(clientX, clientY) {
     if (this.mode !== MODE.PLAYING || !this.sim) return;
     const hit = this.rig.groundAt(clientX, clientY, this.view.canvas.getBoundingClientRect());
+    if (this.armedSpell) {
+      if (hit && Math.abs(hit.x) < this.sim.level.width / 2 + 1 && Math.abs(hit.z) < this.sim.level.height / 2 + 1) {
+        const id = this.armedSpell;
+        if (this.sim.castSpell(id, hit.x, hit.z)) {
+          this.armSpell(null);
+          if (this.tutorialStep === 2) this.advanceTutorial();
+        }
+      }
+      return;
+    }
     const cell = hit ? this.sim.level.cellAtWorld(hit.x, hit.z) : null;
     const tower = cell ? this.sim.towerAt(cell) : null;
     if (tower) this.selectTower(tower);
@@ -424,7 +656,7 @@ export class Game {
       return;
     }
     selection.pending = type;
-    this.effects.showRange(selection.cell.x, selection.cell.z, def.levels[0].range, affordable);
+    this.effects.showRange(selection.cell.x, selection.cell.z, def.levels[0].range * this.sim.modifiers.range, affordable);
     this.ui.refreshBuildSheet(this.sim.gold, type);
     if (affordable) this.audio.click();
     else {
@@ -441,7 +673,6 @@ export class Game {
     this.ui.openTowerSheet(tower, this.sim.gold, false);
     this.audio.click();
     this.haptics.pulse(CONFIG.haptics.tap);
-    if (this.tutorialStep === 2) this.advanceTutorial();
   }
 
   upgradeSelected() {
@@ -488,7 +719,7 @@ export class Game {
     this.tutorialStep++;
     if (this.tutorialStep < TUTORIAL.length) {
       this.ui.coach(TUTORIAL[this.tutorialStep]);
-      if (this.tutorialStep === TUTORIAL.length - 1) this.tutorialTimer = 7;
+      if (this.tutorialStep === TUTORIAL.length - 1) this.tutorialTimer = 9;
       return;
     }
     this.tutorialStep = -1;
@@ -558,20 +789,34 @@ export class Game {
     const dt = realDt * this.loop.timeScale;
     this.renderTime += dt;
     this.rig.update(realDt);
-    this.world.update(dt);
+    this.world.update(dt, this.view.camera);
     this.towerViews.update(dt, this.renderTime);
     this.enemyViews.update(dt, this.renderTime, this.view.camera);
     this.projectileViews.update(dt);
+    this.spellViews.update(dt);
     this.effects.update(dt);
 
     const sim = this.sim;
     if (sim && (this.mode === MODE.PLAYING || this.mode === MODE.ENDED)) {
-      this.ui.setStats(sim.lives, sim.gold, sim.nextWave, sim.waves.length);
+      this.ui.setStats(sim.lives, sim.gold, sim.nextWave, sim.waveCount);
       this.ui.setWaveButton(this.waveButtonState());
+      for (const id of SPELL_ORDER) {
+        this.spellCharges[id] = sim.spellCharge(id);
+        this.spellRemaining[id] = sim.spells[id].cooldown;
+      }
+      this.ui.setSpells(this.spellCharges, this.spellRemaining, this.armedSpell, this.mode === MODE.PLAYING);
       if (this.selection && sim.gold !== this.sheetGold) {
         this.sheetGold = sim.gold;
         if (this.selection.kind === 'build') this.ui.refreshBuildSheet(sim.gold, this.selection.pending);
         else this.ui.refreshTowerSheet(this.selection.tower, sim.gold, this.selection.confirmSell);
+      }
+      // A castle under half health smokes.
+      if (sim.lives < sim.startLives / 2 && this.mode === MODE.PLAYING) {
+        this.smokeTimer -= dt;
+        if (this.smokeTimer <= 0) {
+          this.smokeTimer = sim.lives < sim.startLives / 4 ? 0.08 : 0.18;
+          this.effects.castleSmoke(sim.level.base.x, sim.level.base.z);
+        }
       }
     }
     this.view.render();
@@ -579,8 +824,7 @@ export class Game {
 
   waveButtonState() {
     const sim = this.sim;
-    const total = sim.waves.length;
-    if (sim.nextWave >= total) {
+    if (sim.nextWave >= sim.waveCount) {
       return { title: sim.over ? 'Partie terminée' : 'Dernière vague !', meta: sim.over ? '' : 'Tiens bon jusqu’au bout', enabled: false, ready: false, progress: 0, preview: [], previewKey: 'none' };
     }
     const preview = this.previewFor(sim.nextWave);
@@ -602,10 +846,10 @@ export class Game {
   }
 
   previewFor(waveIndex) {
-    const key = `${this.levelIndex}:${waveIndex}`;
+    const key = `${this.current.def.id}:${this.current.heroic}:${waveIndex}`;
     if (!this.previewCache.has(key)) {
       const counts = new Map();
-      for (const spawn of this.sim.waves[waveIndex].spawns) counts.set(spawn.type, (counts.get(spawn.type) ?? 0) + 1);
+      for (const spawn of this.sim.wave(waveIndex).spawns) counts.set(spawn.type, (counts.get(spawn.type) ?? 0) + 1);
       this.previewCache.set(key, [...counts].map(([type, count]) => ({ type, count })));
     }
     return this.previewCache.get(key);
@@ -617,12 +861,19 @@ export class Game {
     if (point.visible) this.ui.floatText(point.x, point.y, text, variant);
   }
 
+  flyCoinsFrom(x, y, z, count) {
+    const rect = this.view.canvas.getBoundingClientRect();
+    const point = this.rig.toScreen(this.tmp.set(x, y, z), rect);
+    if (point.visible) this.ui.flyCoins(point.x, point.y, count);
+  }
+
   // ------------------------------------------------------------ platform events
 
   handleResize(width, height) {
     this.rig.fit(width, height);
     this.world.setViewDistance(this.rig.fitDistance);
     this.effects.setViewport(height * this.view.pixelRatio, this.view.camera.fov);
+    this.world.ambient.setViewport(height * this.view.pixelRatio, this.view.camera.fov);
     if (!this.loop.running) this.loop.renderOnce();
   }
 
@@ -648,6 +899,7 @@ export class Game {
     this.input.dispose();
     this.clearEntities();
     this.enemyViews.dispose();
+    this.spellViews.dispose();
     this.effects.dispose();
     this.world.dispose();
     this.assets.dispose();

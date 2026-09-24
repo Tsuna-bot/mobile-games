@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v1';
+const VERSION = 'bastion-v2';
 const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
 
 const APP_SHELL = [
@@ -17,12 +17,14 @@ const APP_SHELL = [
   './src/audio/audio.js',
   './src/sim/level.js',
   './src/sim/simulation.js',
+  './src/render/ambient.js',
   './src/render/assets.js',
   './src/render/cameraRig.js',
   './src/render/effects.js',
   './src/render/enemyViews.js',
   './src/render/particles.js',
   './src/render/projectileViews.js',
+  './src/render/spellViews.js',
   './src/render/thumbnails.js',
   './src/render/towerViews.js',
   './src/render/view.js',
@@ -30,6 +32,9 @@ const APP_SHELL = [
   './src/input/pointer.js',
   './src/data/enemies.js',
   './src/data/levels.js',
+  './src/data/perks.js',
+  './src/data/spells.js',
+  './src/data/themes.js',
   './src/data/towers.js',
   './src/data/waves.js',
   './src/core/loop.js',
@@ -108,6 +113,16 @@ const THREE_FILES = [
   'examples/jsm/loaders/GLTFLoader.js',
   'examples/jsm/utils/BufferGeometryUtils.js',
   'examples/jsm/utils/SkeletonUtils.js',
+  'examples/jsm/postprocessing/EffectComposer.js',
+  'examples/jsm/postprocessing/RenderPass.js',
+  'examples/jsm/postprocessing/UnrealBloomPass.js',
+  'examples/jsm/postprocessing/OutputPass.js',
+  'examples/jsm/postprocessing/ShaderPass.js',
+  'examples/jsm/postprocessing/MaskPass.js',
+  'examples/jsm/postprocessing/Pass.js',
+  'examples/jsm/shaders/CopyShader.js',
+  'examples/jsm/shaders/LuminosityHighPassShader.js',
+  'examples/jsm/shaders/OutputShader.js',
 ].map((path) => THREE_CDN + path);
 
 self.addEventListener('install', (event) => {

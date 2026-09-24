@@ -1,31 +1,16 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
-
-const THEMES = {
-  grass: {
-    skyTop: '#6cc7ff',
-    skyBottom: '#d7f1ff',
-    fog: 0xcfeeff,
-    ground: 0x3e9c5c,
-    hemisphereSky: 0xcfeaff,
-    hemisphereGround: 0x3c7a45,
-    sun: 0xfff1d6,
-    scenery: ['detail-tree', 'detail-tree-large', 'detail-tree', 'detail-rocks', 'detail-rocks-large'],
-  },
-  snow: {
-    skyTop: '#8fb7e0',
-    skyBottom: '#eef5fb',
-    fog: 0xe6f0f8,
-    ground: 0xd9e6f0,
-    hemisphereSky: 0xe8f2ff,
-    hemisphereGround: 0x8fa7bd,
-    sun: 0xffffff,
-    scenery: ['snow-detail-tree', 'snow-detail-tree-large', 'snow-detail-tree', 'snow-detail-rocks', 'snow-detail-crystal'],
-  },
-};
+import { THEMES } from '../data/themes.js';
+import { AmbientParticles } from './ambient.js';
 
 const TREES = ['tile-tree', 'tile-tree-double', 'tile-tree-quad'];
 const DECORATION_MODELS = { rock: ['tile-rock'], crystal: ['tile-crystal'], hill: ['tile-hill'] };
+const FOLIAGE = new Set(['tile-tree', 'tile-tree-double', 'tile-tree-quad', 'detail-tree', 'detail-tree-large']);
+const ISLAND_MARGIN = 0.65;
+const ISLAND_DEPTH = 2.6;
+const WATER_LEVEL = -0.62;
+// Island top sits below the recessed path surface of the Kenney tiles.
+const ISLAND_TOP = 0.04;
 
 /** Deterministic PRNG so every visit of a level looks the same. */
 function seededRandom(seed) {
@@ -38,24 +23,202 @@ function seededRandom(seed) {
   };
 }
 
-function createSkyTexture(top, bottom) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 2;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-  gradient.addColorStop(0, top);
-  gradient.addColorStop(1, bottom);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 2, 256);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+const NOISE_GLSL = /* glsl */ `
+float cloudHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float cloudNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(cloudHash(i), cloudHash(i + vec2(1.0, 0.0)), f.x), mix(cloudHash(i + vec2(0.0, 1.0)), cloudHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`;
+
+/**
+ * Patches a standard material with drifting cloud shadows and, optionally,
+ * wind sway for foliage (vertices above `swayFrom` bend with the wind).
+ */
+function patchMaterial(material, uniforms, { sway = false } = {}) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.time;
+    shader.uniforms.uCloudShadow = uniforms.cloudShadow;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec2 vCloudUv;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 cloudWorld = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          cloudWorld = instanceMatrix * cloudWorld;
+        #endif
+        cloudWorld = modelMatrix * cloudWorld;
+        ${sway ? `
+        float swayAmount = smoothstep(0.24, 0.85, transformed.y);
+        float gust = sin(uTime * 1.6 + cloudWorld.x * 0.9 + cloudWorld.z * 0.7) + 0.4 * sin(uTime * 3.7 + cloudWorld.x * 2.3);
+        transformed.x += gust * 0.035 * swayAmount;
+        transformed.z += gust * 0.02 * swayAmount;` : ''}
+        vCloudUv = cloudWorld.xz * 0.16 + vec2(uTime * 0.035, uTime * 0.02);`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform float uCloudShadow;\nvarying vec2 vCloudUv;\n${NOISE_GLSL}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float cloudMask = smoothstep(0.52, 0.72, cloudNoise(vCloudUv) * 0.65 + cloudNoise(vCloudUv * 2.3) * 0.35);
+        diffuseColor.rgb *= 1.0 - uCloudShadow * cloudMask;`);
+  };
+  material.customProgramCacheKey = () => (sway ? 'bastion-foliage' : 'bastion-terrain');
+  material.needsUpdate = true;
+}
+
+const SKY_VERTEX = /* glsl */ `
+varying vec3 vDirection;
+void main() {
+  vDirection = normalize(position);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const SKY_FRAGMENT = /* glsl */ `
+uniform vec3 uTop;
+uniform vec3 uBottom;
+uniform vec3 uSunColor;
+uniform vec3 uSunDir;
+uniform float uStars;
+uniform float uTime;
+varying vec3 vDirection;
+float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+void main() {
+  vec3 dir = normalize(vDirection);
+  float h = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+  vec3 color = mix(uBottom, uTop, smoothstep(0.45, 0.95, h));
+  float sun = max(dot(dir, normalize(uSunDir)), 0.0);
+  color += uSunColor * (pow(sun, 380.0) * 2.5 + pow(sun, 12.0) * 0.28);
+  if (uStars > 0.5) {
+    vec3 cell = floor(dir * 180.0);
+    float star = step(0.9965, hash(cell)) * smoothstep(0.5, 0.7, h);
+    color += star * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 1.0) * 40.0));
+  }
+  gl_FragColor = vec4(color, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+const WATER_VERTEX = /* glsl */ `
+#include <fog_pars_vertex>
+uniform float uTime;
+varying vec3 vWorld;
+varying float vWave;
+void main() {
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  float wave = sin(world.x * 0.9 + uTime * 1.1) * 0.05
+             + sin(world.z * 1.3 - uTime * 0.8) * 0.04
+             + sin((world.x + world.z) * 2.1 + uTime * 1.7) * 0.02;
+  world.y += wave;
+  vWave = wave;
+  vWorld = world.xyz;
+  vec4 mvPosition = viewMatrix * world;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
+}`;
+
+const WATER_FRAGMENT = /* glsl */ `
+#include <fog_pars_fragment>
+uniform vec3 uDeep;
+uniform vec3 uShallow;
+uniform vec3 uFoam;
+uniform vec2 uHalf;
+uniform float uRadius;
+uniform float uTime;
+varying vec3 vWorld;
+varying float vWave;
+${NOISE_GLSL}
+float roundRect(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + r;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+void main() {
+  float d = roundRect(vWorld.xz, uHalf, uRadius);
+  float shore = 1.0 - smoothstep(0.0, 5.0, d);
+  vec3 color = mix(uDeep, uShallow, shore * shore);
+  float ripples = cloudNoise(vWorld.xz * 1.4 + vec2(uTime * 0.25, -uTime * 0.18)) * 0.6
+                + cloudNoise(vWorld.xz * 3.1 - vec2(uTime * 0.3, uTime * 0.12)) * 0.4;
+  color *= 0.92 + ripples * 0.16 + vWave * 1.4;
+  float bands = smoothstep(0.7, 1.0, sin(d * 5.5 - uTime * 2.0 + ripples * 2.0)) * (1.0 - smoothstep(0.0, 1.6, d));
+  float edge = 1.0 - smoothstep(0.0, 0.22 + ripples * 0.12, d);
+  color = mix(color, uFoam, clamp(bands * 0.55 + edge, 0.0, 1.0) * 0.85);
+  float sparkle = smoothstep(0.86, 0.97, cloudNoise(vWorld.xz * 6.0 + uTime * vec2(0.6, -0.4)));
+  color += uFoam * sparkle * 0.35;
+  gl_FragColor = vec4(color, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}`;
+
+function createIslandGeometry(halfW, halfH, colors, random) {
+  const radius = 0.9;
+  const shape = new THREE.Shape();
+  shape.moveTo(-halfW + radius, -halfH);
+  shape.lineTo(halfW - radius, -halfH);
+  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + radius);
+  shape.lineTo(halfW, halfH - radius);
+  shape.quadraticCurveTo(halfW, halfH, halfW - radius, halfH);
+  shape.lineTo(-halfW + radius, halfH);
+  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - radius);
+  shape.lineTo(-halfW, -halfH + radius);
+  shape.quadraticCurveTo(-halfW, -halfH, -halfW + radius, -halfH);
+
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: ISLAND_DEPTH, steps: 6, bevelEnabled: false, curveSegments: 5 });
+  geometry.rotateX(Math.PI / 2);
+  const position = geometry.attributes.position;
+  const color = new Float32Array(position.count * 3);
+  const top = new THREE.Color(colors.top);
+  const mid = new THREE.Color(colors.mid);
+  const bottom = new THREE.Color(colors.bottom);
+  const tmp = new THREE.Color();
+  const jitter = new Map();
+
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    const depth = Math.min(1, Math.max(0, -y / ISLAND_DEPTH)); // 0 at the top, 1 at the bottom
+    // Same jitter for shared corners keeps the rock surface closed.
+    const key = `${x.toFixed(3)}|${y.toFixed(3)}|${z.toFixed(3)}`;
+    if (!jitter.has(key)) jitter.set(key, (random() - 0.5) * 0.35);
+    const noise = depth > 0.01 ? jitter.get(key) : 0;
+    const taper = 1 - Math.pow(depth, 1.6) * 0.62 + noise * 0.25;
+    position.setXYZ(i, x * taper, y + (depth > 0.99 ? -0.4 - Math.abs(jitter.get(key)) : noise * 0.15), z * taper);
+    if (depth < 0.08) tmp.copy(top);
+    else if (depth < 0.5) tmp.copy(top).lerp(mid, Math.min(1, (depth - 0.08) / 0.2));
+    else tmp.copy(mid).lerp(bottom, (depth - 0.5) / 0.5);
+    color[i * 3] = tmp.r;
+    color[i * 3 + 1] = tmp.g;
+    color[i * 3 + 2] = tmp.b;
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(color, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createCloudGeometry(random) {
+  const parts = [];
+  const count = 3 + Math.floor(random() * 3);
+  for (let i = 0; i < count; i++) {
+    const blob = new THREE.IcosahedronGeometry(0.5 + random() * 0.5, 1);
+    blob.scale(1, 0.7, 1);
+    blob.translate((i - count / 2) * 0.6 + random() * 0.3, random() * 0.25, (random() - 0.5) * 0.6);
+    parts.push(blob);
+  }
+  const merged = new THREE.BufferGeometry();
+  const total = parts.reduce((sum, g) => sum + g.attributes.position.count, 0);
+  const array = new Float32Array(total * 3);
+  let offset = 0;
+  for (const part of parts) {
+    array.set(part.attributes.position.array, offset);
+    offset += part.attributes.position.array.length;
+    part.dispose();
+  }
+  merged.setAttribute('position', new THREE.BufferAttribute(array, 3));
+  merged.computeVertexNormals();
+  return merged;
 }
 
 /**
- * The static diorama for a level: instanced terrain tiles, surrounding scenery,
- * the castle, the spawn portal, sky and lights. Rebuilt when the level changes.
+ * The diorama for a level: a floating island (instanced Kenney tiles on a
+ * rocky cliff) in an animated sea, islets, clouds, sky, lights, ambient life.
  */
 export class World {
   constructor(scene, assets) {
@@ -64,36 +227,83 @@ export class World {
     this.root = new THREE.Group();
     scene.add(this.root);
     this.disposables = [];
-    this.skyTexture = null;
     this.time = 0;
+    this.castleHit = 0;
+    this.uniforms = { time: { value: 0 }, cloudShadow: { value: 0.18 } };
 
-    this.hemisphere = new THREE.HemisphereLight(0xffffff, 0x444444, 1.25);
-    this.sun = new THREE.DirectionalLight(0xffffff, 2.1);
-    this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.02;
+    // Shared palette material gets drifting cloud shadows; foliage also sways.
+    // Kenney models are closed meshes: casting shadows from back faces removes self-shadow acne.
+    assets.material.shadowSide = THREE.BackSide;
+    patchMaterial(assets.material, this.uniforms);
+    this.foliageMaterial = assets.material.clone();
+    patchMaterial(this.foliageMaterial, this.uniforms, { sway: true });
+
+    this.hemisphere = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    this.sun.shadow.bias = -0.0008;
+    this.sun.shadow.normalBias = 0.045;
     this.sun.shadow.radius = 2;
     scene.add(this.hemisphere, this.sun, this.sun.target);
+
+    // Warm light from the castle windows on dark levels.
+    this.castleLight = new THREE.PointLight(0xffa04a, 0, 5, 1.6);
+    scene.add(this.castleLight);
+
+    this.sky = new THREE.Mesh(
+      new THREE.SphereGeometry(150, 32, 16),
+      new THREE.ShaderMaterial({
+        vertexShader: SKY_VERTEX,
+        fragmentShader: SKY_FRAGMENT,
+        side: THREE.BackSide,
+        depthWrite: false,
+        fog: false,
+        uniforms: {
+          uTop: { value: new THREE.Color() },
+          uBottom: { value: new THREE.Color() },
+          uSunColor: { value: new THREE.Color() },
+          uSunDir: { value: new THREE.Vector3() },
+          uStars: { value: 0 },
+          uTime: { value: 0 },
+        },
+      }),
+    );
+    this.sky.renderOrder = -10;
+    this.sky.frustumCulled = false;
+    scene.add(this.sky);
+
+    this.ambient = new AmbientParticles(scene);
+    this.clouds = [];
   }
 
   build(level) {
     this.clear();
-    const theme = THEMES[level.def.theme] ?? THEMES.grass;
-    const prefix = level.def.theme === 'snow' ? 'snow-' : '';
-    const random = seededRandom(level.index * 977 + 13);
+    const theme = THEMES[level.def.theme] ?? THEMES.meadow;
+    this.theme = theme;
     this.level = level;
+    const prefix = theme.tiles;
+    const random = seededRandom(level.index * 977 + level.width * 31 + 13);
 
-    this.skyTexture = createSkyTexture(theme.skyTop, theme.skyBottom);
-    this.scene.background = this.skyTexture;
-    this.scene.fog = new THREE.Fog(theme.fog, 22, 55);
+    // Sky, fog and light.
+    const sky = this.sky.material.uniforms;
+    sky.uTop.value.set(theme.skyTop);
+    sky.uBottom.value.set(theme.skyBottom);
+    sky.uSunColor.value.set(theme.sun);
+    sky.uSunDir.value.set(...theme.sunDirection).normalize();
+    sky.uStars.value = theme.stars ? 1 : 0;
+    this.scene.background = new THREE.Color(theme.fog);
+    this.scene.fog = new THREE.Fog(theme.fog, 20, 60);
     this.hemisphere.color.set(theme.hemisphereSky);
     this.hemisphere.groundColor.set(theme.hemisphereGround);
+    this.hemisphere.intensity = theme.hemisphereIntensity;
     this.sun.color.set(theme.sun);
+    this.sun.intensity = theme.sunIntensity;
+    this.uniforms.cloudShadow.value = theme.stars ? 0.1 : 0.2;
 
     // Terrain tiles, grouped per model into InstancedMeshes.
     const placements = new Map();
-    const place = (model, x, z, rotation, y = 0) => {
+    const place = (model, x, z, rotation, y = 0, scale = 1) => {
       if (!placements.has(model)) placements.set(model, []);
-      placements.get(model).push({ x, y, z, rotation });
+      placements.get(model).push({ x, y, z, rotation, scale });
     };
     const pathTiles = new Map(level.pathTiles.map((tile) => [tile.cell.index, tile]));
     for (const cell of level.cells) {
@@ -111,43 +321,127 @@ export class World {
       }
     }
 
-    // Scenery scattered on the lower ground around the plateau.
+    // Island rim decorations just outside the playable grid.
     const halfW = level.width / 2;
     const halfH = level.height / 2;
-    for (let i = 0; i < 90; i++) {
-      const angle = random() * Math.PI * 2;
-      const radius = 1.2 + random() * 9;
-      const x = Math.cos(angle) * (halfW + radius);
-      const z = Math.sin(angle) * (halfH + radius);
-      if (Math.abs(x) < halfW + 0.7 && Math.abs(z) < halfH + 0.7) continue;
-      place(theme.scenery[Math.floor(random() * theme.scenery.length)], x, z, random() * Math.PI * 2, -CONFIG.world.tileTop);
+    const rimModels = prefix ? ['snow-detail-tree', 'snow-detail-rocks', 'snow-detail-tree-large'] : ['detail-tree', 'detail-rocks', 'detail-tree-large', 'detail-crystal'];
+    for (let i = 0; i < 26; i++) {
+      const side = Math.floor(random() * 4);
+      const along = random() * 2 - 1;
+      const x = side < 2 ? along * (halfW - 0.2) : (side === 2 ? -1 : 1) * (halfW + 0.3);
+      const z = side < 2 ? (side === 0 ? -1 : 1) * (halfH + 0.3) : along * (halfH - 0.2);
+      place(rimModels[Math.floor(random() * rimModels.length)], x, z, random() * Math.PI * 2, ISLAND_TOP, 0.55 + random() * 0.3);
+    }
+
+    // Islets scattered in the sea.
+    const isletGeometry = new THREE.CylinderGeometry(1, 0.55, 1.2, 7, 1);
+    isletGeometry.translate(0, -0.6, 0);
+    const isletMaterial = new THREE.MeshStandardMaterial({ color: theme.cliff.mid, roughness: 1, flatShading: true });
+    const isletTopMaterial = new THREE.MeshStandardMaterial({ color: theme.cliff.top, roughness: 1, flatShading: true });
+    const isletTop = new THREE.CylinderGeometry(1.02, 1, 0.12, 7, 1);
+    this.disposables.push(isletGeometry, isletMaterial, isletTopMaterial, isletTop);
+    for (let i = 0; i < 7; i++) {
+      const angle = (i / 7) * Math.PI * 2 + random() * 0.6;
+      const distance = 3.2 + random() * 4;
+      const x = Math.cos(angle) * (halfW + distance);
+      const z = Math.sin(angle) * (halfH + distance * 0.7);
+      const size = 0.45 + random() * 0.55;
+      const islet = new THREE.Group();
+      islet.position.set(x, WATER_LEVEL + 0.15 + random() * 0.15, z);
+      islet.scale.setScalar(size);
+      islet.rotation.y = random() * Math.PI;
+      const rock = new THREE.Mesh(isletGeometry, isletMaterial);
+      const cap = new THREE.Mesh(isletTop, isletTopMaterial);
+      rock.receiveShadow = cap.receiveShadow = true;
+      islet.add(rock, cap);
+      this.root.add(islet);
+      const count = 1 + Math.floor(random() * 3);
+      for (let k = 0; k < count; k++) {
+        const a = random() * Math.PI * 2;
+        const r = random() * 0.55 * size;
+        place(rimModels[Math.floor(random() * rimModels.length)], x + Math.cos(a) * r, z + Math.sin(a) * r, random() * Math.PI * 2, islet.position.y + 0.06 * size, size * (0.8 + random() * 0.4));
+      }
     }
 
     const dummy = new THREE.Object3D();
     for (const [model, list] of placements) {
-      const mesh = new THREE.InstancedMesh(this.assets.geometry(model), this.assets.material, list.length);
+      const baseName = model.replace('snow-', '');
+      const material = FOLIAGE.has(baseName) ? this.foliageMaterial : this.assets.material;
+      const mesh = new THREE.InstancedMesh(this.assets.geometry(model), material, list.length);
       list.forEach((p, i) => {
         dummy.position.set(p.x, p.y, p.z);
         dummy.rotation.set(0, p.rotation, 0);
+        dummy.scale.setScalar(p.scale);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
       });
       mesh.receiveShadow = true;
-      mesh.castShadow = !model.endsWith('tile');
+      // Terrain tiles self-shadow badly (whole tiles turn dark): only loose props cast.
+      mesh.castShadow = baseName.startsWith('detail-');
       mesh.computeBoundingSphere();
       this.root.add(mesh);
       this.disposables.push(mesh);
     }
 
-    // Lower ground: the map reads as a raised diorama.
-    const groundGeometry = new THREE.CircleGeometry(60, 48);
-    groundGeometry.rotateX(-Math.PI / 2);
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: theme.ground, roughness: 1 });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.position.y = -CONFIG.world.tileTop;
-    ground.receiveShadow = true;
-    this.root.add(ground);
-    this.disposables.push(groundGeometry, groundMaterial);
+    // The floating island under the tiles.
+    const islandHalfW = halfW + ISLAND_MARGIN;
+    const islandHalfH = halfH + ISLAND_MARGIN;
+    const islandGeometry = createIslandGeometry(islandHalfW, islandHalfH, theme.cliff, random);
+    const islandMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+    const island = new THREE.Mesh(islandGeometry, islandMaterial);
+    island.position.y = ISLAND_TOP;
+    island.receiveShadow = true;
+    this.root.add(island);
+    this.disposables.push(islandGeometry, islandMaterial);
+
+    // Animated sea.
+    const waterGeometry = new THREE.PlaneGeometry(160, 160, 96, 96);
+    waterGeometry.rotateX(-Math.PI / 2);
+    this.waterMaterial = new THREE.ShaderMaterial({
+      vertexShader: WATER_VERTEX,
+      fragmentShader: WATER_FRAGMENT,
+      fog: true,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+          uTime: { value: 0 },
+          uDeep: { value: new THREE.Color(theme.water.deep) },
+          uShallow: { value: new THREE.Color(theme.water.shallow) },
+          uFoam: { value: new THREE.Color(theme.water.foam) },
+          uHalf: { value: new THREE.Vector2(islandHalfW * 0.93, islandHalfH * 0.93) },
+          uRadius: { value: 0.9 },
+        },
+      ]),
+    });
+    const water = new THREE.Mesh(waterGeometry, this.waterMaterial);
+    water.position.y = WATER_LEVEL;
+    this.root.add(water);
+    this.disposables.push(waterGeometry, this.waterMaterial);
+
+    // Clouds drifting around the island.
+    const cloudMaterial = new THREE.MeshStandardMaterial({
+      color: theme.clouds,
+      emissive: theme.clouds,
+      emissiveIntensity: 0.25,
+      roughness: 1,
+      flatShading: true,
+      transparent: true,
+      opacity: 0.92,
+    });
+    this.disposables.push(cloudMaterial);
+    this.cloudGroup = new THREE.Group();
+    for (let i = 0; i < 9; i++) {
+      const geometry = createCloudGeometry(random);
+      const cloud = new THREE.Mesh(geometry, cloudMaterial);
+      const angle = (i / 9) * Math.PI * 2 + random();
+      const distance = Math.max(halfW, halfH) + 4 + random() * 9;
+      cloud.position.set(Math.cos(angle) * distance, 0.2 + random() * 2.2, Math.sin(angle) * distance);
+      cloud.scale.setScalar(0.9 + random() * 1.1);
+      cloud.userData.speed = 0.15 + random() * 0.2;
+      this.cloudGroup.add(cloud);
+      this.disposables.push(geometry);
+    }
+    this.root.add(this.cloudGroup);
 
     // Castle at the end of the path, turned toward the incoming road.
     const baseTile = pathTiles.get(level.base.index);
@@ -157,16 +451,21 @@ export class World {
     this.castle.scale.setScalar(0.9);
     this.root.add(this.castle);
 
+    this.castleLight.position.set(level.base.x, CONFIG.world.tileTop + 1.6, level.base.z + 0.9);
+    this.castleLight.intensity = theme.castleLight ?? 0;
+
     this.portal = this.assets.clone('spawn-round');
     this.portal.position.set(level.spawn.x, CONFIG.world.tileTop + 0.01, level.spawn.z);
     this.root.add(this.portal);
 
-    this.fitShadows(level);
+    this.ambient.configure(theme.ambient, halfW + 1.5, halfH + 1.5);
+    this.fitShadows(level, theme);
   }
 
-  fitShadows(level) {
-    const span = Math.max(level.width, level.height) / 2 + 1.5;
-    this.sun.position.set(-4, 12, 6);
+  fitShadows(level, theme) {
+    const span = Math.max(level.width, level.height) / 2 + 2;
+    const direction = new THREE.Vector3(...theme.sunDirection).normalize();
+    this.sun.position.copy(direction).multiplyScalar(16);
     this.sun.target.position.set(0, 0, 0);
     const camera = this.sun.shadow.camera;
     camera.left = -span;
@@ -174,15 +473,14 @@ export class World {
     camera.top = span;
     camera.bottom = -span;
     camera.near = 1;
-    camera.far = 30;
+    camera.far = 40;
     camera.updateProjectionMatrix();
   }
 
-  /** Keeps the fog behind the map whatever the camera distance. */
   setViewDistance(distance) {
     if (!this.scene.fog) return;
-    this.scene.fog.near = distance + 4;
-    this.scene.fog.far = distance + 45;
+    this.scene.fog.near = distance + 6;
+    this.scene.fog.far = distance + 55;
   }
 
   applyQuality(preset) {
@@ -192,35 +490,59 @@ export class World {
       this.sun.shadow.map?.dispose();
       this.sun.shadow.map = null;
     }
+    this.ambient.setDensity(preset.effects);
   }
 
-  /** Makes the castle wobble when an enemy gets through. */
+  get exposure() {
+    return this.theme?.exposure ?? 1;
+  }
+
   hitCastle() {
     this.castleHit = 0.5;
   }
 
-  update(dt) {
+  update(dt, camera) {
     this.time += dt;
+    this.uniforms.time.value = this.time;
+    this.sky.position.copy(camera.position);
+    this.sky.material.uniforms.uTime.value = this.time;
+    if (this.waterMaterial) this.waterMaterial.uniforms.uTime.value = this.time;
+    this.ambient.update(this.time);
+    if (this.cloudGroup) {
+      for (const cloud of this.cloudGroup.children) {
+        const angle = Math.atan2(cloud.position.z, cloud.position.x) + dt * cloud.userData.speed * 0.05;
+        const distance = Math.hypot(cloud.position.x, cloud.position.z);
+        cloud.position.x = Math.cos(angle) * distance;
+        cloud.position.z = Math.sin(angle) * distance;
+      }
+    }
     if (this.portal) this.portal.rotation.y = this.time * 0.8;
     if (this.castle) {
-      this.castleHit = Math.max(0, (this.castleHit ?? 0) - dt);
+      this.castleHit = Math.max(0, this.castleHit - dt);
       const k = this.castleHit * 2;
       this.castle.scale.set(0.9 + Math.sin(this.time * 40) * 0.04 * k, 0.9 - k * 0.06, 0.9 + Math.cos(this.time * 40) * 0.04 * k);
     }
+    if (this.theme?.castleLight) this.castleLight.intensity = this.theme.castleLight * (0.9 + Math.sin(this.time * 7) * 0.05 + Math.sin(this.time * 13) * 0.05);
   }
 
   clear() {
     for (const item of this.disposables) item.dispose?.();
     this.disposables = [];
     this.root.clear();
-    this.skyTexture?.dispose();
-    this.skyTexture = null;
     this.castle = null;
     this.portal = null;
+    this.cloudGroup = null;
+    this.waterMaterial = null;
   }
 
   dispose() {
     this.clear();
+    this.ambient.dispose();
+    this.sky.geometry.dispose();
+    this.sky.material.dispose();
+    this.foliageMaterial.dispose();
     this.sun.shadow.map?.dispose();
   }
 }
+
+export { WATER_LEVEL };

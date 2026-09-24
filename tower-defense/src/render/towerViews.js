@@ -41,6 +41,16 @@ export class TowerViews {
     this.scene = scene;
     this.assets = assets;
     this.views = new Set();
+    // Golden aura under fully upgraded towers.
+    this.auraGeometry = new THREE.RingGeometry(0.42, 0.52, 32, 1, 0, Math.PI * 1.6);
+    this.auraGeometry.rotateX(-Math.PI / 2);
+    this.auraMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(0xffc93c).multiplyScalar(1.8),
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
   }
 
   add(tower) {
@@ -77,6 +87,12 @@ export class TowerViews {
     view.weapon.rotation.y = view.yaw;
     view.group.add(view.model);
     view.pop = 1;
+    if (view.tower.maxed && !view.aura) {
+      view.aura = new THREE.Mesh(this.auraGeometry, this.auraMaterial);
+      view.aura.position.y = 0.02;
+      view.aura.renderOrder = 2;
+      view.group.add(view.aura);
+    }
   }
 
   upgrade(tower) {
@@ -104,6 +120,7 @@ export class TowerViews {
   update(dt, time) {
     for (const view of this.views) {
       const { tower } = view;
+      if (view.aura) view.aura.rotation.y = time * 1.5;
       if (tower.def.id === 'frost') {
         view.weapon.rotation.y = time * 0.9;
         view.weapon.position.y = stackHeight(tower.def, tower.level) + 0.37 + Math.sin(time * 2 + tower.id) * 0.04;

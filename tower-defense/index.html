@@ -62,6 +62,20 @@
     </header>
 
     <footer id="dock" class="dock">
+      <div class="spells" id="spells" role="group" aria-label="Sorts">
+        <button class="spell" type="button" data-spell="meteor" aria-label="Météore">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2.5c.4 3-1.8 4.3-1.8 6.6 0 1.3.9 2.3 2.1 2.3 1.8 0 2.6-1.8 2.2-3.8 2.3 1.6 3.9 4.3 3.9 7.2A7.9 7.9 0 0 1 12 22.5a7.9 7.9 0 0 1-7.9-7.9c0-5.1 5.5-7.6 9.4-12.1z"/></svg>
+          <span class="spell__cooldown"></span><span class="spell__time"></span>
+        </button>
+        <button class="spell" type="button" data-spell="blizzard" aria-label="Blizzard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 1.5h2v4.1l2.4-1.4 1 1.7L13 8v2.3l2-1.2 2.1-3.6 1.7 1-1.2 2.1 2.1-1.2 1 1.7-3.6 2.1L15 12l2.1 1.2 3.6 2.1-1 1.7-2.1-1.2 1.2 2.1-1.7 1-2.1-3.6-2-1.2V16l3.4 2.1-1 1.7-2.4-1.4v4.1h-2v-4.1l-2.4 1.4-1-1.7L11 16v-2.3l-2 1.2-2.1 3.6-1.7-1 1.2-2.1-2.1 1.2-1-1.7 3.6-2.1L9 12l-2.1-1.2-3.6-2.1 1-1.7 2.1 1.2-1.2-2.1 1.7-1L9 8.8l2 1.2V8L7.6 5.9l1-1.7L11 5.6z"/></svg>
+          <span class="spell__cooldown"></span><span class="spell__time"></span>
+        </button>
+        <button class="spell" type="button" data-spell="lightning" aria-label="Foudre">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 1.5 4.5 13.5h6l-1.5 9 10-12h-6z"/></svg>
+          <span class="spell__cooldown"></span><span class="spell__time"></span>
+        </button>
+      </div>
       <button id="btn-wave" class="wave-btn" type="button">
         <span class="wave-btn__progress" id="wave-progress"></span>
         <span class="wave-btn__text">
@@ -102,13 +116,23 @@
 
     <div id="banner" class="banner" aria-live="polite"></div>
     <div id="floaters" class="floaters" aria-hidden="true"></div>
+    <div id="coins" class="coins" aria-hidden="true"></div>
     <div id="coach" class="coach" role="status"></div>
+    <div id="spell-hint" class="spell-hint" role="status">
+      <span id="spell-hint-text">Touche la carte pour lancer le sort</span>
+      <button id="btn-spell-cancel" type="button">Annuler</button>
+    </div>
+    <div id="screen-flash" aria-hidden="true"></div>
 
     <section id="screen-menu" class="screen screen--menu" aria-labelledby="title">
       <div class="brand">
         <p class="brand__kicker">Tower defense</p>
         <h1 id="title" class="brand__title">Bastion</h1>
         <p class="brand__tagline">Les ovnis débarquent. Ton château doit tenir.</p>
+      </div>
+      <div class="menu-bar">
+        <span class="star-total" id="star-total" aria-label="Étoiles"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg><b id="star-count">0</b></span>
+        <button id="btn-perks" class="btn btn--gold btn--small" type="button">Améliorations <span class="badge" id="perks-badge" hidden>!</span></button>
       </div>
       <div class="levels" id="levels"></div>
       <div class="settings" role="group" aria-label="Réglages">
@@ -118,6 +142,19 @@
         <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
       </div>
       <p class="credits">Modèles 3D : Tower Defense Kit de Kenney (CC0)</p>
+    </section>
+
+    <section id="screen-perks" class="screen" aria-labelledby="perks-title">
+      <div class="perks-head">
+        <h2 id="perks-title" class="screen__title screen__title--small">Améliorations</h2>
+        <p class="perks-balance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg><b id="perks-stars">0</b> <span id="perks-stars-label">étoiles disponibles</span></p>
+      </div>
+      <div class="perks" id="perks"></div>
+      <p class="perks-note">Gagne des étoiles en terminant les niveaux (jusqu'à 3), en mode Héroïque (+1 couronne) et en Survie (1 étoile toutes les 10 vagues).</p>
+      <div class="panel panel--row">
+        <button id="btn-perks-reset" class="btn btn--ghost" type="button">Réinitialiser</button>
+        <button id="btn-perks-back" class="btn btn--primary" type="button">Retour</button>
+      </div>
     </section>
 
     <section id="screen-pause" class="screen" aria-labelledby="pause-title">
@@ -139,6 +176,7 @@
       <p class="screen__kicker" id="end-kicker">Prairie</p>
       <h2 id="end-title" class="screen__title">Victoire !</h2>
       <div class="end-stars" id="end-stars"></div>
+      <p class="end-reward" id="end-reward"></p>
       <dl class="end-stats" id="end-stats"></dl>
       <div class="panel">
         <button id="btn-next" class="btn btn--primary" type="button">Niveau suivant</button>

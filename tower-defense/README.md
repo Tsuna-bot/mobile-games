@@ -6,21 +6,58 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
 
 ## Contenu
 
-- **3 niveaux** faits main, de difficulté croissante : Prairie (10 vagues), Col enneigé (12 vagues, décor neige), Canyon cristallin (15 vagues). Chaque niveau se débloque en terminant le précédent. On gagne de 1 à 3 étoiles selon les vies restantes (18+ pour 3 étoiles, 10+ pour 2), et elles sont sauvegardées.
-- **5 tours à 3 niveaux**. Le modèle grandit à chaque amélioration, étage par étage.
+- **5 niveaux** faits main, chacun avec sa propre ambiance :
+
+  | Niveau | Vagues | Ambiance |
+  | --- | --- | --- |
+  | Prairie | 10 | journée ensoleillée, pollen |
+  | Col enneigé | 12 | neige qui tombe |
+  | Forêt du crépuscule | 12 | coucher de soleil, lucioles |
+  | Canyon cristallin | 15 | lumière magique, poussière de cristal |
+  | Citadelle nocturne | 18 | nuit étoilée, lueur du château |
+
+- **Mode Survie** : vagues infinies, débloqué après le niveau 3. Le record est sauvegardé.
+- **Mode Héroïque** : se débloque sur un niveau fini avec 3 étoiles. 5 vies, ennemis plus résistants et plus rapides, et une couronne à gagner.
+- **5 tours à 3 niveaux**. Le modèle grandit à chaque amélioration, et une aura dorée apparaît au niveau maximum.
 
   | Tour | Rôle |
   | --- | --- |
-  | Baliste | Tir précis sur une seule cible, bon rapport coût/efficacité |
+  | Baliste | Tir précis sur une seule cible |
   | Canon | Boulets explosifs, dégâts de zone |
   | Mitrailleuse | Rafales très rapides, faible contre l'armure |
-  | Catapulte | Très longue portée, grosse zone, tir en cloche qui anticipe la position de la cible |
-  | Givre | Onde qui ralentit tous les ennemis proches |
+  | Catapulte | Très longue portée, tir en cloche qui anticipe la cible |
+  | Givre | Onde qui ralentit les ennemis proches |
 
-- **4 ennemis** : Éclaireur, Rapide, Blindé (l'armure retire des dégâts à chaque coup) et Vaisseau-mère, qui libère 4 Rapides en mourant.
-- **Économie** : or par ennemi détruit, prime de fin de vague, revente à 70 %. Appeler la vague suivante en avance rapporte 1 or par seconde gagnée.
-- **Ciblage par tour** : premier, dernier, plus fort, plus proche.
-- **Confort** : vitesse x1/x2, pause automatique quand l'app passe en arrière-plan, tutoriel au premier niveau, aperçu de la composition de la prochaine vague.
+- **3 sorts** à recharge, qu'on vise en touchant la carte. Leur puissance suit la difficulté des vagues.
+  - Météore : un rocher en feu écrase une zone.
+  - Blizzard : gèle les ennemis sur place (moitié du temps pour les boss).
+  - Foudre : éclair en chaîne sur les 5 ennemis les plus proches.
+- **4 ennemis** : Éclaireur, Rapide, Blindé et Vaisseau-mère, qui libère 4 Rapides en mourant.
+- **Progression** :
+  - on gagne des étoiles (3 par niveau, 1 couronne en Héroïque, 1 étoile toutes les 10 vagues en Survie, jusqu'à 3) ;
+  - elles s'échangent contre **6 améliorations permanentes** : dégâts, or de départ, portée, coût des améliorations, sorts, vies ;
+  - elles sont réinitialisables à tout moment.
+- **Récompenses en jeu** :
+  - bonus multi-kill (triplé, quadruplé, carnage) ;
+  - bonus de vague parfaite (aucun ovni passé) ;
+  - bonus d'appel anticipé ;
+  - pièces qui volent vers le compteur d'or.
+
+## Graphismes
+
+- **L'île** : la carte est une île flottante en tuiles Kenney, posée sur une falaise rocheuse générée, au milieu d'une mer animée (shader maison : vagues, écume sur le rivage, reflets). Des îlots boisés l'entourent et des nuages dérivent autour.
+- **Ambiances** : ciel en dégradé avec soleil ou lune et étoiles, ombres de nuages qui glissent sur le terrain, arbres qui bougent au vent (vertex shader), particules d'ambiance par niveau, lueur chaude du château la nuit.
+- **Effets** :
+  - ovnis avec ombre de contact, halo coloré par type, bloc de glace quand ils sont gelés ;
+  - traînées derrière les projectiles, flash au tir ;
+  - météore enflammé, éclairs en chaîne, traces de brûlure et de givre au sol ;
+  - le château fume quand il est endommagé.
+- **Qualité** :
+  - Haute : bloom, ombres 2048 ;
+  - Moyenne : ombres 1024 ;
+  - Basse : pas d'ombres.
+
+  En mode Auto, la qualité baisse d'un cran si le jeu ralentit.
 
 ## Contrôles
 
@@ -31,6 +68,7 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
 | Déplacer la vue | Glisser un doigt (une fois zoomé) |
 | Zoomer | Pincer, ou molette sur ordinateur |
 | Lancer la vague | Bouton en bas, ou Espace |
+| Lancer un sort | Toucher le sort en bas à gauche, puis la carte (ou touches 1, 2, 3) |
 | Pause | Bouton en haut à droite, ou Échap |
 
 ## Architecture
@@ -43,13 +81,15 @@ tower-defense/
 ├── tools/balance.mjs           # Bot d'équilibrage (Node, sans navigateur)
 └── src/
     ├── config.js               # Réglages globaux (économie, caméra, combat)
-    ├── data/                   # Tours, ennemis, cartes ASCII, génération des vagues
+    ├── data/                   # Tours, ennemis, sorts, améliorations, cartes, ambiances, vagues
     ├── sim/                    # Logique pure, sans Three.js ni DOM
     │   ├── level.js            # Lecture de carte, chemin, virages arrondis
     │   └── simulation.js       # Vagues, ennemis, tours, projectiles, économie
     ├── render/                 # Tout le visuel Three.js
     │   ├── assets.js           # Chargement GLB, matériau unique partagé
-    │   ├── world.js            # Terrain en InstancedMesh, décor, lumières, château
+    │   ├── world.js            # Île, mer, nuages, ciel, terrain instancié, lumières
+    │   ├── ambient.js          # Particules d'ambiance animées sur le GPU
+    │   ├── spellViews.js       # Météore, éclairs, traces au sol
     │   ├── towerViews.js       # Tours empilées, visée, recul, animations
     │   ├── enemyViews.js       # Ovnis (pool), barres de vie, flash, teinte givre
     │   ├── projectileViews.js  # Flèches, boulets, balles, rochers
@@ -67,11 +107,21 @@ La simulation ne connaît ni Three.js ni le DOM : elle tourne à pas fixe (60 Hz
 
 ```bash
 cd tower-defense
-node tools/balance.mjs 10          # le bot joue 10 parties par niveau
-node tools/balance.mjs 1 --leaks   # et détaille les ennemis qui passent
+node tools/balance.mjs 6 --survival   # 6 parties par niveau, sorts compris, et la Survie
+node tools/balance.mjs 6 --perks      # même chose avec des améliorations « milieu de partie »
+node tools/balance.mjs 1 --leaks      # détaille les ennemis qui passent
 ```
 
-Résultat actuel (10 parties) : le bot gagne 10/10 en Prairie avec 16 à 20 vies, 10/10 au Col avec 5 à 11 vies, et 8/10 au Canyon avec 0 à 10 vies. Toutes les valeurs d'équilibrage sont dans `src/data/` et `src/config.js`.
+Résultat actuel (bot qui utilise aussi les sorts) :
+
+| Niveau | Sans amélioration | Avec améliorations moyennes |
+| --- | --- | --- |
+| 1 à 2 | 3 étoiles | 3 étoiles |
+| 3 à 4 | 1 à 3 étoiles | 3 étoiles |
+| 5 | gagne 4 fois sur 6, 1 étoile | 3 étoiles |
+| Survie | vague 22 environ | vague 28 environ |
+
+Le niveau 5 pousse donc à utiliser les améliorations. Toutes les valeurs d'équilibrage sont dans `src/data/` et `src/config.js`.
 
 **Performance** : terrain et décor en InstancedMesh, un seul matériau et une seule texture pour tous les modèles, objets (ennemis, projectiles, particules) réutilisés en pool. La qualité (ombres, pixel ratio, particules) baisse automatiquement si le FPS chute.
 

@@ -22,8 +22,8 @@ export class Effects {
   constructor(scene, assets) {
     this.scene = scene;
     this.scale = 1;
-    this.sparks = new ParticleSystem(scene, { capacity: 700, additive: true, softness: 0.5 });
-    this.puffs = new ParticleSystem(scene, { capacity: 500, additive: false, softness: 0.35 });
+    this.sparks = new ParticleSystem(scene, { capacity: 1100, additive: true, softness: 0.5 });
+    this.puffs = new ParticleSystem(scene, { capacity: 1000, additive: false, softness: 0.35 });
 
     this.ringGeometry = new THREE.RingGeometry(0.86, 1, 48);
     this.ringGeometry.rotateX(-Math.PI / 2);
@@ -108,6 +108,69 @@ export class Effects {
 
   muzzle(x, y, z) {
     this.puffs.burst(x, y, z, this.count(4), 0.8, COLORS.smoke, 0.25, 0.5, { upward: 0.9, drag: 3, endSize: 0.5 });
+    this.flash(x, y, z, 0.5);
+  }
+
+  /** Short bright pop of light (muzzle flash, impacts). */
+  flash(x, y, z, size) {
+    this.sparks.emit(x, y, z, 0, 0, 0, COLORS.spark, size, 0.09, { endSize: size * 1.4, drag: 0, brightness: 2 });
+  }
+
+  bigExplosion(x, z, radius) {
+    const y = CONFIG.world.tileTop + 0.15;
+    this.sparks.burst(x, y, z, this.count(60), 6, COLORS.fire, 0.55, 0.8, { gravity: 4, brightness: 1.8, upward: 0.7 });
+    this.sparks.burst(x, y, z, this.count(30), 8, COLORS.spark, 0.25, 0.6, { gravity: 8, brightness: 2 });
+    this.sparks.burst(x, y, z, this.count(20), 4, COLORS.ember, 0.18, 1.4, { gravity: 5, upward: 0.9, brightness: 1.6 });
+    this.puffs.burst(x, y, z, this.count(26), 3, COLORS.smoke, 0.9, 1.6, { upward: 0.8, drag: 2, endSize: 2.2 });
+    this.puffs.burst(x, y, z, this.count(18), 4, COLORS.dust, 0.5, 1, { upward: 0.4, drag: 3, endSize: 1.2 });
+    this.flash(x, y + 0.4, z, 3.5);
+    this.ring(x, z, radius * 1.4, 0.6, COLORS.fire);
+    this.ring(x, z, radius * 0.8, 0.4, COLORS.spark);
+  }
+
+  iceBurst(x, z, radius) {
+    const y = CONFIG.world.tileTop + 0.2;
+    this.sparks.burst(x, y, z, this.count(45), radius * 3, COLORS.frost, 0.22, 1, { upward: 0.5, drag: 2.5, brightness: 1.5 });
+    this.puffs.burst(x, y, z, this.count(35), radius * 2, COLORS.snow, 0.3, 1.4, { upward: 0.6, drag: 2, gravity: 0.6, endSize: 0.1 });
+    this.flash(x, y + 0.3, z, 2.5);
+    this.ring(x, z, radius, 0.7, COLORS.frost);
+    this.ring(x, z, radius * 0.6, 0.5, COLORS.snow);
+  }
+
+  sparksBurst(x, y, z, color) {
+    this.sparks.burst(x, y, z, this.count(14), 4, color, 0.2, 0.4, { gravity: 6, brightness: 1.8 });
+    this.flash(x, y, z, 0.9);
+  }
+
+  meteorTrail(x, y, z, fire, ember) {
+    const j = () => (Math.random() - 0.5) * 0.25;
+    this.sparks.emit(x + j(), y + j(), z + j(), j(), 0.5, j(), fire, 0.55, 0.35, { endSize: 0.1, drag: 2, brightness: 1.8 });
+    this.sparks.emit(x + j(), y + j(), z + j(), j() * 4, j() * 4, j() * 4, ember, 0.15, 0.5, { drag: 1, brightness: 1.6 });
+    this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.3, 0, COLORS.smoke, 0.35, 0.9, { endSize: 0.9, drag: 2 });
+  }
+
+  /** Continuous smoke from a damaged castle. */
+  castleSmoke(x, z) {
+    this.puffs.emit(x + (Math.random() - 0.5) * 0.3, CONFIG.world.tileTop + 1.2, z + (Math.random() - 0.5) * 0.3, 0, 0.6, 0, COLORS.smoke, 0.3, 1.8, { endSize: 0.8, drag: 0.5 });
+  }
+
+  trail(kind, x, y, z) {
+    const j = () => (Math.random() - 0.5) * 0.05;
+    switch (kind) {
+      case 'arrow':
+        this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.1, 0, COLORS.snow, 0.09, 0.3, { endSize: 0.02, drag: 4 });
+        break;
+      case 'bullet':
+        this.sparks.emit(x, y, z, 0, 0, 0, COLORS.spark, 0.1, 0.12, { endSize: 0.02, drag: 0, brightness: 1.6 });
+        break;
+      case 'cannonball':
+        this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.3, 0, COLORS.smoke, 0.16, 0.45, { endSize: 0.32, drag: 3 });
+        break;
+      case 'boulder':
+        this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.2, 0, COLORS.dust, 0.2, 0.5, { endSize: 0.4, drag: 3 });
+        break;
+      default:
+    }
   }
 
   enemyDeath(x, y, z, big) {
