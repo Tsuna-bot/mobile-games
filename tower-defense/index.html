@@ -50,7 +50,7 @@
         </div>
       </div>
       <div class="hud__wave">
-        <span>Vague</span>
+        <span id="hud-wave-label">Vague</span>
         <strong id="hud-wave">0/10</strong>
       </div>
       <div class="hud__actions">
@@ -59,9 +59,18 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
         </button>
       </div>
+      <div class="hud__res" id="hud-res" hidden>
+        <span class="res" data-res="wood" title="Bois"><i aria-hidden="true">🪵</i><b>0</b><small>/250</small></span>
+        <span class="res" data-res="stone" title="Pierre"><i aria-hidden="true">🪨</i><b>0</b><small>/250</small></span>
+        <span class="res" data-res="crystal" title="Cristal"><i aria-hidden="true">💎</i><b>0</b><small>/250</small></span>
+      </div>
     </header>
 
     <footer id="dock" class="dock">
+      <div class="realm-bar" id="realm-bar" hidden>
+        <button id="btn-workers" class="realm-bar__btn" type="button"><span aria-hidden="true">👷</span> <span id="workers-label">Ouvriers</span></button>
+        <button id="btn-research" class="realm-bar__btn" type="button"><span aria-hidden="true">📜</span> <span id="research-label">Recherche</span></button>
+      </div>
       <div class="spells" id="spells" role="group" aria-label="Sorts">
         <button class="spell" type="button" data-spell="meteor" aria-label="Météore">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2.5c.4 3-1.8 4.3-1.8 6.6 0 1.3.9 2.3 2.1 2.3 1.8 0 2.6-1.8 2.2-3.8 2.3 1.6 3.9 4.3 3.9 7.2A7.9 7.9 0 0 1 12 22.5a7.9 7.9 0 0 1-7.9-7.9c0-5.1 5.5-7.6 9.4-12.1z"/></svg>
@@ -126,6 +135,47 @@
       </div>
     </section>
 
+    <section id="sheet-realm-build" class="sheet" aria-labelledby="realm-build-title">
+      <div class="sheet__head">
+        <h2 id="realm-build-title">Construire</h2>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <div class="tabs tabs--sheet" role="tablist">
+        <button class="tab" type="button" role="tab" data-realm-tab="defense" aria-selected="true">Défense</button>
+        <button class="tab" type="button" role="tab" data-realm-tab="village" aria-selected="false">Village</button>
+      </div>
+      <div class="build-grid build-grid--realm" id="realm-build-grid"></div>
+      <p class="sheet__hint" id="realm-build-hint">Touche un élément pour le voir, puis touche-le encore pour construire.</p>
+    </section>
+
+    <section id="sheet-realm-info" class="sheet" aria-labelledby="realm-info-name">
+      <div class="sheet__head">
+        <div class="tower-id">
+          <img id="realm-info-image" alt="" width="64" height="64">
+          <div>
+            <h2 id="realm-info-name">Maison</h2>
+            <div class="pips" id="realm-info-level" aria-label="Niveau"></div>
+          </div>
+        </div>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <dl class="tower-stats" id="realm-info-stats"></dl>
+      <div class="segmented" id="realm-info-targeting" role="group" aria-label="Cible prioritaire"></div>
+      <div class="sheet__actions">
+        <button id="btn-demolish" class="btn btn--ghost" type="button">Démolir</button>
+        <button id="btn-realm-upgrade" class="btn btn--gold" type="button">Améliorer</button>
+      </div>
+    </section>
+
+    <section id="sheet-workers" class="sheet" aria-labelledby="workers-title">
+      <div class="sheet__head">
+        <h2 id="workers-title">Ouvriers</h2>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <div class="jobs" id="jobs"></div>
+      <p class="sheet__hint" id="workers-hint">Touche aussi un arbre, un rocher ou un cristal pour y envoyer un ouvrier.</p>
+    </section>
+
     <div id="banner" class="banner" aria-live="polite"></div>
     <div id="floaters" class="floaters" aria-hidden="true"></div>
     <div id="coins" class="coins" aria-hidden="true"></div>
@@ -153,6 +203,11 @@
           <button id="btn-achievements" class="btn btn--small" type="button">Succès <span class="badge badge--soft" id="achievements-count">0/0</span></button>
         </div>
       </div>
+      <button id="btn-realm" class="realm-card" type="button">
+        <span class="realm-card__icon" aria-hidden="true">🏰</span>
+        <span><b>Royaume</b><span id="realm-detail">Monde ouvert : récolte, construis, survis aux nuits</span></span>
+        <span class="realm-card__tag">Nouveau</span>
+      </button>
       <button id="btn-resume-run" class="resume-card" type="button" hidden>
         <span class="resume-card__icon" aria-hidden="true">▶</span>
         <span><b>Reprendre la partie</b><span id="resume-detail">Prairie · vague 3</span></span>
@@ -164,7 +219,7 @@
         <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
         <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
       </div>
-      <p class="credits">Sauvegarde automatique · Modèles 3D : Tower Defense Kit de Kenney (CC0)</p>
+      <p class="credits">Sauvegarde automatique · Modèles 3D : Tower Defense Kit, Survival Kit et Mini Characters de Kenney (CC0)</p>
     </section>
 
     <section id="screen-perks" class="screen" aria-labelledby="perks-title">
@@ -204,11 +259,24 @@
       </div>
     </section>
 
+    <section id="screen-research" class="screen" aria-labelledby="research-title">
+      <div class="perks-head">
+        <h2 id="research-title" class="screen__title screen__title--small">Académie</h2>
+        <p class="research-wallet" id="research-wallet"></p>
+      </div>
+      <div class="tabs tabs--four" role="tablist" id="research-tabs"></div>
+      <div class="shop" id="research"></div>
+      <div class="panel">
+        <button id="btn-research-back" class="btn btn--primary" type="button">Retour au royaume</button>
+      </div>
+    </section>
+
     <section id="screen-pause" class="screen" aria-labelledby="pause-title">
       <h2 id="pause-title" class="screen__title">Pause</h2>
       <div class="panel">
         <button id="btn-resume" class="btn btn--primary" type="button">Reprendre</button>
         <button id="btn-restart" class="btn" type="button">Recommencer</button>
+        <button id="btn-new-realm" class="btn btn--danger-soft" type="button" hidden>Nouveau royaume</button>
         <button id="btn-quit" class="btn btn--ghost" type="button">Menu</button>
       </div>
       <div class="settings" role="group" aria-label="Réglages">

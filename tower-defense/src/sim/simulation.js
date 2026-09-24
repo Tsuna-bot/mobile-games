@@ -35,6 +35,12 @@ function createEnemy() {
     slowTimer: 0,
     freezeTimer: 0,
     stunTimer: 0,
+    // Damage over time (flame and acid towers): armor is ignored.
+    burnTimer: 0,
+    burnDps: 0,
+    poisonTimer: 0,
+    poisonDps: 0,
+    dotTower: null,
     wave: 0,
     view: null,
   };
@@ -50,6 +56,8 @@ function createProjectile() {
     damage: 0,
     splash: 0,
     pierce: false,
+    poison: 0,
+    poisonTime: 0,
     speed: 0,
     x: 0, y: 0, z: 0,
     vx: 0, vy: 0, vz: 0,
@@ -76,6 +84,10 @@ export class Tower {
     this.target = null;
     this.kills = 0;
     this.damageDealt = 0;
+    this.beamTarget = null;
+    this.beamTargetId = 0;
+    this.beamHeat = 1;
+    this.beaming = 0;
     this.view = null;
     this.refreshStats();
   }
@@ -112,7 +124,7 @@ export class Simulation {
   constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS, spells = STARTER_SPELLS } = {}) {
     this.def = levelDef;
     this.levelIndex = levelIndex;
-    this.level = new Level(levelDef, levelIndex);
+    this.level = this.createLevel(levelDef, levelIndex);
     this.heroic = heroic;
     this.modifiers = modifiers;
     this.endless = Boolean(levelDef.endless);
@@ -145,6 +157,10 @@ export class Simulation {
       this.spells[id] = { cooldown: spell.initialCooldown * modifiers.spellCooldown, max };
     }
     this.strikes = [];
+  }
+
+  createLevel(levelDef, levelIndex) {
+    return new Level(levelDef, levelIndex);
   }
 
   get over() {
@@ -449,19 +465,29 @@ export class Simulation {
     enemy.slowTimer = 0;
     enemy.freezeTimer = 0;
     enemy.stunTimer = 0;
+    enemy.burnTimer = 0;
+    enemy.poisonTimer = 0;
+    enemy.dotTower = null;
     enemy.wave = wave;
+    this.placeEnemy(enemy, distance);
+    this.listener.onEnemySpawn?.(enemy);
+    return enemy;
+  }
+
+  /** Puts a new enemy at `distance` along the road. */
+  placeEnemy(enemy, distance) {
     this.level.sampleRoute(distance, this.sample);
     enemy.x = this.sample.x;
     enemy.z = this.sample.z;
     enemy.dirX = this.sample.dirX;
     enemy.dirZ = this.sample.dirZ;
-    this.listener.onEnemySpawn?.(enemy);
-    return enemy;
   }
 
   updateEnemies(dt) {
     const length = this.level.routeLength;
     for (const enemy of this.enemies) {
+      if (!enemy.active) continue;
+      this.updateDots(enemy, dt);
       if (!enemy.active) continue;
       if (enemy.freezeTimer > 0 || enemy.stunTimer > 0) {
         if (enemy.freezeTimer > 0) enemy.freezeTimer -= dt;
@@ -483,6 +509,18 @@ export class Simulation {
       enemy.z = this.sample.z;
       enemy.dirX = this.sample.dirX;
       enemy.dirZ = this.sample.dirZ;
+    }
+  }
+
+  /** Burn and poison ticks (silent: no hit flash every frame). */
+  updateDots(enemy, dt) {
+    if (enemy.burnTimer > 0) {
+      enemy.burnTimer -= dt;
+      this.damage(enemy, enemy.burnDps * dt, enemy.dotTower, true, true);
+    }
+    if (enemy.poisonTimer > 0 && enemy.active) {
+      enemy.poisonTimer -= dt;
+      this.damage(enemy, enemy.poisonDps * dt, enemy.dotTower, true, true);
     }
   }
 
@@ -518,12 +556,12 @@ export class Simulation {
     }
   }
 
-  damage(enemy, amount, tower, pierce = false) {
+  damage(enemy, amount, tower, pierce = false, silent = false) {
     if (!enemy.active) return;
     const dealt = pierce ? amount : Math.max(amount * CONFIG.combat.minDamageShare, amount - enemy.armor);
     enemy.hp -= dealt;
     if (tower) tower.damageDealt += dealt;
-    this.listener.onEnemyHit?.(enemy, dealt);
+    if (!silent) this.listener.onEnemyHit?.(enemy, dealt);
     if (enemy.hp <= 0) this.kill(enemy, tower);
   }
 
@@ -586,6 +624,7 @@ export class Simulation {
     for (const tower of this.towers) {
       const stats = tower.stats;
       tower.cooldown -= dt;
+      if (tower.beaming > 0) tower.beaming -= dt;
       if (tower.def.id === 'frost') {
         if (tower.cooldown <= 0 && this.frostPulse(tower, stats)) tower.cooldown = stats.rate;
         continue;
@@ -647,9 +686,49 @@ export class Simulation {
     chain.forEach((enemy, i) => this.damage(enemy, stats.damage * 0.85 ** i, tower));
   }
 
+  /** Flame tower: a burst of fire around the target sets every enemy there alight. */
+  flame(tower, target, stats) {
+    this.listener.onFlame?.(tower, target);
+    const radiusSq = stats.splash * stats.splash;
+    for (const enemy of this.enemies) {
+      if (!enemy.active || (enemy.x - target.x) ** 2 + (enemy.z - target.z) ** 2 > radiusSq) continue;
+      if (enemy.burnTimer <= 0 || enemy.burnDps <= stats.burn) {
+        enemy.burnDps = stats.burn;
+        enemy.dotTower = tower;
+      }
+      enemy.burnTimer = Math.max(enemy.burnTimer, stats.burnTime);
+      this.damage(enemy, stats.damage, tower, true);
+    }
+  }
+
+  /** Prism: continuous beam whose damage ramps up while it stays on the same target. */
+  beam(tower, target, stats) {
+    tower.beamHeat = tower.beamTarget === target && target.id === tower.beamTargetId ? Math.min(stats.maxRamp, tower.beamHeat + stats.ramp) : 1;
+    tower.beamTarget = target;
+    tower.beamTargetId = target.id;
+    tower.beaming = stats.rate * 1.8;
+    this.damage(target, stats.damage * tower.beamHeat, tower, stats.armorPierce, true);
+    this.listener.onBeam?.(tower, target);
+  }
+
+  /** Where `target` will be in `time` seconds (arcing shells aim ahead). */
+  predictPosition(target, time, out) {
+    const moving = target.freezeTimer > 0 || target.stunTimer > 0 ? 0 : target.speed * target.slowFactor;
+    this.level.sampleRoute(target.distance + moving * time, out);
+    return out;
+  }
+
   fire(tower, target, stats) {
     if (stats.chains) {
       this.chainLightning(tower, target, stats);
+      return;
+    }
+    if (stats.burn) {
+      this.flame(tower, target, stats);
+      return;
+    }
+    if (stats.beam) {
+      this.beam(tower, target, stats);
       return;
     }
     const p = this.projectiles.find((item) => !item.active);
@@ -662,6 +741,8 @@ export class Simulation {
     p.damage = stats.damage;
     p.splash = stats.splash ?? 0;
     p.pierce = Boolean(stats.armorPierce);
+    p.poison = stats.poison ?? 0;
+    p.poisonTime = stats.poisonTime ?? 0;
     p.speed = stats.projectileSpeed ?? 0;
     p.age = 0;
     p.x = p.sx = tower.x;
@@ -671,11 +752,11 @@ export class Simulation {
     p.ty = CONFIG.world.enemyHover;
     p.tz = target.z;
     p.vx = p.vy = p.vz = 0;
-    if (p.kind === 'boulder') {
-      // Aim where the target will be when the boulder lands.
+    p.flightTime = 0;
+    if (stats.flightTime) {
+      // Arcing shots aim where the target will be when they land.
       p.flightTime = stats.flightTime;
-      const moving = target.freezeTimer > 0 || target.stunTimer > 0 ? 0 : target.speed * target.slowFactor;
-      this.level.sampleRoute(target.distance + moving * stats.flightTime, this.sample);
+      this.predictPosition(target, stats.flightTime, this.sample);
       p.tx = this.sample.x;
       p.tz = this.sample.z;
       p.ty = CONFIG.world.tileTop;
@@ -687,7 +768,7 @@ export class Simulation {
     for (const p of this.projectiles) {
       if (!p.active) continue;
       p.age += dt;
-      if (p.kind === 'boulder') {
+      if (p.flightTime > 0) {
         const t = Math.min(p.age / p.flightTime, 1);
         const px = p.x;
         const py = p.y;
@@ -729,9 +810,22 @@ export class Simulation {
     }
   }
 
+  poisonCloud(p) {
+    const radiusSq = p.splash * p.splash;
+    for (const enemy of this.enemies) {
+      if (!enemy.active || (enemy.x - p.x) ** 2 + (enemy.z - p.z) ** 2 > radiusSq) continue;
+      if (enemy.poisonTimer <= 0 || enemy.poisonDps <= p.poison) {
+        enemy.poisonDps = p.poison;
+        enemy.dotTower = p.tower;
+      }
+      enemy.poisonTimer = Math.max(enemy.poisonTimer, p.poisonTime);
+    }
+  }
+
   impact(p) {
     p.active = false;
     this.listener.onImpact?.(p);
+    if (p.poison > 0) this.poisonCloud(p);
     if (p.splash > 0) this.areaDamage(p.x, p.z, p.splash, p.damage, p.tower);
     else if (p.target && p.target.active && p.target.id === p.targetId) this.damage(p.target, p.damage, p.tower, p.pierce);
     p.target = null;

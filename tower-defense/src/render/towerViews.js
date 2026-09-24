@@ -18,6 +18,10 @@ function shortestAngle(from, to) {
   return delta;
 }
 
+// Towers whose top does not aim: crystals and the gold mine spin and float instead.
+const NON_AIMING = new Set(['frost', 'tesla', 'goldmine', 'laser']);
+const BEAM_COLOR = new THREE.Color(0xff5ad8).multiplyScalar(2.2);
+
 const tintedMaterials = new Map();
 
 /** Shared glowing variant of the palette material for tinted crystals. */
@@ -73,6 +77,13 @@ export class TowerViews {
     // Golden aura under fully upgraded towers.
     this.auraGeometry = new THREE.RingGeometry(0.42, 0.52, 32, 1, 0, Math.PI * 1.6);
     this.auraGeometry.rotateX(-Math.PI / 2);
+    // Prism beam: an open cylinder along +Z, stretched to the target each frame.
+    this.beamGeometry = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+    this.beamGeometry.rotateX(Math.PI / 2);
+    this.beamGeometry.translate(0, 0, 0.5);
+    this.beamMaterial = new THREE.MeshBasicMaterial({ color: BEAM_COLOR, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.beamCore = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffffff).multiplyScalar(2), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.beamTarget = new THREE.Vector3();
     this.auraMaterial = new THREE.MeshBasicMaterial({
       color: new THREE.Color(0xffc93c).multiplyScalar(1.8),
       transparent: true,
@@ -101,6 +112,16 @@ export class TowerViews {
     view.pick.userData.tower = tower;
     view.group.add(view.pick);
     this.scene.add(view.group);
+    if (tower.def.levels[0].beam) {
+      view.beam = new THREE.Group();
+      const glow = new THREE.Mesh(this.beamGeometry, this.beamMaterial);
+      const core = new THREE.Mesh(this.beamGeometry, this.beamCore);
+      core.scale.set(0.4, 0.4, 1);
+      view.beam.add(glow, core);
+      view.beam.visible = false;
+      view.beam.renderOrder = 5;
+      this.scene.add(view.beam);
+    }
     tower.view = view;
     this.views.add(view);
     this.rebuild(view);
@@ -137,6 +158,7 @@ export class TowerViews {
     const view = tower.view;
     if (!view) return;
     view.group.removeFromParent();
+    view.beam?.removeFromParent();
     this.views.delete(view);
     tower.view = null;
   }
@@ -155,7 +177,19 @@ export class TowerViews {
     for (const view of this.views) {
       const { tower } = view;
       if (view.aura) view.aura.rotation.y = time * 1.5;
-      if (!tower.def.projectile) {
+      if (view.beam) {
+        const target = tower.target;
+        const on = tower.beaming > 0 && target?.active;
+        view.beam.visible = Boolean(on);
+        if (on) {
+          const muzzle = view.beam.position.set(tower.x, CONFIG.world.tileTop + weaponBaseY(tower.def, tower.level) + 0.35, tower.z);
+          const end = target.view ? this.beamTarget.copy(target.view.root.position) : this.beamTarget.set(target.x, CONFIG.world.enemyHover, target.z);
+          view.beam.lookAt(end);
+          const width = 0.05 + 0.022 * tower.beamHeat + Math.sin(time * 50) * 0.008;
+          view.beam.scale.set(width, width, muzzle.distanceTo(end));
+        }
+      }
+      if (NON_AIMING.has(tower.def.id)) {
         // Crystal and gold towers don't aim: their top slowly spins and floats.
         view.weapon.rotation.y = time * (tower.def.id === 'tesla' ? 2.2 : 0.9);
         view.weapon.position.y = weaponBaseY(tower.def, tower.level) + Math.sin(time * 2 + tower.id) * 0.04;
@@ -197,7 +231,10 @@ export class TowerViews {
   }
 
   clear() {
-    for (const view of this.views) view.group.removeFromParent();
+    for (const view of this.views) {
+      view.group.removeFromParent();
+      view.beam?.removeFromParent();
+    }
     this.views.clear();
   }
 }

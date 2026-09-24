@@ -13,6 +13,9 @@ export const ACHIEVEMENTS = [
   { id: 'perfect', name: 'Sans faille', text: 'Réussir 25 vagues parfaites', reward: 40, check: (s) => s.perfectWaves >= 25 },
   { id: 'survivor', name: 'Survivant', text: 'Atteindre la vague 20 en Survie', reward: 60, check: (s) => s.survivalWave >= 20 },
   { id: 'rich', name: 'Trésorier', text: 'Avoir 1 000 or en même temps', reward: 30, check: (s) => s.maxGold >= 1000 },
+  { id: 'realm_5', name: 'Seigneur', text: 'Survivre à 5 nuits dans le Royaume', reward: 40, check: (s) => s.realmNights >= 5 },
+  { id: 'realm_15', name: 'Roi des nuits', text: 'Survivre à 15 nuits dans le Royaume', reward: 100, check: (s) => s.realmNights >= 15 },
+  { id: 'realm_30', name: 'Légende du royaume', text: 'Survivre à 30 nuits dans le Royaume', reward: 200, check: (s) => s.realmNights >= 30 },
 ];
 
 export const EMPTY_STATS = Object.freeze({
@@ -27,6 +30,7 @@ export const EMPTY_STATS = Object.freeze({
   perfectWaves: 0,
   survivalWave: 0,
   maxGold: 0,
+  realmNights: 0,
 });
 
 /** Gems earned at the end of a run (the first clear of a level pays more). */

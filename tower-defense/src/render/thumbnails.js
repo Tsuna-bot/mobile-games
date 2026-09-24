@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { ENEMIES } from '../data/enemies.js';
 import { TOWERS } from '../data/towers.js';
+import { BUILDINGS } from '../data/realm.js';
+import { buildBuildingModel } from './realmViews.js';
 import { buildTowerModel } from './towerViews.js';
 
 const SIZE = 160;
@@ -53,9 +55,12 @@ export function renderThumbnails(renderer, assets) {
     return canvas.toDataURL('image/png');
   };
 
-  const thumbnails = { towers: {}, enemies: {} };
+  const thumbnails = { towers: {}, enemies: {}, buildings: {} };
   for (const def of Object.values(TOWERS)) {
     thumbnails.towers[def.id] = def.levels.map((_, level) => snap(buildTowerModel(assets, def, level).root));
+  }
+  for (const def of Object.values(BUILDINGS)) {
+    thumbnails.buildings[def.id] = def.levels.map((_, level) => snap(buildBuildingModel(assets, def, level)));
   }
   for (const def of Object.values(ENEMIES)) {
     const model = assets.clone(def.model);

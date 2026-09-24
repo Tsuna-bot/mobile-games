@@ -17,6 +17,8 @@ export class CameraRig {
     this.fitDistance = 20;
     this.zoom = 1;
     this.targetZoom = 1;
+    // Closest zoom (fraction of the fitted distance); the big Kingdom map allows closer.
+    this.minZoom = CONFIG.camera.minZoom;
     this.target = new THREE.Vector3();
     this.goal = new THREE.Vector3();
     this.bounds = { halfW: 3, halfH: 5 };
@@ -92,7 +94,7 @@ export class CameraRig {
   }
 
   zoomBy(factor) {
-    this.targetZoom = clamp(this.targetZoom / factor, CONFIG.camera.minZoom, 1);
+    this.targetZoom = clamp(this.targetZoom / factor, this.minZoom, 1);
     this.clampGoal();
   }
 

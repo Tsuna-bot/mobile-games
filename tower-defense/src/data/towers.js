@@ -157,6 +157,84 @@ export const TOWERS = {
       { upgrade: 170, income: 50, range: 0, rate: 0 },
     ],
   },
+  flame: {
+    id: 'flame',
+    name: 'Lance-flammes',
+    blurb: 'Crache du feu sur un groupe : les ovnis brûlent, même blindés.',
+    cost: 100,
+    shopPrice: 160,
+    weapon: 'weapon-turret',
+    weaponTint: 0xff7a30,
+    projectile: null,
+    pieces: [
+      ['tower-round-bottom-b'],
+      ['tower-round-bottom-b', 'tower-round-middle-b'],
+      ['tower-round-bottom-b', 'tower-round-middle-b', 'tower-round-top-b'],
+    ],
+    levels: [
+      { damage: 4, splash: 0.7, range: 1.7, rate: 0.32, burn: 7, burnTime: 2 },
+      { upgrade: 90, damage: 6, splash: 0.8, range: 1.85, rate: 0.3, burn: 12, burnTime: 2.2 },
+      { upgrade: 160, damage: 10, splash: 0.9, range: 2.0, rate: 0.28, burn: 20, burnTime: 2.4 },
+    ],
+  },
+  mortar: {
+    id: 'mortar',
+    name: 'Mortier',
+    blurb: 'Obus lents à très longue portée : énormes dégâts de zone.',
+    cost: 160,
+    shopPrice: 220,
+    weapon: 'weapon-cannon',
+    weaponScale: [1.15, 1.25, 1.35],
+    projectile: 'shell',
+    pieces: [['tower-square-build-d'], ['tower-square-build-e'], ['tower-square-build-f']],
+    levels: [
+      { damage: 85, splash: 1.5, range: 4.6, rate: 3.4, flightTime: 1.4 },
+      { upgrade: 140, damage: 145, splash: 1.65, range: 5.0, rate: 3.1, flightTime: 1.4 },
+      { upgrade: 230, damage: 245, splash: 1.8, range: 5.4, rate: 2.8, flightTime: 1.4 },
+    ],
+  },
+  laser: {
+    id: 'laser',
+    name: 'Prisme',
+    blurb: 'Rayon continu qui chauffe : plus il reste sur une cible, plus il fait mal.',
+    cost: 150,
+    shopPrice: 200,
+    weapon: 'tower-round-crystals',
+    weaponTint: 0xff5ad8,
+    weaponScale: [0.85, 1, 1.1],
+    projectile: null,
+    pieces: [
+      ['tower-round-bottom-a'],
+      ['tower-round-bottom-a', 'tower-round-middle-a'],
+      ['tower-round-bottom-a', 'tower-round-middle-a', 'tower-round-top-a'],
+    ],
+    levels: [
+      { damage: 3.2, range: 2.6, rate: 0.1, beam: true, ramp: 0.1, maxRamp: 3.5, armorPierce: true },
+      { upgrade: 120, damage: 5.4, range: 2.9, rate: 0.1, beam: true, ramp: 0.11, maxRamp: 3.8, armorPierce: true },
+      { upgrade: 200, damage: 8.5, range: 3.2, rate: 0.1, beam: true, ramp: 0.12, maxRamp: 4.2, armorPierce: true },
+    ],
+  },
+  poison: {
+    id: 'poison',
+    name: 'Tour d’acide',
+    blurb: 'Fioles toxiques : un nuage empoisonne les ovnis et ignore l’armure.',
+    cost: 90,
+    shopPrice: 140,
+    weapon: 'weapon-cannon',
+    weaponTint: 0x8dff4a,
+    weaponScale: [0.8, 0.85, 0.9],
+    projectile: 'poison',
+    pieces: [
+      ['tower-square-bottom-a'],
+      ['tower-square-bottom-a', 'tower-square-middle-c'],
+      ['tower-square-bottom-a', 'tower-square-middle-c', 'tower-square-top-a'],
+    ],
+    levels: [
+      { damage: 8, splash: 1.0, range: 2.4, rate: 1.3, projectileSpeed: 7, poison: 12, poisonTime: 3 },
+      { upgrade: 80, damage: 12, splash: 1.1, range: 2.6, rate: 1.2, projectileSpeed: 7.5, poison: 21, poisonTime: 3.2 },
+      { upgrade: 140, damage: 18, splash: 1.2, range: 2.8, rate: 1.1, projectileSpeed: 8, poison: 34, poisonTime: 3.5 },
+    ],
+  },
 };
 
 // Height of each stackable piece (from the model bounding boxes), used to place
@@ -186,6 +264,9 @@ export const PIECE_HEIGHT = {
   'tower-square-build-a': 1,
   'tower-square-build-b': 1,
   'tower-square-build-c': 1,
+  'tower-square-build-d': 1.45,
+  'tower-square-build-e': 1.45,
+  'tower-square-build-f': 1.45,
 };
 
 /** Height of the stacked body for a tower level (weapon sits on top). */
@@ -193,7 +274,7 @@ export function stackHeight(def, level) {
   return def.pieces[level].reduce((sum, piece) => sum + PIECE_HEIGHT[piece], 0);
 }
 
-export const TOWER_ORDER = ['ballista', 'cannon', 'turret', 'catapult', 'frost', 'tesla', 'sniper', 'goldmine'];
+export const TOWER_ORDER = ['ballista', 'cannon', 'turret', 'catapult', 'frost', 'tesla', 'sniper', 'goldmine', 'flame', 'poison', 'laser', 'mortar'];
 export const STARTER_TOWERS = ['ballista', 'cannon', 'turret', 'catapult', 'frost'];
 
 /** Total gold invested in a tower up to (and including) `level`. */

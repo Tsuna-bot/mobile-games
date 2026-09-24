@@ -12,12 +12,14 @@ import { CameraRig } from '../render/cameraRig.js';
 import { Effects } from '../render/effects.js';
 import { EnemyViews } from '../render/enemyViews.js';
 import { ProjectileViews } from '../render/projectileViews.js';
+import { RealmViews } from '../render/realmViews.js';
 import { SpellViews } from '../render/spellViews.js';
 import { TowerViews } from '../render/towerViews.js';
 import { FrameRateMonitor, detectInitialQuality, lowerQuality } from '../render/view.js';
 import { World } from '../render/world.js';
 import { Level } from '../sim/level.js';
 import { SIM_STATE, Simulation } from '../sim/simulation.js';
+import { RealmMode } from './realmMode.js';
 
 const MODE = Object.freeze({ MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', ENDED: 'ended', PERKS: 'perks' });
 const END_SCREEN_DELAY = 1.6;
@@ -48,6 +50,7 @@ export class Game {
     this.enemyViews = new EnemyViews(scene, assets);
     this.projectileViews = new ProjectileViews(scene, assets, this.effects);
     this.spellViews = new SpellViews(scene, assets, this.effects, view.camera);
+    this.realmViews = new RealmViews(scene, assets, this.world);
     this.rig = new CameraRig(view.camera);
     this.input = new PointerInput(view.canvas);
     this.monitor = new FrameRateMonitor();
@@ -85,6 +88,9 @@ export class Game {
     });
 
     this.listener = this.createListener();
+    // Kingdom mode reuses everything above; `this.realm` is set while it runs.
+    this.realm = null;
+    this.realmMode = new RealmMode(this);
     this.bindUi();
     this.bindInput();
     this.bindLifecycle();
@@ -179,7 +185,15 @@ export class Game {
       onImpact: (projectile) => {
         this.projectileViews.release(projectile);
         const { x, y, z, kind, splash } = projectile;
-        if (kind === 'boulder') {
+        if (kind === 'shell') {
+          this.effects.groundImpact(x, z, splash, this.snowy);
+          this.effects.explosion(x, y + 0.2, z, splash);
+          this.audio.explosion(true);
+          this.rig.shake(0.12);
+        } else if (kind === 'poison') {
+          this.effects.poisonCloud(x, z, splash);
+          this.audio.shoot('poison');
+        } else if (kind === 'boulder') {
           this.effects.groundImpact(x, z, splash, this.snowy);
           this.audio.explosion(true);
           this.rig.shake(0.08);
@@ -197,6 +211,13 @@ export class Game {
         for (const point of points) this.effects.sparksAt(point.x, point.y, point.z);
         this.audio.shoot('tesla');
       },
+      onFlame: (tower, target) => {
+        const to = this.enemyViews.positionOf(target, this.tmp2);
+        this.effects.flameJet(tower.x, tower.muzzleY, tower.z, to.x, to.y, to.z);
+        this.towerViews.fired(tower);
+        this.audio.shoot('flame');
+      },
+      onBeam: () => this.audio.shoot('laser'),
       onMineIncome: (tower, amount) => {
         this.floatAt(tower.x, 1.4, tower.z, `+${amount}`);
         this.flyCoinsFrom(tower.x, 1, tower.z, 3);
@@ -303,7 +324,10 @@ export class Game {
     ui.on('shopTab', () => this.renderShop());
     ui.on('btn-perks-back', () => this.showMenu());
     ui.on('btn-perks-reset', () => this.resetPerks());
-    ui.on('btn-spell-cancel', () => this.armSpell(null));
+    ui.on('btn-spell-cancel', () => {
+      if (this.selection?.repeat) this.deselect();
+      else this.armSpell(null);
+    });
     ui.on('close', () => this.deselect());
     ui.on('buildCard', (type) => this.chooseTower(type));
     ui.on('targeting', (mode) => this.setTargeting(mode));
@@ -424,6 +448,7 @@ export class Game {
   // ------------------------------------------------------------ flow
 
   showMenu() {
+    this.realmMode.stop();
     this.mode = MODE.MENU;
     this.sim = null;
     this.armSpell(null);
@@ -444,6 +469,8 @@ export class Game {
     this.refreshWallet();
     const run = loadRun();
     const runDef = run && ALL_LEVELS.find((def) => def.id === run.levelId);
+    const realmCard = this.realmMode.menuDetail();
+    this.ui.setRealmCard(realmCard.detail, realmCard.fresh);
     this.ui.setResume(runDef ? `${runDef.name}${run.heroic ? ' · Héroïque' : ''} · vague ${Math.max(1, run.snapshot.nextWave)} · ${run.snapshot.lives} vies` : null);
     this.ui.showScreen('menu');
     this.audio.setIntensity(0);
@@ -536,6 +563,7 @@ export class Game {
     // Frame the island rim too, with a glimpse of sea around it.
     this.rig.setBounds(level.width + 1.1, level.height + 1.1);
     this.rig.reset();
+    this.rig.minZoom = CONFIG.camera.minZoom;
     this.rig.fit(this.view.width, this.view.height);
     this.world.setViewDistance(this.rig.fitDistance);
   }
@@ -553,6 +581,7 @@ export class Game {
   pause() {
     if (this.mode !== MODE.PLAYING) return;
     this.mode = MODE.PAUSED;
+    this.realmMode.resetPauseMenu();
     this.armSpell(null);
     this.persistRun();
     this.loop.stop();
@@ -666,6 +695,10 @@ export class Game {
 
   /** Saves the run in progress so it can be resumed after closing the page. */
   persistRun() {
+    if (this.realm) {
+      this.realm.persist();
+      return;
+    }
     const sim = this.sim;
     if (!sim || sim.over || !this.current || (this.mode !== MODE.PLAYING && this.mode !== MODE.PAUSED)) return;
     writeRun({
@@ -700,7 +733,7 @@ export class Game {
       const lv = def.levels[0];
       const stats = lv.income
         ? `Coût ${def.cost} or · +${lv.income} or par vague (jusqu’à +${def.levels[2].income})`
-        : `Coût ${def.cost} or · ${lv.damage} dégâts · portée ${lv.range}${lv.chains ? ` · ${lv.chains} rebonds` : ''}${lv.armorPierce ? ' · perce l’armure' : ''}`;
+        : `Coût ${def.cost} or · ${lv.beam ? `${Math.round(lv.damage * 10)} dégâts/s (monte ×${lv.maxRamp})` : `${lv.damage} dégâts`} · portée ${lv.range}${lv.chains ? ` · ${lv.chains} rebonds` : ''}${lv.burn ? ` · brûlure ${lv.burn}/s` : ''}${lv.poison ? ` · poison ${lv.poison}/s` : ''}${lv.armorPierce && !lv.beam ? ' · perce l’armure' : ''}`;
       return { id, kind: 'tower', name: def.name, blurb: def.blurb, stats, price: def.shopPrice, owned: this.save.owned.towers.includes(id) };
     });
     const spells = SPELL_ORDER.filter((id) => SPELLS[id].shopPrice).map((id) => {
@@ -791,6 +824,10 @@ export class Game {
 
   callWave() {
     if (this.mode !== MODE.PLAYING || !this.sim) return;
+    if (this.realm) {
+      this.realm.callNight();
+      return;
+    }
     const sim = this.sim;
     const canCall = sim.canCallWave() && (sim.nextWave === 0 || sim.countdown > 0);
     if (!canCall) return;
@@ -838,6 +875,10 @@ export class Game {
           if (this.tutorialStep === 2) this.advanceTutorial();
         }
       }
+      return;
+    }
+    if (this.realm) {
+      this.realm.handleTap(hit);
       return;
     }
     // Every tower under the finger, nearest first, then the one on the tile below.
@@ -928,6 +969,10 @@ export class Game {
   }
 
   setTargeting(mode) {
+    if (this.realm) {
+      this.realm.setTargeting(mode);
+      return;
+    }
     const selection = this.selection;
     if (selection?.kind !== 'tower') return;
     selection.tower.targeting = mode;
@@ -936,6 +981,7 @@ export class Game {
   }
 
   deselect() {
+    if (this.selection?.repeat) this.ui.showSpellHint(null);
     this.selection = null;
     this.effects.hideRange();
     this.effects.hideCursor();
@@ -1031,7 +1077,29 @@ export class Game {
     this.effects.update(dt);
 
     const sim = this.sim;
-    if (sim && (this.mode === MODE.PLAYING || this.mode === MODE.ENDED)) {
+    // Enemies on fire or poisoned give off flames and bubbles.
+    if (sim) {
+      for (const enemy of sim.enemies) {
+        if (!enemy.active || !enemy.view || (enemy.burnTimer <= 0 && enemy.poisonTimer <= 0)) continue;
+        if (Math.random() > dt * 14 * this.effects.scale) continue;
+        const p = enemy.view.root.position;
+        this.effects.burning(p.x, p.y, p.z, enemy.burnTimer <= 0);
+      }
+    }
+    if (this.realm) {
+      this.realm.render(dt, realDt, this.renderTime);
+      if (sim && this.mode === MODE.PLAYING) {
+        for (const id of SPELL_ORDER) {
+          if (!sim.hasSpell(id)) {
+            delete this.spellCharges[id];
+            continue;
+          }
+          this.spellCharges[id] = sim.spellCharge(id);
+          this.spellRemaining[id] = sim.spells[id].cooldown;
+        }
+        this.ui.setSpells(this.spellCharges, this.spellRemaining, this.armedSpell, true);
+      }
+    } else if (sim && (this.mode === MODE.PLAYING || this.mode === MODE.ENDED)) {
       this.ui.setStats(sim.lives, sim.gold, sim.nextWave, sim.waveCount);
       this.ui.setWaveButton(this.waveButtonState());
       for (const id of SPELL_ORDER) {
@@ -1136,6 +1204,7 @@ export class Game {
     window.visualViewport?.removeEventListener('resize', this.handleWindowResize);
     this.input.dispose();
     this.clearEntities();
+    this.realmViews.dispose();
     this.enemyViews.dispose();
     this.spellViews.dispose();
     this.effects.dispose();

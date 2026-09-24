@@ -14,7 +14,14 @@ const COLORS = {
   spark: new THREE.Color(0xfff2b0),
   magic: new THREE.Color(0xd08cff),
   heal: new THREE.Color(0x7dff9a),
+  acid: new THREE.Color(0x8dff4a),
+  wood: new THREE.Color(0xb07a4a),
+  stone: new THREE.Color(0xa6a2b8),
+  crystal: new THREE.Color(0xd08cff),
+  flame: new THREE.Color(0xff7a2a),
 };
+
+export { COLORS as EFFECT_COLORS };
 
 const RING_POOL = 10;
 
@@ -192,8 +199,68 @@ export class Effects {
       case 'boulder':
         this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.2, 0, COLORS.dust, 0.2, 0.5, { endSize: 0.4, drag: 3 });
         break;
+      case 'shell':
+        this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.25, 0, COLORS.smoke, 0.2, 0.6, { endSize: 0.45, drag: 3 });
+        this.sparks.emit(x, y, z, 0, 0, 0, COLORS.fire, 0.12, 0.15, { endSize: 0.02, drag: 0, brightness: 1.4 });
+        break;
+      case 'poison':
+        this.sparks.emit(x + j(), y + j(), z + j(), 0, -0.2, 0, COLORS.acid, 0.12, 0.35, { endSize: 0.03, drag: 2, brightness: 1.2 });
+        break;
       default:
     }
+  }
+
+  /** Flame tower: a jet of fire from the nozzle to the target. */
+  flameJet(fx, fy, fz, tx, ty, tz) {
+    const n = this.count(9);
+    for (let i = 0; i < n; i++) {
+      const speed = 3.5 + Math.random() * 1.5;
+      const dx = tx - fx + (Math.random() - 0.5) * 0.5;
+      const dy = ty - fy + (Math.random() - 0.3) * 0.3;
+      const dz = tz - fz + (Math.random() - 0.5) * 0.5;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      const life = Math.min(0.5, len / speed);
+      this.sparks.emit(fx, fy, fz, (dx / len) * speed, (dy / len) * speed, (dz / len) * speed, Math.random() < 0.5 ? COLORS.fire : COLORS.flame, 0.16, life, { endSize: 0.42, drag: 0.6, brightness: 1.5 });
+    }
+    this.puffs.emit(tx, ty + 0.1, tz, 0, 0.5, 0, COLORS.smoke, 0.2, 0.6, { endSize: 0.5, drag: 2 });
+  }
+
+  /** Small flames or acid bubbles on an enemy taking damage over time. */
+  burning(x, y, z, poison) {
+    const j = () => (Math.random() - 0.5) * 0.3;
+    if (poison) this.sparks.emit(x + j(), y + j() * 0.5, z + j(), 0, 0.6, 0, COLORS.acid, 0.12, 0.45, { endSize: 0.04, drag: 1, brightness: 1.1 });
+    else this.sparks.emit(x + j(), y + j() * 0.5, z + j(), 0, 1, 0, Math.random() < 0.5 ? COLORS.fire : COLORS.flame, 0.16, 0.4, { endSize: 0.04, drag: 1, brightness: 1.5 });
+  }
+
+  poisonCloud(x, z, radius) {
+    this.ring(x, z, radius, 0.5, COLORS.acid);
+    this.puffs.burst(x, CONFIG.world.tileTop + 0.25, z, this.count(14), radius * 1.6, COLORS.acid, 0.35, 0.9, { upward: 0.3, drag: 3, endSize: 0.8 });
+    this.sparks.burst(x, CONFIG.world.tileTop + 0.3, z, this.count(10), 2, COLORS.acid, 0.12, 0.6, { upward: 0.8, gravity: 2, brightness: 1.2 });
+  }
+
+  /** Chips flying off a tree, rock or crystal being gathered. */
+  chips(x, z, resource) {
+    const color = COLORS[resource] ?? COLORS.dust;
+    this.puffs.burst(x, CONFIG.world.tileTop + 0.4, z, this.count(6), 1.6, color, 0.09, 0.5, { upward: 0.8, gravity: 5, drag: 1, endSize: 0.05 });
+  }
+
+  /** A tree falls or a rock crumbles. */
+  depleted(x, z, resource) {
+    const color = COLORS[resource] ?? COLORS.dust;
+    this.puffs.burst(x, CONFIG.world.tileTop + 0.3, z, this.count(14), 2.2, color, 0.16, 0.8, { upward: 0.6, gravity: 4, drag: 1, endSize: 0.06 });
+    this.puffs.burst(x, CONFIG.world.tileTop + 0.2, z, this.count(8), 1.2, COLORS.dust, 0.35, 0.9, { upward: 0.4, drag: 3, endSize: 0.8 });
+  }
+
+  /** Walls and buildings under attack. */
+  siegeHit(x, y, z) {
+    this.sparks.burst(x, y, z, this.count(6), 2.2, COLORS.spark, 0.12, 0.35, { gravity: 5, brightness: 1.4 });
+    this.puffs.burst(x, y, z, this.count(3), 0.8, COLORS.dust, 0.2, 0.5, { upward: 0.4, drag: 3, endSize: 0.4 });
+  }
+
+  destroyed(x, z) {
+    this.puffs.burst(x, CONFIG.world.tileTop + 0.4, z, this.count(22), 2.6, COLORS.smoke, 0.5, 1.1, { upward: 0.7, drag: 2.5, endSize: 1.2 });
+    this.sparks.burst(x, CONFIG.world.tileTop + 0.4, z, this.count(16), 3.2, COLORS.ember, 0.2, 0.6, { gravity: 5, brightness: 1.3 });
+    this.puffs.burst(x, CONFIG.world.tileTop + 0.4, z, this.count(10), 2, COLORS.wood, 0.12, 0.7, { upward: 0.8, gravity: 6, drag: 1, endSize: 0.08 });
   }
 
   enemyDeath(x, y, z, big) {

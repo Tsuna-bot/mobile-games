@@ -36,7 +36,7 @@ float cloudNoise(vec2 p) {
  * Patches a standard material with drifting cloud shadows and, optionally,
  * wind sway for foliage (vertices above `swayFrom` bend with the wind).
  */
-function patchMaterial(material, uniforms, { sway = false } = {}) {
+export function patchMaterial(material, uniforms, { sway = false } = {}) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.time;
     shader.uniforms.uCloudShadow = uniforms.cloudShadow;
@@ -86,10 +86,10 @@ void main() {
   vec3 color = mix(uBottom, uTop, smoothstep(0.45, 0.95, h));
   float sun = max(dot(dir, normalize(uSunDir)), 0.0);
   color += uSunColor * (pow(sun, 380.0) * 2.5 + pow(sun, 12.0) * 0.28);
-  if (uStars > 0.5) {
+  if (uStars > 0.01) {
     vec3 cell = floor(dir * 180.0);
     float star = step(0.9965, hash(cell)) * smoothstep(0.5, 0.7, h);
-    color += star * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 1.0) * 40.0));
+    color += star * uStars * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 1.0) * 40.0));
   }
   gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
@@ -276,6 +276,15 @@ export class World {
     patchMaterial(assets.material, this.uniforms);
     this.foliageMaterial = assets.material.clone();
     patchMaterial(this.foliageMaterial, this.uniforms, { sway: true });
+    // Survival Kit props (Kingdom mode): same cloud shadows, trees sway too.
+    const survival = assets.materials.survival;
+    if (survival) {
+      survival.shadowSide = THREE.BackSide;
+      patchMaterial(survival, this.uniforms);
+      this.survivalFoliage = survival.clone();
+      patchMaterial(this.survivalFoliage, this.uniforms, { sway: true });
+    }
+    this.cycle = null;
 
     this.hemisphere = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -542,20 +551,35 @@ export class World {
     }
     this.root.add(this.cloudGroup);
 
-    // Castle at the end of the path, turned toward the incoming road.
+    // Castle at the end of the path, turned toward the incoming road (the Kingdom castle is bigger).
     const baseTile = pathTiles.get(level.base.index);
+    this.castleScale = level.portals ? 1.9 : 0.9;
     this.castle = this.assets.clone('tower-round-build-f');
     this.castle.position.set(level.base.x, CONFIG.world.tileTop, level.base.z);
-    this.castle.rotation.y = baseTile.rotation;
-    this.castle.scale.setScalar(0.9);
+    this.castle.rotation.y = baseTile?.rotation ?? 0;
+    this.castle.scale.setScalar(this.castleScale);
     this.root.add(this.castle);
+    if (level.portals) {
+      // Corner turrets around the Kingdom keep.
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const turret = this.assets.clone('tower-round-roof-a');
+        turret.position.set(level.base.x + dx * 1.05, CONFIG.world.tileTop, level.base.z + dz * 1.05);
+        turret.scale.setScalar(0.62);
+        this.root.add(turret);
+      }
+    }
 
-    this.castleLight.position.set(level.base.x, CONFIG.world.tileTop + 1.6, level.base.z + 0.9);
+    this.castleLight.position.set(level.base.x, CONFIG.world.tileTop + 1.6 * this.castleScale, level.base.z + 0.9 * this.castleScale);
+    this.castleLight.distance = 5 * this.castleScale;
     this.castleLight.intensity = theme.castleLight ?? 0;
 
-    this.portal = this.assets.clone('spawn-round');
-    this.portal.position.set(level.spawn.x, CONFIG.world.tileTop + 0.01, level.spawn.z);
-    this.root.add(this.portal);
+    this.portals = (level.portals ?? [level.spawn]).map((cell) => {
+      const portal = this.assets.clone('spawn-round');
+      portal.position.set(cell.x, CONFIG.world.tileTop + 0.01, cell.z);
+      this.root.add(portal);
+      return portal;
+    });
+    this.portal = this.portals[0];
 
     this.ambient.configure(theme.ambient, halfW + 1.5, halfH + 1.5);
     this.fitShadows(level, theme);
@@ -595,7 +619,53 @@ export class World {
   }
 
   get exposure() {
-    return this.theme?.exposure ?? 1;
+    return this.cycle ? this.cycle.exposure : this.theme?.exposure ?? 1;
+  }
+
+  /**
+   * Day/night cycle (Kingdom): `t` = 0 full day theme, 1 full night theme.
+   * Lerps sky, fog, lights, water and stars; the environment map follows in steps.
+   */
+  setCycle(t, dayTheme, nightTheme) {
+    const c = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), t);
+    const n = (a, b) => a + (b - a) * t;
+    const sky = this.sky.material.uniforms;
+    sky.uTop.value.copy(c(dayTheme.skyTop, nightTheme.skyTop));
+    sky.uBottom.value.copy(c(dayTheme.skyBottom, nightTheme.skyBottom));
+    sky.uSunColor.value.copy(c(dayTheme.sun, nightTheme.sun));
+    const direction = new THREE.Vector3(...dayTheme.sunDirection).normalize().lerp(new THREE.Vector3(...nightTheme.sunDirection).normalize(), t).normalize();
+    sky.uSunDir.value.copy(direction);
+    sky.uStars.value = Math.max(0, (t - 0.4) / 0.6);
+    const fog = c(dayTheme.fog, nightTheme.fog);
+    this.scene.background.copy(fog);
+    this.scene.fog.color.copy(fog);
+    this.hemisphere.color.copy(c(dayTheme.hemisphereSky, nightTheme.hemisphereSky));
+    this.hemisphere.groundColor.copy(c(dayTheme.hemisphereGround, nightTheme.hemisphereGround));
+    this.hemisphere.intensity = n(dayTheme.hemisphereIntensity, nightTheme.hemisphereIntensity) * 0.6;
+    this.sun.color.copy(c(dayTheme.sun, nightTheme.sun));
+    this.sun.intensity = n(dayTheme.sunIntensity, nightTheme.sunIntensity);
+    this.sun.position.copy(direction).multiplyScalar(16);
+    if (this.waterMaterial) {
+      const w = this.waterMaterial.uniforms;
+      w.uDeep.value.copy(c(dayTheme.water.deep, nightTheme.water.deep));
+      w.uShallow.value.copy(c(dayTheme.water.shallow, nightTheme.water.shallow));
+      w.uFoam.value.copy(c(dayTheme.water.foam, nightTheme.water.foam));
+      w.uSunDir.value.copy(direction);
+      w.uSunColor.value.copy(c(dayTheme.sun, nightTheme.sun));
+      w.uSkyColor.value.copy(sky.uBottom.value).lerp(sky.uTop.value, 0.35);
+    }
+    this.uniforms.cloudShadow.value = n(0.2, 0.08);
+    this.cycle = {
+      t,
+      exposure: n(dayTheme.exposure ?? 1, nightTheme.exposure ?? 1),
+      castleLight: n(dayTheme.castleLight ?? 0, nightTheme.castleLight ?? 0),
+    };
+    if (this.envT === undefined || Math.abs(this.envT - t) > 0.12 || (t !== this.envT && (t === 0 || t === 1))) {
+      this.envT = t;
+      this.envMap?.dispose();
+      this.envMap = this.pmrem.fromScene(this.envScene, 0.04).texture;
+      this.scene.environment = this.envMap;
+    }
   }
 
   hitCastle() {
@@ -617,13 +687,15 @@ export class World {
         cloud.position.z = Math.sin(angle) * distance;
       }
     }
-    if (this.portal) this.portal.rotation.y = this.time * 0.8;
+    for (const portal of this.portals ?? []) portal.rotation.y = this.time * 0.8;
     if (this.castle) {
       this.castleHit = Math.max(0, this.castleHit - dt);
       const k = this.castleHit * 2;
-      this.castle.scale.set(0.9 + Math.sin(this.time * 40) * 0.04 * k, 0.9 - k * 0.06, 0.9 + Math.cos(this.time * 40) * 0.04 * k);
+      const s0 = this.castleScale;
+      this.castle.scale.set(s0 * (1 + Math.sin(this.time * 40) * 0.04 * k), s0 * (1 - k * 0.06), s0 * (1 + Math.cos(this.time * 40) * 0.04 * k));
     }
-    if (this.theme?.castleLight) this.castleLight.intensity = this.theme.castleLight * (0.9 + Math.sin(this.time * 7) * 0.05 + Math.sin(this.time * 13) * 0.05);
+    const castleLight = this.cycle ? this.cycle.castleLight : this.theme?.castleLight;
+    if (castleLight) this.castleLight.intensity = castleLight * (0.9 + Math.sin(this.time * 7) * 0.05 + Math.sin(this.time * 13) * 0.05);
   }
 
   clear() {
@@ -632,6 +704,8 @@ export class World {
     this.root.clear();
     this.castle = null;
     this.portal = null;
+    this.portals = [];
+    this.cycle = null;
     this.cloudGroup = null;
     this.waterMaterial = null;
     this.grass = null;
@@ -643,6 +717,7 @@ export class World {
     this.sky.geometry.dispose();
     this.sky.material.dispose();
     this.foliageMaterial.dispose();
+    this.survivalFoliage?.dispose();
     this.grassGeometry.dispose();
     this.grassMaterial.dispose();
     this.envSky.geometry.dispose();

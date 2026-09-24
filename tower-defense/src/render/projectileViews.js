@@ -5,11 +5,14 @@ const MODELS = {
   cannonball: 'weapon-ammo-cannonball',
   bullet: 'weapon-ammo-bullet',
   boulder: 'weapon-ammo-boulder',
+  shell: 'weapon-ammo-cannonball',
+  poison: 'weapon-ammo-cannonball',
 };
 
-const SCALE = { arrow: 0.7, cannonball: 0.8, bullet: 0.55, boulder: 1.1 };
+const SCALE = { arrow: 0.7, cannonball: 0.8, bullet: 0.55, boulder: 1.1, shell: 1.25, poison: 0.7 };
 // Trail particles emitted per second of flight.
-const TRAIL_RATE = { arrow: 40, cannonball: 45, bullet: 30, boulder: 40 };
+const TRAIL_RATE = { arrow: 40, cannonball: 45, bullet: 30, boulder: 40, shell: 45, poison: 35 };
+const SPINNING = new Set(['boulder', 'cannonball', 'shell', 'poison']);
 
 /** Pooled projectile meshes following the simulated projectiles. */
 export class ProjectileViews {
@@ -30,7 +33,10 @@ export class ProjectileViews {
     if (!view) {
       view = { kind, object: this.assets.clone(MODELS[kind]), projectile: null, trail: 0 };
       view.object.scale.setScalar(SCALE[kind]);
-      view.object.traverse((o) => { o.castShadow = kind === 'boulder' || kind === 'cannonball'; });
+      view.object.traverse((o) => {
+        o.castShadow = SPINNING.has(kind);
+        if (o.isMesh && kind === 'poison') o.material = this.poisonMaterial();
+      });
     }
     view.projectile = projectile;
     view.trail = 0;
@@ -38,6 +44,17 @@ export class ProjectileViews {
     this.scene.add(view.object);
     projectile.view = view;
     this.active.add(view);
+  }
+
+  /** Glowing green vial material for the acid tower. */
+  poisonMaterial() {
+    if (!this.acid) {
+      this.acid = this.assets.material.clone();
+      this.acid.color.set(0x8dff4a);
+      this.acid.emissive.set(0x3fbf1a);
+      this.acid.emissiveIntensity = 0.8;
+    }
+    return this.acid;
   }
 
   release(projectile) {
@@ -59,7 +76,7 @@ export class ProjectileViews {
         view.trail -= 1;
         this.effects.trail(p.kind, p.x, p.y, p.z);
       }
-      if (p.kind === 'boulder' || p.kind === 'cannonball') {
+      if (SPINNING.has(p.kind)) {
         view.object.rotation.x += dt * 9;
         view.object.rotation.y += dt * 5;
       } else if (p.vx || p.vy || p.vz) {

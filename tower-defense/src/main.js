@@ -1,6 +1,6 @@
 import { AudioEngine } from './audio/audio.js';
 import { flushAll, syncFromCloud } from './core/cloud.js';
-import { RUN_KEY, STORAGE_KEY, loadSave } from './core/storage.js';
+import { REALM_KEY, RUN_KEY, STORAGE_KEY, loadSave } from './core/storage.js';
 import { Game } from './game/game.js';
 import { Assets } from './render/assets.js';
 import { renderThumbnails } from './render/thumbnails.js';
@@ -40,7 +40,7 @@ async function boot() {
   blockBrowserGestures();
 
   // In the Claude app the save lives in the artifact database: fetch it before reading.
-  await syncFromCloud([STORAGE_KEY, RUN_KEY]);
+  await syncFromCloud([STORAGE_KEY, RUN_KEY, REALM_KEY]);
   const save = loadSave();
   const audio = new AudioEngine({ sound: save.settings.sound, music: save.settings.music });
   const unlockAudio = () => audio.unlock();

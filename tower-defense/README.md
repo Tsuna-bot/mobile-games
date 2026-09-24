@@ -2,7 +2,33 @@
 
 Tower defense 3D pour mobile (Three.js). Des ovnis suivent la route jusqu'à ton château : construis des tours sur l'herbe, améliore-les et choisis leurs cibles pour tenir jusqu'à la dernière vague.
 
-Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de Kenney, licence CC0 (voir `assets/models/LICENSE-Kenney.txt`).
+Modèles 3D de Kenney, licence CC0 : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit), [Survival Kit](https://kenney.nl/assets/survival-kit) et [Mini Characters](https://kenney.nl/assets/mini-characters) (licences dans `assets/models/`).
+
+## Le Royaume (monde ouvert)
+
+Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoirement autour de ton château :
+
+- **Le jour, tu récoltes et tu construis.**
+  - Tes ouvriers (personnages animés, hache ou pioche en main) vont couper les arbres (bois), casser les rochers (pierre) et miner les cristaux, puis rapportent leur charge au château ou à un entrepôt.
+  - Touche une ressource pour y envoyer un ouvrier, ou règle la répartition dans le panneau **Ouvriers**.
+  - Les ressources repoussent après quelques jours.
+- **La nuit, les ovnis attaquent.**
+  - Ils sortent de portails au bord de la carte : 1 au début, jusqu'à 4.
+  - Ils cherchent le chemin le plus court vers le château. Si tes murs les obligent à un trop long détour, ils les cassent.
+  - Le **Démolisseur** (dès la nuit 3) est spécialisé dans la démolition.
+  - Chaque nuit est plus dure que la précédente.
+- **Construire** (toucher une case libre) :
+  - palissades, qu'on peut transformer en murailles de pierre ; après la première, chaque case touchée prolonge le mur ;
+  - tours ;
+  - maisons (plus d'ouvriers) ;
+  - entrepôts (stockage et point de dépôt) ;
+  - l'Académie.
+- **Académie** : un arbre de recherches payé en or et en cristal.
+  - Débloque les 11 autres tours et les 5 autres sorts.
+  - Améliore la récolte, les dégâts, la portée, les murs, le château et la puissance ou la recharge des sorts.
+- **Le château peut tomber.** Ce n'est pas la fin : les pillards emportent 40 % du stock, le château est à moitié réparé et un nouveau jour commence.
+- **Récompenses** : chaque aube rapporte de l'or et des gemmes pour la boutique de la campagne. 3 succès sont liés au Royaume (5, 15 et 30 nuits).
+- **Sauvegarde continue**, y compris dans la base de l'artefact Claude. Si tu quittes en plein jour, tes ouvriers continuent de récolter en ton absence, à mi-vitesse, dans la limite du stockage.
 
 ## Contenu
 
@@ -18,7 +44,7 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
 
 - **Mode Survie** : vagues infinies, débloqué après le niveau 3. Le record est sauvegardé.
 - **Mode Héroïque** : se débloque sur un niveau fini avec 3 étoiles. 5 vies, ennemis plus résistants et plus rapides, et une couronne à gagner.
-- **8 tours à 3 niveaux** (5 de départ, 3 à acheter en boutique). Le modèle grandit à chaque amélioration, et une aura dorée apparaît au niveau maximum.
+- **12 tours à 3 niveaux** (5 de départ, 7 à acheter en boutique). Le modèle grandit à chaque amélioration, et une aura dorée apparaît au niveau maximum.
 
   | Tour | Rôle |
   | --- | --- |
@@ -30,6 +56,10 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
   | Tesla (boutique) | Arc électrique qui rebondit sur 3 à 5 ovnis |
   | Arbalète lourde (boutique) | Portée immense, perce l'armure |
   | Mine d'or (boutique) | Ne tire pas, rapporte de l'or à chaque vague |
+  | Lance-flammes (boutique) | Brûle un groupe d'ovnis, même blindés |
+  | Tour d'acide (boutique) | Nuage de poison qui ignore l'armure |
+  | Prisme (boutique) | Rayon continu qui fait de plus en plus mal sur la même cible |
+  | Mortier (boutique) | Obus à très longue portée, énorme zone |
 
 - **6 sorts** à recharge (3 de départ, 3 à acheter). Leur puissance suit la difficulté des vagues.
   - Météore : un rocher en feu écrase une zone (à viser).
@@ -39,9 +69,12 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
   - Réparation (boutique) : rend 3 vies au château.
   - Pluie d'or (boutique) : or immédiat, qui augmente avec les vagues.
 - **Boutique et gemmes** : on gagne des gemmes en finissant des niveaux (gros bonus la première fois), en Héroïque, en Survie et avec les succès. Elles achètent les nouvelles tours et les nouveaux sorts.
-- **12 succès** (première victoire, 3 étoiles, campagne finie, 3 000 ovnis détruits, vague parfaite…), chacun récompensé en gemmes.
+- **15 succès** (première victoire, 3 étoiles, campagne finie, 3 000 ovnis détruits, vague parfaite…), chacun récompensé en gemmes.
 - **Sauvegarde automatique** : la progression est enregistrée en continu. Une partie en cours est sauvegardée toutes les 4 secondes, en pause et quand on quitte la page. Au retour, la carte « Reprendre la partie » du menu la relance là où on l'avait laissée. Dans l'app Claude (artefact), une copie privée est aussi gardée dans la base de données de l'artefact, liée à ton compte : elle survit même si le navigateur de l'app efface son stockage (`src/core/cloud.js`).
-- **4 ennemis** : Éclaireur, Rapide, Blindé et Vaisseau-mère, qui libère 4 Rapides en mourant.
+- **5 ennemis** :
+  - Éclaireur, Rapide et Blindé ;
+  - Vaisseau-mère, qui libère 4 Rapides en mourant ;
+  - Démolisseur (Royaume seulement).
 - **Progression** :
   - on gagne des étoiles (3 par niveau, 1 couronne en Héroïque, 1 étoile toutes les 10 vagues en Survie, jusqu'à 3) ;
   - elles s'échangent contre **6 améliorations permanentes** : dégâts, or de départ, portée, coût des améliorations, sorts, vies ;
@@ -100,10 +133,12 @@ tower-defense/
     ├── data/                   # Tours, ennemis, sorts, améliorations, succès, cartes, ambiances, vagues
     ├── sim/                    # Logique pure, sans Three.js ni DOM
     │   ├── level.js            # Lecture de carte, chemin, virages arrondis
-    │   └── simulation.js       # Vagues, ennemis, tours, projectiles, économie
+    │   ├── simulation.js       # Vagues, ennemis, tours, projectiles, économie
+    │   └── realm.js            # Royaume : carte générée, champ de flux, ouvriers, jour/nuit
     ├── render/                 # Tout le visuel Three.js
     │   ├── assets.js           # Chargement GLB, matériau unique partagé
-    │   ├── world.js            # Île, mer, herbe, nuages, ciel, carte d'environnement, lumières
+    │   ├── world.js            # Île, mer, herbe, nuages, ciel, jour/nuit, lumières
+    │   ├── realmViews.js       # Royaume : ressources instanciées, bâtiments, murs, ouvriers animés
     │   ├── ambient.js          # Particules d'ambiance animées sur le GPU
     │   ├── spellViews.js       # Météore, éclairs, traces au sol
     │   ├── towerViews.js       # Tours empilées, visée, recul, animations
@@ -116,7 +151,9 @@ tower-defense/
     ├── input/pointer.js        # Tap, glisser, pincer
     ├── audio/audio.js          # Musique et bruitages générés (Web Audio)
     ├── ui/                     # DOM et vibrations
-    └── game/game.js            # Orchestrateur : états, événements, actions
+    └── game/
+        ├── game.js             # Orchestrateur : états, événements, actions
+        └── realmMode.js        # Contrôleur du Royaume (panneaux, recherche, sauvegarde)
 ```
 
 La simulation ne connaît ni Three.js ni le DOM : elle tourne à pas fixe (60 Hz) et prévient le rendu, l'UI et l'audio par des événements. On peut donc la tester seule :
@@ -126,7 +163,10 @@ cd tower-defense
 node tools/balance.mjs 6 --survival   # 6 parties par niveau, sorts compris, et la Survie
 node tools/balance.mjs 6 --perks      # même chose avec des améliorations « milieu de partie »
 node tools/balance.mjs 1 --leaks      # détaille les ennemis qui passent
+node tools/realm-bot.mjs 4 20          # Royaume : 4 cartes, 20 nuits, bot qui récolte, construit et recherche
 ```
+
+Royaume : le bot, qui ne construit pas de murs et utilise surtout des balistes, voit son château tomber pour la première fois entre la nuit 10 et la nuit 15 selon la carte. Ensuite il tombe presque chaque nuit.
 
 Résultat actuel (bot qui utilise les sorts de départ, mais pas les tours de la boutique) :
 

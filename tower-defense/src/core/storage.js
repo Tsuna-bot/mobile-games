@@ -6,6 +6,7 @@ import { STARTER_TOWERS, TOWERS } from '../data/towers.js';
 
 export const STORAGE_KEY = 'bastion/v1';
 export const RUN_KEY = 'bastion/run';
+export const REALM_KEY = 'bastion/realm';
 
 export const QUALITY_SETTINGS = ['auto', 'ultra', 'high', 'medium', 'low'];
 
@@ -19,6 +20,7 @@ function defaults() {
     achievements: {},
     stats: { ...EMPTY_STATS },
     tutorialDone: false,
+    realm: { bestNight: 0, tutorialDone: false, played: false },
     settings: { sound: true, music: true, haptics: true, quality: 'auto' },
   };
 }
@@ -61,6 +63,9 @@ export function loadSave() {
       if (isCount(value, 1e9)) save.stats[key] = value;
     }
     if (typeof data.tutorialDone === 'boolean') save.tutorialDone = data.tutorialDone;
+    if (isCount(Number(data.realm?.bestNight), 1e6)) save.realm.bestNight = Number(data.realm.bestNight);
+    if (typeof data.realm?.tutorialDone === 'boolean') save.realm.tutorialDone = data.realm.tutorialDone;
+    if (typeof data.realm?.played === 'boolean') save.realm.played = data.realm.played;
     const settings = data.settings ?? {};
     for (const key of ['sound', 'music', 'haptics']) {
       if (typeof settings[key] === 'boolean') save.settings[key] = settings[key];
@@ -93,6 +98,25 @@ export function writeRun(run) {
 
 export function clearRun() {
   persist(RUN_KEY, null);
+}
+
+/** The Kingdom in progress (one per player), or null. */
+export function loadRealm() {
+  try {
+    const raw = localStorage.getItem(REALM_KEY);
+    const realm = raw ? JSON.parse(raw) : null;
+    return realm?.version === 1 && Number.isFinite(realm.seed) ? realm : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeRealm(realm) {
+  persist(REALM_KEY, JSON.stringify(realm));
+}
+
+export function clearRealm() {
+  persist(REALM_KEY, null);
 }
 
 /** Stars earned so far: level stars, heroic crowns and survival milestones. */

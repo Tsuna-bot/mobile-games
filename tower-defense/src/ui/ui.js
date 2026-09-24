@@ -1,4 +1,5 @@
 import { ENEMIES } from '../data/enemies.js';
+import { RESOURCE_INFO } from '../data/realm.js';
 import { PERKS } from '../data/perks.js';
 import { SPELLS, SPELL_ORDER } from '../data/spells.js';
 import { TARGETING, TARGETING_LABELS, TOWERS, TOWER_ORDER } from '../data/towers.js';
@@ -37,6 +38,7 @@ export class UI {
       perks: $('screen-perks'),
       shop: $('screen-shop'),
       achievements: $('screen-achievements'),
+      research: $('screen-research'),
     };
     this.hud = $('hud');
     this.dock = $('dock');
@@ -109,7 +111,23 @@ export class UI {
     this.builtFor = '';
     this.screenFlash = $('screen-flash');
 
-    for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run']) {
+    // Kingdom mode.
+    this.realmBuildSheet = $('sheet-realm-build');
+    this.realmInfoSheet = $('sheet-realm-info');
+    this.workersSheet = $('sheet-workers');
+    this.realmTab = 'defense';
+    this.researchTab = 'Économie';
+    this.shownRes = {};
+    for (const tab of doc.querySelectorAll('[data-realm-tab]')) {
+      tab.addEventListener('click', () => {
+        this.realmTab = tab.dataset.realmTab;
+        for (const other of doc.querySelectorAll('[data-realm-tab]')) other.setAttribute('aria-selected', String(other === tab));
+        this.handlers.realmTab?.(this.realmTab);
+      });
+    }
+
+    for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -340,6 +358,7 @@ export class UI {
       this.shown.gold = gold;
       this.gold.textContent = number.format(gold);
     }
+    if (waveNumber === null) return;
     const wave = `${waveNumber}/${waveTotal}`;
     if (wave !== this.shown.wave) {
       this.shown.wave = wave;
@@ -449,12 +468,16 @@ export class UI {
     if (stats.income) {
       rows.push(['Or par vague', diff('income', (v) => `+${v}`)]);
     } else {
-      rows.push(['Dégâts', diff('damage', (v) => Math.round(v))]);
+      if (stats.beam) rows.push(['Dégâts/s', diff('damage', (v) => Math.round(v * 10))]);
+      else rows.push(['Dégâts', diff('damage', (v) => Math.round(v))]);
       rows.push(['Portée', diff('range', (v) => v.toFixed(1).replace('.', ','))]);
-      rows.push(['Cadence', diff('rate', formatRate)]);
+      if (!stats.beam) rows.push(['Cadence', diff('rate', formatRate)]);
     }
+    if (stats.burn) rows.push(['Brûlure', diff('burn', (v) => `${v}/s`)]);
+    if (stats.poison) rows.push(['Poison', diff('poison', (v) => `${v}/s`)]);
     if (stats.chains) rows.push(['Rebonds', diff('chains')]);
-    if (stats.armorPierce) rows.push(['Spécial', 'Perce l’armure']);
+    if (stats.armorPierce && !stats.beam) rows.push(['Spécial', 'Perce l’armure']);
+    if (stats.beam) rows.push(['Chauffe', `jusqu’à ×${stats.maxRamp}`]);
     if (stats.splash) rows.push(['Zone', diff('splash', (v) => v.toFixed(1).replace('.', ','))]);
     if (stats.slow) rows.push(['Ralenti', diff('slow', (v) => `${Math.round(v * 100)} %`)]);
     if (!stats.income) rows.push(['Éliminés', tower.kills]);
@@ -515,7 +538,15 @@ export class UI {
   showSpellHint(id) {
     const spell = SPELLS[id];
     this.$('spell-hint-text').innerHTML = spell ? `Touche la carte : <b>${spell.name}</b>` : '';
+    this.$('btn-spell-cancel').textContent = 'Annuler';
     this.spellHint.classList.toggle('is-visible', Boolean(spell));
+  }
+
+  /** Same bar as the spell hint, for a building mode (walls). */
+  showModeHint(text, buttonText) {
+    this.$('spell-hint-text').textContent = text;
+    this.$('btn-spell-cancel').textContent = buttonText;
+    this.spellHint.classList.add('is-visible');
   }
 
   flash(variant = '') {
@@ -547,6 +578,235 @@ export class UI {
   closeSheets() {
     this.buildSheet.classList.remove('is-open');
     this.towerSheet.classList.remove('is-open');
+    this.realmBuildSheet.classList.remove('is-open');
+    this.realmInfoSheet.classList.remove('is-open');
+    this.workersSheet.classList.remove('is-open');
+  }
+
+  // ------------------------------------------------------------ Kingdom
+
+  /** Cost chips like "🪵 20 🪨 10"; resources the player lacks are red. */
+  costHtml(cost, have) {
+    return `<span class="costs">${Object.entries(cost)
+      .map(([resource, amount]) => `<span class="${have && have(resource) < amount ? 'poor' : ''}">${RESOURCE_INFO[resource].icon} ${number.format(amount)}</span>`)
+      .join('')}</span>`;
+  }
+
+  setRealmMode(on) {
+    this.$('hud-res').hidden = !on;
+    this.$('realm-bar').hidden = !on;
+    this.$('hud-wave-label').textContent = on ? 'Jour' : 'Vague';
+    this.$('btn-restart').hidden = on;
+    this.$('btn-new-realm').hidden = !on;
+    this.shownRes = {};
+    this.shown.wave = '';
+  }
+
+  setRealmCard(detail, fresh) {
+    this.$('realm-detail').textContent = detail;
+    this.$('btn-realm').querySelector('.realm-card__tag').hidden = !fresh;
+  }
+
+  /** Resource chips under the HUD: amounts and storage cap. */
+  setResources(stock, cap) {
+    for (const el of this.$('hud-res').children) {
+      const resource = el.dataset.res;
+      const value = stock[resource];
+      const key = `${value}/${cap}`;
+      if (this.shownRes[resource] === key) continue;
+      const previous = this.shownRes[resource] ? Number(this.shownRes[resource].split('/')[0]) : value;
+      this.shownRes[resource] = key;
+      el.querySelector('b').textContent = number.format(value);
+      el.querySelector('small').textContent = `/${number.format(cap)}`;
+      el.classList.toggle('is-full', value >= cap);
+      if (value > previous) this.restartAnimation(el, 'bump');
+    }
+  }
+
+  setDay(text) {
+    if (text !== this.shown.wave) {
+      this.shown.wave = text;
+      this.wave.textContent = text;
+    }
+  }
+
+  setRealmBar(workersText, workersAlert, researchText, researchEnabled, researchAlert) {
+    const workers = this.$('btn-workers');
+    const research = this.$('btn-research');
+    const key = `${workersText}|${workersAlert}|${researchText}|${researchEnabled}|${researchAlert}`;
+    if (this.shown.realmBar === key) return;
+    this.shown.realmBar = key;
+    this.$('workers-label').textContent = workersText;
+    workers.classList.toggle('is-alert', workersAlert);
+    this.$('research-label').textContent = researchText;
+    research.classList.toggle('is-alert', researchAlert);
+    research.setAttribute('aria-disabled', String(!researchEnabled));
+  }
+
+  /**
+   * @param items [{ id, name, image, cost, affordable, locked, lockText, blurb }]
+   */
+  openRealmBuild(items, pending, have) {
+    this.closeSheets();
+    this.renderRealmBuild(items, pending, have);
+    this.realmBuildSheet.classList.add('is-open');
+  }
+
+  renderRealmBuild(items, pending, have, hint) {
+    const grid = this.$('realm-build-grid');
+    grid.replaceChildren();
+    for (const item of items) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = `build-card${item.locked ? ' is-locked' : ''}${!item.locked && !item.affordable ? ' is-poor' : ''}${item.id === pending ? ' is-selected' : ''}`;
+      card.dataset.item = item.id;
+      card.innerHTML = `<img src="${item.image}" alt="">${item.locked ? '<span class="build-card__lock" aria-hidden="true">🔒</span>' : ''}
+        <span class="build-card__name">${item.name}</span>
+        <span class="build-card__costs">${item.locked ? item.lockText : this.costHtml(item.cost, have)}</span>`;
+      card.setAttribute('aria-label', `${item.name}${item.locked ? ', verrouillé' : ''}`);
+      card.addEventListener('click', () => this.handlers.realmBuildCard?.(item.id));
+      grid.append(card);
+    }
+    const selected = items.find((item) => item.id === pending);
+    this.$('realm-build-hint').textContent = hint ?? (selected
+      ? `${selected.name} : ${selected.blurb} Touche encore pour construire.`
+      : 'Touche un élément pour le voir, puis touche-le encore pour construire.');
+  }
+
+  denyRealmCard(id) {
+    const card = this.$('realm-build-grid').querySelector(`[data-item="${id}"]`);
+    if (card) this.restartAnimation(card, 'denied');
+  }
+
+  /**
+   * @param info { image, name, level, levels, stats: [[label, value]], upgrade: { cost, affordable } | null,
+   *               maxText, demolish: html, confirm, targeting: mode | null }
+   */
+  openRealmInfo(info, have) {
+    if (!this.realmInfoSheet.classList.contains('is-open')) this.closeSheets();
+    this.$('realm-info-image').src = info.image;
+    this.$('realm-info-name').textContent = info.name;
+    this.$('realm-info-level').innerHTML = Array.from({ length: info.levels }, (_, i) => `<i class="${i <= info.level ? 'on' : ''}"></i>`).join('');
+    this.$('realm-info-stats').innerHTML = info.stats.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+    const targeting = this.$('realm-info-targeting');
+    targeting.hidden = !info.targeting;
+    if (!targeting.childElementCount) {
+      for (const mode of TARGETING) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.mode = mode;
+        button.textContent = TARGETING_LABELS[mode];
+        button.addEventListener('click', () => this.handlers.targeting?.(mode));
+        targeting.append(button);
+      }
+    }
+    for (const button of targeting.children) button.setAttribute('aria-pressed', String(button.dataset.mode === info.targeting));
+    const upgrade = this.$('btn-realm-upgrade');
+    if (info.upgrade) {
+      upgrade.innerHTML = `${info.upgradeLabel ?? 'Améliorer'} ${this.costHtml(info.upgrade.cost, have)}`;
+      upgrade.disabled = !info.upgrade.affordable;
+    } else {
+      upgrade.textContent = info.maxText ?? 'Niveau max';
+      upgrade.disabled = true;
+    }
+    const demolish = this.$('btn-demolish');
+    demolish.classList.toggle('btn--danger', info.confirm);
+    demolish.classList.toggle('btn--ghost', !info.confirm);
+    demolish.innerHTML = info.confirm ? `Confirmer ${info.demolish}` : `Démolir ${info.demolish}`;
+    this.realmInfoSheet.classList.add('is-open');
+  }
+
+  /** @param rows [{ resource, name, icon, count, info, canAdd, canRemove }] */
+  openWorkers(rows, idle, total, hint) {
+    if (!this.workersSheet.classList.contains('is-open')) this.closeSheets();
+    const list = this.$('jobs');
+    list.replaceChildren();
+    for (const row of rows) {
+      const el = document.createElement('div');
+      el.className = 'job';
+      el.innerHTML = `<span class="job__icon" aria-hidden="true">${row.icon}</span>
+        <span><span class="job__name">${row.name}</span><span class="job__info">${row.info}</span></span>`;
+      const minus = document.createElement('button');
+      minus.type = 'button';
+      minus.className = 'job__btn';
+      minus.textContent = '−';
+      minus.disabled = !row.canRemove;
+      minus.setAttribute('aria-label', `Un ouvrier de moins sur ${row.name}`);
+      minus.addEventListener('click', () => this.handlers.job?.(row.resource, -1));
+      const count = document.createElement('span');
+      count.className = 'job__count';
+      count.textContent = row.count;
+      const plus = document.createElement('button');
+      plus.type = 'button';
+      plus.className = 'job__btn';
+      plus.textContent = '+';
+      plus.disabled = !row.canAdd;
+      plus.setAttribute('aria-label', `Un ouvrier de plus sur ${row.name}`);
+      plus.addEventListener('click', () => this.handlers.job?.(row.resource, 1));
+      el.append(minus, count, plus);
+      list.append(el);
+    }
+    const free = document.createElement('div');
+    free.className = 'job job--idle';
+    free.innerHTML = `<span class="job__icon" aria-hidden="true">💤</span>
+      <span><span class="job__name">Libres</span><span class="job__info">${total} ouvrier${total > 1 ? 's' : ''} au total · une maison en loge 2 de plus</span></span>
+      <span class="job__count">${idle}</span>`;
+    list.append(free);
+    if (hint) this.$('workers-hint').textContent = hint;
+    this.workersSheet.classList.add('is-open');
+  }
+
+  /**
+   * @param items [{ id, icon, name, effect, level, max, cost, affordable, locked }]
+   */
+  renderResearch(groups, tab, items, walletHtml, have) {
+    this.$('research-wallet').innerHTML = walletHtml;
+    const tabs = this.$('research-tabs');
+    if (!tabs.childElementCount) {
+      for (const group of groups) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tab';
+        button.setAttribute('role', 'tab');
+        button.dataset.group = group;
+        button.textContent = group;
+        button.addEventListener('click', () => {
+          this.researchTab = group;
+          this.handlers.researchTab?.(group);
+        });
+        tabs.append(button);
+      }
+    }
+    for (const button of tabs.children) button.setAttribute('aria-selected', String(button.dataset.group === tab));
+    const list = this.$('research');
+    list.replaceChildren();
+    for (const item of items) {
+      const maxed = item.level >= item.max;
+      const row = document.createElement('div');
+      row.className = `shop-item research-item${maxed ? ' is-maxed' : ''}`;
+      row.innerHTML = `
+        <span class="shop-item__art">${item.image ? `<img src="${item.image}" alt="">` : `<span aria-hidden="true">${item.icon}</span>`}</span>
+        <span>
+          <span class="shop-item__name">${item.name}</span>
+          <span class="shop-item__blurb">${item.effect}</span>
+          ${item.max > 1 ? `<span class="pips">${Array.from({ length: item.max }, (_, i) => `<i class="${i < item.level ? 'on' : ''}"></i>`).join('')}</span>` : ''}
+        </span>
+        <span class="shop-item__footer"></span>`;
+      const buy = document.createElement('button');
+      buy.type = 'button';
+      buy.className = 'btn btn--gold shop-item__buy';
+      if (maxed) {
+        buy.textContent = item.max > 1 ? '✓ Maximum' : '✓ Débloqué';
+        buy.disabled = true;
+      } else {
+        buy.innerHTML = this.costHtml(item.cost, have);
+        buy.disabled = !item.affordable;
+        buy.setAttribute('aria-label', `Rechercher ${item.name}`);
+        buy.addEventListener('click', () => this.handlers.researchBuy?.(item.id));
+      }
+      row.querySelector('.shop-item__footer').append(buy);
+      list.append(row);
+    }
   }
 
   // ------------------------------------------------------------ feedback

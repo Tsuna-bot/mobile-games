@@ -1,4 +1,5 @@
 // Enemy catalogue. Speeds in tiles per second, hp before wave scaling.
+// `siege`: damage per second dealt to walls and buildings blocking the way (Kingdom mode).
 
 export const ENEMIES = {
   scout: {
@@ -11,6 +12,7 @@ export const ENEMIES = {
     reward: 6,
     leak: 1,
     scale: 1,
+    siege: 8,
   },
   runner: {
     id: 'runner',
@@ -22,6 +24,7 @@ export const ENEMIES = {
     reward: 5,
     leak: 1,
     scale: 0.85,
+    siege: 5,
   },
   tank: {
     id: 'tank',
@@ -33,6 +36,7 @@ export const ENEMIES = {
     reward: 14,
     leak: 2,
     scale: 1.15,
+    siege: 18,
   },
   boss: {
     id: 'boss',
@@ -44,7 +48,22 @@ export const ENEMIES = {
     reward: 110,
     leak: 5,
     scale: 1.7,
+    siege: 60,
     // On death, releases these at its position.
     spawnsOnDeath: { type: 'runner', count: 4 },
+  },
+  siege: {
+    id: 'siege',
+    name: 'Démolisseur',
+    model: 'enemy-ufo-c-weapon',
+    hp: 300,
+    speed: 0.7,
+    armor: 4,
+    reward: 18,
+    leak: 3,
+    scale: 1.2,
+    siege: 55,
+    // Only appears at night in the Kingdom, where it smashes walls.
+    realmOnly: true,
   },
 };
