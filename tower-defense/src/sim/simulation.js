@@ -4,7 +4,7 @@
 import { CONFIG } from '../config.js';
 import { ENEMIES } from '../data/enemies.js';
 import { DEFAULT_MODIFIERS } from '../data/perks.js';
-import { SPELLS } from '../data/spells.js';
+import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
 import { TOWERS, stackHeight } from '../data/towers.js';
 import { makeWave } from '../data/waves.js';
 import { Level } from './level.js';
@@ -34,6 +34,7 @@ function createEnemy() {
     slowFactor: 1,
     slowTimer: 0,
     freezeTimer: 0,
+    stunTimer: 0,
     wave: 0,
     view: null,
   };
@@ -48,6 +49,7 @@ function createProjectile() {
     targetId: 0,
     damage: 0,
     splash: 0,
+    pierce: false,
     speed: 0,
     x: 0, y: 0, z: 0,
     vx: 0, vy: 0, vz: 0,
@@ -81,7 +83,8 @@ export class Tower {
   /** Level stats with the permanent upgrades (perks) applied. */
   refreshStats() {
     const base = this.def.levels[this.level];
-    this.stats = { ...base, damage: base.damage * this.modifiers.damage, range: base.range * this.modifiers.range };
+    this.stats = { ...base, range: base.range * this.modifiers.range };
+    if (base.damage !== undefined) this.stats.damage = base.damage * this.modifiers.damage;
   }
 
   get muzzleY() {
@@ -106,7 +109,7 @@ export class Simulation {
    * @param options.heroic   harder variant: tougher enemies, only 5 lives
    * @param options.modifiers permanent upgrades (see perks.js)
    */
-  constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS } = {}) {
+  constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS, spells = STARTER_SPELLS } = {}) {
     this.def = levelDef;
     this.levelIndex = levelIndex;
     this.level = new Level(levelDef, levelIndex);
@@ -132,12 +135,14 @@ export class Simulation {
     this.towerByCell = new Map();
     this.nextEnemyId = 1;
     this.nextTowerId = 1;
-    this.stats = { kills: 0, leaked: 0, goldEarned: 0, towersBuilt: 0, spellsCast: 0, perfectWaves: 0, wavesCleared: 0 };
+    this.stats = { kills: 0, bossKills: 0, leaked: 0, goldEarned: 0, towersBuilt: 0, towersMaxed: 0, spellsCast: 0, perfectWaves: 0, wavesCleared: 0, maxGold: 0 };
     this.sample = { x: 0, z: 0, dirX: 0, dirZ: 1 };
     this.spells = {};
-    for (const spell of Object.values(SPELLS)) {
+    for (const id of spells) {
+      const spell = SPELLS[id];
+      if (!spell) continue;
       const max = spell.cooldown * modifiers.spellCooldown;
-      this.spells[spell.id] = { cooldown: spell.initialCooldown * modifiers.spellCooldown, max };
+      this.spells[id] = { cooldown: spell.initialCooldown * modifiers.spellCooldown, max };
     }
     this.strikes = [];
   }
@@ -187,6 +192,11 @@ export class Simulation {
     this.countdown = -1;
     this.state = SIM_STATE.RUNNING;
     this.listener.onWaveStart?.(index, bonus);
+    for (const tower of this.towers) {
+      if (!tower.stats.income) continue;
+      this.addGold(tower.stats.income);
+      this.listener.onMineIncome?.(tower, tower.stats.income);
+    }
     return true;
   }
 
@@ -217,6 +227,7 @@ export class Simulation {
     tower.spent += cost;
     tower.level++;
     tower.refreshStats();
+    if (tower.maxed) this.stats.towersMaxed++;
     this.listener.onTowerUpgraded?.(tower);
     return true;
   }
@@ -237,8 +248,85 @@ export class Simulation {
     this.stats.goldEarned += amount;
   }
 
+  // ------------------------------------------------------------ save / resume
+
+  /** Everything needed to resume the run later (projectiles in flight are dropped). */
+  serialize() {
+    const round = (v) => Math.round(v * 1000) / 1000;
+    return {
+      version: 1,
+      gold: this.gold,
+      lives: this.lives,
+      time: round(this.time),
+      state: this.state,
+      nextWave: this.nextWave,
+      countdown: round(this.countdown),
+      waveRemaining: [...this.waveRemaining],
+      waveLeaks: [...this.waveLeaks],
+      spawners: this.spawners.map((s) => ({ index: s.index, cursor: s.cursor, elapsed: round(s.elapsed) })),
+      spells: Object.fromEntries(Object.entries(this.spells).map(([id, s]) => [id, round(s.cooldown)])),
+      strikes: this.strikes.map((s) => ({ ...s })),
+      stats: { ...this.stats },
+      towers: this.towers.map((t) => ({
+        type: t.def.id, cell: t.cell.index, level: t.level, spent: t.spent,
+        targeting: t.targeting, kills: t.kills, cooldown: round(t.cooldown),
+      })),
+      enemies: this.enemies.filter((e) => e.active).map((e) => ({
+        type: e.def.id, hp: round(e.hp), maxHp: e.maxHp, hpMultiplier: e.hpMultiplier, speed: round(e.speed),
+        distance: round(e.distance), slowFactor: e.slowFactor, slowTimer: round(e.slowTimer),
+        freezeTimer: round(e.freezeTimer), stunTimer: round(e.stunTimer), wave: e.wave,
+      })),
+    };
+  }
+
+  /** Rebuilds a run from `serialize()` output. Call before attaching the listener. */
+  restore(data) {
+    this.gold = data.gold;
+    this.lives = data.lives;
+    this.time = data.time;
+    this.state = data.state === SIM_STATE.RUNNING ? SIM_STATE.RUNNING : SIM_STATE.READY;
+    this.nextWave = data.nextWave;
+    this.countdown = data.countdown;
+    this.waveRemaining = [...data.waveRemaining];
+    this.waveLeaks = [...data.waveLeaks];
+    this.spawners = data.spawners.map((s) => ({ wave: this.wave(s.index), index: s.index, cursor: s.cursor, elapsed: s.elapsed }));
+    for (const [id, cooldown] of Object.entries(data.spells)) if (this.spells[id]) this.spells[id].cooldown = cooldown;
+    this.strikes = data.strikes.map((s) => ({ ...s }));
+    Object.assign(this.stats, data.stats);
+    for (const saved of data.towers) {
+      const cell = this.level.cells[saved.cell];
+      const def = TOWERS[saved.type];
+      if (!cell || !def || !this.canBuild(cell)) continue;
+      const tower = new Tower(this.nextTowerId++, def, cell, this.modifiers);
+      tower.level = Math.min(saved.level, def.levels.length - 1);
+      tower.spent = saved.spent;
+      tower.targeting = saved.targeting;
+      tower.kills = saved.kills;
+      tower.cooldown = saved.cooldown;
+      tower.refreshStats();
+      this.towers.push(tower);
+      this.towerByCell.set(cell.index, tower);
+    }
+    for (const saved of data.enemies) {
+      const def = ENEMIES[saved.type];
+      const enemy = this.enemies.find((e) => !e.active);
+      if (!def || !enemy) continue;
+      Object.assign(enemy, saved, { id: this.nextEnemyId++, active: true, def, armor: def.armor, view: null });
+      delete enemy.type;
+      this.level.sampleRoute(enemy.distance, this.sample);
+      enemy.x = this.sample.x;
+      enemy.z = this.sample.z;
+      enemy.dirX = this.sample.dirX;
+      enemy.dirZ = this.sample.dirZ;
+    }
+  }
+
+  hasSpell(id) {
+    return Boolean(this.spells[id]);
+  }
+
   spellReady(id) {
-    return this.spells[id].cooldown <= 0 && !this.over;
+    return Boolean(this.spells[id]) && this.spells[id].cooldown <= 0 && !this.over;
   }
 
   /** 0 = just cast, 1 = ready. */
@@ -266,6 +354,21 @@ export class Simulation {
         enemy.freezeTimer = Math.max(enemy.freezeTimer, enemy.def.id === 'boss' ? def.freeze / 2 : def.freeze);
         this.damage(enemy, power, null);
       }
+    } else if (id === 'quake') {
+      this.listener.onSpellCast?.(id, x, z, null);
+      for (const enemy of this.enemies) {
+        if (!enemy.active) continue;
+        enemy.stunTimer = Math.max(enemy.stunTimer, enemy.def.id === 'boss' ? def.stun / 2 : def.stun);
+        this.damage(enemy, power, null);
+      }
+    } else if (id === 'repair') {
+      const healed = Math.min(def.heal, this.startLives - this.lives);
+      this.lives += healed;
+      this.listener.onSpellCast?.(id, x, z, healed);
+    } else if (id === 'goldrain') {
+      const amount = Math.round((def.gold + def.goldPerWave * this.nextWave) * this.modifiers.spellPower);
+      this.addGold(amount);
+      this.listener.onSpellCast?.(id, x, z, amount);
     } else if (id === 'lightning') {
       const targets = this.enemies
         .filter((e) => e.active && (e.x - x) ** 2 + (e.z - z) ** 2 <= radiusSq)
@@ -282,6 +385,7 @@ export class Simulation {
   step(dt) {
     if (this.over) return;
     this.time += dt;
+    if (this.gold > this.stats.maxGold) this.stats.maxGold = this.gold;
     this.updateSpawners(dt);
     if (this.countdown > 0) {
       this.countdown -= dt;
@@ -344,6 +448,7 @@ export class Simulation {
     enemy.slowFactor = 1;
     enemy.slowTimer = 0;
     enemy.freezeTimer = 0;
+    enemy.stunTimer = 0;
     enemy.wave = wave;
     this.level.sampleRoute(distance, this.sample);
     enemy.x = this.sample.x;
@@ -358,8 +463,9 @@ export class Simulation {
     const length = this.level.routeLength;
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
-      if (enemy.freezeTimer > 0) {
-        enemy.freezeTimer -= dt;
+      if (enemy.freezeTimer > 0 || enemy.stunTimer > 0) {
+        if (enemy.freezeTimer > 0) enemy.freezeTimer -= dt;
+        if (enemy.stunTimer > 0) enemy.stunTimer -= dt;
         continue;
       }
       if (enemy.slowTimer > 0) {
@@ -412,9 +518,9 @@ export class Simulation {
     }
   }
 
-  damage(enemy, amount, tower) {
+  damage(enemy, amount, tower, pierce = false) {
     if (!enemy.active) return;
-    const dealt = Math.max(amount * CONFIG.combat.minDamageShare, amount - enemy.armor);
+    const dealt = pierce ? amount : Math.max(amount * CONFIG.combat.minDamageShare, amount - enemy.armor);
     enemy.hp -= dealt;
     if (tower) tower.damageDealt += dealt;
     this.listener.onEnemyHit?.(enemy, dealt);
@@ -437,6 +543,7 @@ export class Simulation {
     const def = enemy.def;
     this.gold += def.reward;
     this.stats.kills++;
+    if (def.id === 'boss') this.stats.bossKills++;
     this.stats.goldEarned += def.reward;
     if (tower) tower.kills++;
     this.listener.onEnemyKilled?.(enemy);
@@ -483,6 +590,7 @@ export class Simulation {
         if (tower.cooldown <= 0 && this.frostPulse(tower, stats)) tower.cooldown = stats.rate;
         continue;
       }
+      if (stats.income) continue;
       const target = this.findTarget(tower, stats.range);
       tower.target = target;
       if (!target) {
@@ -516,7 +624,34 @@ export class Simulation {
     return hit;
   }
 
+  /** Tesla: instant arc that jumps to the nearest enemies not hit yet. */
+  chainLightning(tower, target, stats) {
+    const chain = [target];
+    let current = target;
+    while (chain.length < stats.chains) {
+      let next = null;
+      let best = CONFIG.combat.chainJump * CONFIG.combat.chainJump;
+      for (const enemy of this.enemies) {
+        if (!enemy.active || chain.includes(enemy)) continue;
+        const d = (enemy.x - current.x) ** 2 + (enemy.z - current.z) ** 2;
+        if (d < best) {
+          best = d;
+          next = enemy;
+        }
+      }
+      if (!next) break;
+      chain.push(next);
+      current = next;
+    }
+    this.listener.onChain?.(tower, chain);
+    chain.forEach((enemy, i) => this.damage(enemy, stats.damage * 0.85 ** i, tower));
+  }
+
   fire(tower, target, stats) {
+    if (stats.chains) {
+      this.chainLightning(tower, target, stats);
+      return;
+    }
     const p = this.projectiles.find((item) => !item.active);
     if (!p) return;
     p.active = true;
@@ -526,6 +661,7 @@ export class Simulation {
     p.targetId = target.id;
     p.damage = stats.damage;
     p.splash = stats.splash ?? 0;
+    p.pierce = Boolean(stats.armorPierce);
     p.speed = stats.projectileSpeed ?? 0;
     p.age = 0;
     p.x = p.sx = tower.x;
@@ -538,7 +674,7 @@ export class Simulation {
     if (p.kind === 'boulder') {
       // Aim where the target will be when the boulder lands.
       p.flightTime = stats.flightTime;
-      const moving = target.freezeTimer > 0 ? 0 : target.speed * target.slowFactor;
+      const moving = target.freezeTimer > 0 || target.stunTimer > 0 ? 0 : target.speed * target.slowFactor;
       this.level.sampleRoute(target.distance + moving * stats.flightTime, this.sample);
       p.tx = this.sample.x;
       p.tz = this.sample.z;
@@ -597,7 +733,7 @@ export class Simulation {
     p.active = false;
     this.listener.onImpact?.(p);
     if (p.splash > 0) this.areaDamage(p.x, p.z, p.splash, p.damage, p.tower);
-    else if (p.target && p.target.active && p.target.id === p.targetId) this.damage(p.target, p.damage, p.tower);
+    else if (p.target && p.target.active && p.target.id === p.targetId) this.damage(p.target, p.damage, p.tower, p.pierce);
     p.target = null;
   }
 }

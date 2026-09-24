@@ -32,6 +32,44 @@ export const SPELLS = {
     damage: 70,
     targets: 5,
   },
+  quake: {
+    id: 'quake',
+    name: 'Séisme',
+    blurb: 'La terre tremble : tous les ovnis sont sonnés et blessés.',
+    cooldown: 55,
+    initialCooldown: 20,
+    global: true,
+    radius: 0,
+    damage: 30,
+    stun: 1.3,
+    shopPrice: 180,
+  },
+  repair: {
+    id: 'repair',
+    name: 'Réparation',
+    blurb: 'Les maçons réparent le château : +3 vies.',
+    cooldown: 75,
+    initialCooldown: 30,
+    global: true,
+    radius: 0,
+    damage: 0,
+    heal: 3,
+    shopPrice: 140,
+  },
+  goldrain: {
+    id: 'goldrain',
+    name: 'Pluie d’or',
+    blurb: 'Un trésor tombe du ciel : de l’or qui grandit avec les vagues.',
+    cooldown: 60,
+    initialCooldown: 15,
+    global: true,
+    radius: 0,
+    damage: 0,
+    gold: 35,
+    goldPerWave: 10,
+    shopPrice: 120,
+  },
 };
 
-export const SPELL_ORDER = ['meteor', 'blizzard', 'lightning'];
+export const SPELL_ORDER = ['meteor', 'blizzard', 'lightning', 'quake', 'repair', 'goldrain'];
+export const STARTER_SPELLS = ['meteor', 'blizzard', 'lightning'];

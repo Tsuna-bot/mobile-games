@@ -75,6 +75,18 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 1.5 4.5 13.5h6l-1.5 9 10-12h-6z"/></svg>
           <span class="spell__cooldown"></span><span class="spell__time"></span>
         </button>
+        <button class="spell" type="button" data-spell="quake" aria-label="Séisme" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20h20v2H2zM3 18l3.5-6 2.5 3 3-7 3 5 2-3 4 8z"/></svg>
+          <span class="spell__cooldown"></span><span class="spell__time"></span>
+        </button>
+        <button class="spell" type="button" data-spell="repair" aria-label="Réparation" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.5.7-1.3 2.2-2.5 4.3-2.5 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21zm-1-12v3H8v2h3v3h2v-3h3v-2h-3V9z"/></svg>
+          <span class="spell__cooldown"></span><span class="spell__time"></span>
+        </button>
+        <button class="spell" type="button" data-spell="goldrain" aria-label="Pluie d’or" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="14" r="7"/><circle cx="6" cy="5" r="2.2"/><circle cx="13" cy="3.5" r="1.8"/><circle cx="19" cy="6" r="2"/></svg>
+          <span class="spell__cooldown"></span><span class="spell__time"></span>
+        </button>
       </div>
       <button id="btn-wave" class="wave-btn" type="button">
         <span class="wave-btn__progress" id="wave-progress"></span>
@@ -131,9 +143,20 @@
         <p class="brand__tagline">Les ovnis débarquent. Ton château doit tenir.</p>
       </div>
       <div class="menu-bar">
-        <span class="star-total" id="star-total" aria-label="Étoiles"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg><b id="star-count">0</b></span>
-        <button id="btn-perks" class="btn btn--gold btn--small" type="button">Améliorations <span class="badge" id="perks-badge" hidden>!</span></button>
+        <div class="wallet">
+          <span class="star-total" id="star-total" aria-label="Étoiles"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg><b id="star-count">0</b></span>
+          <span class="gem-total" id="gem-total" aria-label="Gemmes"><span class="gem" aria-hidden="true"></span><b id="gem-count">0</b></span>
+        </div>
+        <div class="menu-actions">
+          <button id="btn-perks" class="btn btn--gold btn--small" type="button">Améliorations <span class="badge" id="perks-badge" hidden>!</span></button>
+          <button id="btn-shop" class="btn btn--gem btn--small" type="button">Boutique <span class="badge" id="shop-badge" hidden>!</span></button>
+          <button id="btn-achievements" class="btn btn--small" type="button">Succès <span class="badge badge--soft" id="achievements-count">0/0</span></button>
+        </div>
       </div>
+      <button id="btn-resume-run" class="resume-card" type="button" hidden>
+        <span class="resume-card__icon" aria-hidden="true">▶</span>
+        <span><b>Reprendre la partie</b><span id="resume-detail">Prairie · vague 3</span></span>
+      </button>
       <div class="levels" id="levels"></div>
       <div class="settings" role="group" aria-label="Réglages">
         <button class="chip" type="button" data-setting="sound">Sons <span class="chip__value">On</span></button>
@@ -141,7 +164,7 @@
         <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
         <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
       </div>
-      <p class="credits">Modèles 3D : Tower Defense Kit de Kenney (CC0)</p>
+      <p class="credits">Sauvegarde automatique · Modèles 3D : Tower Defense Kit de Kenney (CC0)</p>
     </section>
 
     <section id="screen-perks" class="screen" aria-labelledby="perks-title">
@@ -154,6 +177,30 @@
       <div class="panel panel--row">
         <button id="btn-perks-reset" class="btn btn--ghost" type="button">Réinitialiser</button>
         <button id="btn-perks-back" class="btn btn--primary" type="button">Retour</button>
+      </div>
+    </section>
+
+    <section id="screen-shop" class="screen" aria-labelledby="shop-title">
+      <div class="perks-head">
+        <h2 id="shop-title" class="screen__title screen__title--small">Boutique</h2>
+        <p class="gem-total gem-total--big"><span class="gem" aria-hidden="true"></span><b id="shop-gems">0</b> gemmes</p>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" type="button" role="tab" data-tab="towers" aria-selected="true">Tours</button>
+        <button class="tab" type="button" role="tab" data-tab="spells" aria-selected="false">Sorts</button>
+      </div>
+      <div class="shop" id="shop"></div>
+      <p class="perks-note">Gagne des gemmes en finissant des niveaux (bonus la première fois), en Héroïque, en Survie et avec les succès.</p>
+      <div class="panel">
+        <button id="btn-shop-back" class="btn btn--primary" type="button">Retour</button>
+      </div>
+    </section>
+
+    <section id="screen-achievements" class="screen" aria-labelledby="achievements-title">
+      <h2 id="achievements-title" class="screen__title screen__title--small">Succès</h2>
+      <div class="achievements" id="achievements"></div>
+      <div class="panel">
+        <button id="btn-achievements-back" class="btn btn--primary" type="button">Retour</button>
       </div>
     </section>
 

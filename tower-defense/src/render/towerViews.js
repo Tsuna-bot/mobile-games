@@ -18,6 +18,26 @@ function shortestAngle(from, to) {
   return delta;
 }
 
+const tintedMaterials = new Map();
+
+/** Shared glowing variant of the palette material for tinted crystals. */
+function tintedMaterial(assets, tint) {
+  if (!tintedMaterials.has(tint)) {
+    const material = assets.material.clone();
+    material.color.set(tint);
+    material.emissive.set(tint);
+    material.emissiveIntensity = 0.55;
+    tintedMaterials.set(tint, material);
+  }
+  return tintedMaterials.get(tint);
+}
+
+/** Height where a tower's weapon sits (crystal clusters are centered on their origin). */
+export function weaponBaseY(def, level) {
+  const scale = def.weaponScale?.[level] ?? 1;
+  return stackHeight(def, level) + (def.weapon === 'tower-round-crystals' ? 0.37 * scale : 0);
+}
+
 /** Builds the stacked Kenney tower model for a tower level. */
 export function buildTowerModel(assets, def, level) {
   const root = new THREE.Group();
@@ -29,8 +49,14 @@ export function buildTowerModel(assets, def, level) {
     y += PIECE_HEIGHT[piece];
   }
   const weapon = assets.clone(def.weapon);
-  // The crystal cluster is centered on its origin; lift it onto the stack.
-  weapon.position.y = def.id === 'frost' ? y + 0.37 : y;
+  weapon.scale.setScalar(def.weaponScale?.[level] ?? 1);
+  weapon.position.y = weaponBaseY(def, level);
+  if (def.weaponTint) {
+    const material = tintedMaterial(assets, def.weaponTint);
+    weapon.traverse((o) => {
+      if (o.isMesh) o.material = material;
+    });
+  }
   root.add(weapon);
   return { root, weapon, part: weapon.getObjectByName(MOVING_PART[def.weapon]) ?? null };
 }
@@ -41,6 +67,9 @@ export class TowerViews {
     this.scene = scene;
     this.assets = assets;
     this.views = new Set();
+    this.pickGeometry = new THREE.BoxGeometry(0.8, 1, 0.8);
+    this.pickGeometry.translate(0, 0.5, 0);
+    this.pickMaterial = new THREE.MeshBasicMaterial({ visible: false });
     // Golden aura under fully upgraded towers.
     this.auraGeometry = new THREE.RingGeometry(0.42, 0.52, 32, 1, 0, Math.PI * 1.6);
     this.auraGeometry.rotateX(-Math.PI / 2);
@@ -67,6 +96,10 @@ export class TowerViews {
       pop: 0,
     };
     view.group.position.set(tower.x, CONFIG.world.tileTop, tower.z);
+    // Invisible box used for tap picking: a tower can be selected even when another hides its tile.
+    view.pick = new THREE.Mesh(this.pickGeometry, this.pickMaterial);
+    view.pick.userData.tower = tower;
+    view.group.add(view.pick);
     this.scene.add(view.group);
     tower.view = view;
     this.views.add(view);
@@ -86,6 +119,7 @@ export class TowerViews {
     }
     view.weapon.rotation.y = view.yaw;
     view.group.add(view.model);
+    view.pick.scale.y = weaponBaseY(view.tower.def, view.tower.level) + 0.5;
     view.pop = 1;
     if (view.tower.maxed && !view.aura) {
       view.aura = new THREE.Mesh(this.auraGeometry, this.auraMaterial);
@@ -121,9 +155,10 @@ export class TowerViews {
     for (const view of this.views) {
       const { tower } = view;
       if (view.aura) view.aura.rotation.y = time * 1.5;
-      if (tower.def.id === 'frost') {
-        view.weapon.rotation.y = time * 0.9;
-        view.weapon.position.y = stackHeight(tower.def, tower.level) + 0.37 + Math.sin(time * 2 + tower.id) * 0.04;
+      if (!tower.def.projectile) {
+        // Crystal and gold towers don't aim: their top slowly spins and floats.
+        view.weapon.rotation.y = time * (tower.def.id === 'tesla' ? 2.2 : 0.9);
+        view.weapon.position.y = weaponBaseY(tower.def, tower.level) + Math.sin(time * 2 + tower.id) * 0.04;
       } else if (tower.target) {
         const desired = Math.atan2(tower.target.x - tower.x, tower.target.z - tower.z);
         view.yaw += shortestAngle(view.yaw, desired) * Math.min(1, dt * 12);
@@ -152,6 +187,13 @@ export class TowerViews {
         view.model.scale.set(1 - bounce * 0.5, 1 + bounce, 1 - bounce * 0.5);
       }
     }
+  }
+
+  /** Towers under a screen ray, nearest first. */
+  pick(raycaster) {
+    const boxes = [];
+    for (const view of this.views) boxes.push(view.pick);
+    return raycaster.intersectObjects(boxes, false).map((hit) => hit.object.userData.tower);
   }
 
   clear() {

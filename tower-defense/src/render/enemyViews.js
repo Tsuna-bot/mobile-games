@@ -3,7 +3,8 @@ import { CONFIG } from '../config.js';
 import { ENEMIES } from '../data/enemies.js';
 import { lerp } from '../core/math.js';
 
-const BAR_WIDTH = 0.62;
+const BAR_WIDTH = 0.9;
+const BAR_HEIGHT = 0.15;
 const HIT_FLASH = new THREE.Color(0xffffff);
 const FROST_TINT = new THREE.Color(0x3aa8ff);
 const FREEZE_TINT = new THREE.Color(0x9fe6ff);
@@ -38,7 +39,10 @@ export class EnemyViews {
     this.active = new Set();
     this.barGeometry = new THREE.PlaneGeometry(1, 1);
     this.barGeometry.translate(0.5, 0, 0);
-    this.barBackMaterial = new THREE.MeshBasicMaterial({ color: 0x1b1530, transparent: true, opacity: 0.75, depthWrite: false });
+    // Health bars draw on top of everything (no depth test) so towers never hide them. All opaque,
+    // so renderOrder alone layers back < track < fill.
+    this.barBackMaterial = new THREE.MeshBasicMaterial({ color: 0x0b0a14, depthWrite: false, depthTest: false, toneMapped: false, fog: false });
+    this.barTrackMaterial = new THREE.MeshBasicMaterial({ color: 0x4a1a24, depthWrite: false, depthTest: false, toneMapped: false, fog: false });
     this.cameraQuaternion = new THREE.Quaternion();
     this.tmpColor = new THREE.Color();
     this.discGeometry = new THREE.PlaneGeometry(1, 1);
@@ -108,20 +112,25 @@ export class EnemyViews {
     root.add(ice);
 
     const bar = new THREE.Group();
+    const width = BAR_WIDTH * (def.id === 'boss' ? 1.5 : 1);
     const back = new THREE.Mesh(this.barGeometry, this.barBackMaterial);
-    back.scale.set(BAR_WIDTH + 0.06, 0.12, 1);
-    back.position.set(-(BAR_WIDTH + 0.06) / 2, 0, -0.001);
-    const fillMaterial = new THREE.MeshBasicMaterial({ color: 0x5cff7a, depthWrite: false });
+    back.scale.set(width + 0.08, BAR_HEIGHT + 0.07, 1);
+    back.position.x = -(width + 0.08) / 2;
+    const track = new THREE.Mesh(this.barGeometry, this.barTrackMaterial);
+    track.scale.set(width, BAR_HEIGHT, 1);
+    track.position.x = -width / 2;
+    const fillMaterial = new THREE.MeshBasicMaterial({ color: 0x5cff7a, depthWrite: false, depthTest: false, toneMapped: false, fog: false });
     const fill = new THREE.Mesh(this.barGeometry, fillMaterial);
-    fill.scale.set(BAR_WIDTH, 0.07, 1);
-    fill.position.x = -BAR_WIDTH / 2;
-    back.renderOrder = 4;
-    fill.renderOrder = 5;
-    bar.add(back, fill);
-    bar.position.y = 0.68 * scale + 0.18;
+    fill.scale.set(width, BAR_HEIGHT, 1);
+    fill.position.x = -width / 2;
+    back.renderOrder = 20;
+    track.renderOrder = 21;
+    fill.renderOrder = 22;
+    bar.add(back, track, fill);
+    bar.position.y = 0.68 * scale + 0.3;
     root.add(bar);
 
-    return { type, root, model, material, bar, fill, fillMaterial, shadow, glow, ice, flash: 0, spawn: 0, spin: Math.random() * Math.PI * 2, px: 0, pz: 0 };
+    return { type, root, model, material, bar, fill, fillMaterial, barWidth: width, shadow, glow, ice, flash: 0, spawn: 0, spin: Math.random() * Math.PI * 2, px: 0, pz: 0 };
   }
 
   acquire(enemy) {
@@ -179,9 +188,10 @@ export class EnemyViews {
 
       if (!frozen) view.spin += dt * (enemy.def.id === 'runner' ? 5 : 1.6);
       view.model.rotation.y = view.spin;
-      // Lean into the direction of travel.
-      view.model.rotation.x = enemy.dirZ * 0.12;
-      view.model.rotation.z = -enemy.dirX * 0.12;
+      // Lean into the direction of travel; wobble when stunned by an earthquake.
+      const stunned = enemy.stunTimer > 0;
+      view.model.rotation.x = stunned ? Math.sin(time * 22 + enemy.id) * 0.35 : enemy.dirZ * 0.12;
+      view.model.rotation.z = stunned ? Math.cos(time * 17 + enemy.id) * 0.35 : -enemy.dirX * 0.12;
 
       if (view.spawn > 0) {
         view.spawn = Math.max(0, view.spawn - dt * 3);
@@ -197,9 +207,9 @@ export class EnemyViews {
       if (view.flash > 0) emissive.lerp(HIT_FLASH, view.flash * 0.8);
 
       const fraction = Math.max(0, enemy.hp / enemy.maxHp);
-      view.bar.visible = fraction < 0.999;
-      view.fill.scale.x = BAR_WIDTH * fraction;
-      view.fillMaterial.color.setHSL(0.33 * fraction, 0.9, 0.55);
+      view.fill.scale.x = Math.max(0.001, view.barWidth * fraction);
+      // Green → yellow → red, saturated so it reads on every background.
+      view.fillMaterial.color.setHSL(0.33 * fraction * fraction ** 0.3, 1, 0.5);
       view.bar.quaternion.copy(this.cameraQuaternion);
     }
   }
@@ -219,6 +229,7 @@ export class EnemyViews {
     this.pools.clear();
     this.barGeometry.dispose();
     this.barBackMaterial.dispose();
+    this.barTrackMaterial.dispose();
     this.discGeometry.dispose();
     this.shadowTexture.dispose();
     this.glowTexture.dispose();

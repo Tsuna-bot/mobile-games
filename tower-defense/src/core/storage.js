@@ -1,14 +1,22 @@
+import { ACHIEVEMENTS, EMPTY_STATS } from '../data/achievements.js';
 import { PERKS } from '../data/perks.js';
+import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
+import { STARTER_TOWERS, TOWERS } from '../data/towers.js';
 
 const STORAGE_KEY = 'bastion/v1';
+const RUN_KEY = 'bastion/run';
 
-export const QUALITY_SETTINGS = ['auto', 'high', 'medium', 'low'];
+export const QUALITY_SETTINGS = ['auto', 'ultra', 'high', 'medium', 'low'];
 
 function defaults() {
   return {
     levels: {},
     perks: {},
     survival: { bestWave: 0, stars: 0 },
+    gems: 0,
+    owned: { towers: [...STARTER_TOWERS], spells: [...STARTER_SPELLS] },
+    achievements: {},
+    stats: { ...EMPTY_STATS },
     tutorialDone: false,
     settings: { sound: true, music: true, haptics: true, quality: 'auto' },
   };
@@ -37,6 +45,20 @@ export function loadSave() {
     }
     if (isCount(Number(data.survival?.bestWave), 10000)) save.survival.bestWave = Number(data.survival.bestWave);
     if (isCount(Number(data.survival?.stars), 3)) save.survival.stars = Number(data.survival.stars);
+    if (isCount(Number(data.gems), 1e7)) save.gems = Number(data.gems);
+    if (Array.isArray(data.owned?.towers)) {
+      save.owned.towers = [...new Set([...STARTER_TOWERS, ...data.owned.towers.filter((id) => TOWERS[id])])];
+    }
+    if (Array.isArray(data.owned?.spells)) {
+      save.owned.spells = [...new Set([...STARTER_SPELLS, ...data.owned.spells.filter((id) => SPELLS[id])])];
+    }
+    for (const achievement of ACHIEVEMENTS) {
+      if (data.achievements?.[achievement.id] === true) save.achievements[achievement.id] = true;
+    }
+    for (const key of Object.keys(EMPTY_STATS)) {
+      const value = Number(data.stats?.[key]);
+      if (isCount(value, 1e9)) save.stats[key] = value;
+    }
     if (typeof data.tutorialDone === 'boolean') save.tutorialDone = data.tutorialDone;
     const settings = data.settings ?? {};
     for (const key of ['sound', 'music', 'haptics']) {
@@ -54,6 +76,33 @@ export function writeSave(save) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
   } catch {
     // Persistence is optional.
+  }
+}
+
+/** The run in progress (resumed after closing the page), or null. */
+export function loadRun() {
+  try {
+    const raw = localStorage.getItem(RUN_KEY);
+    const run = raw ? JSON.parse(raw) : null;
+    return run && typeof run.levelId === 'string' && run.snapshot?.version === 1 ? run : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeRun(run) {
+  try {
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+  } catch {
+    // Full or blocked storage: the run just won't be resumable.
+  }
+}
+
+export function clearRun() {
+  try {
+    localStorage.removeItem(RUN_KEY);
+  } catch {
+    // Nothing to clear.
   }
 }
 

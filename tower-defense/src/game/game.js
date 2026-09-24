@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { FixedLoop } from '../core/loop.js';
-import { QUALITY_SETTINGS, earnedStars, writeSave } from '../core/storage.js';
+import { QUALITY_SETTINGS, clearRun, earnedStars, loadRun, writeRun, writeSave } from '../core/storage.js';
+import { ACHIEVEMENTS, runReward } from '../data/achievements.js';
 import { LEVELS, SURVIVAL } from '../data/levels.js';
 import { PERKS, buildModifiers, spentStars } from '../data/perks.js';
 import { SPELLS, SPELL_ORDER } from '../data/spells.js';
-import { TOWERS } from '../data/towers.js';
+import { TOWERS, TOWER_ORDER } from '../data/towers.js';
 import { PointerInput } from '../input/pointer.js';
 import { CameraRig } from '../render/cameraRig.js';
 import { Effects } from '../render/effects.js';
@@ -22,6 +23,8 @@ const MODE = Object.freeze({ MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused',
 const END_SCREEN_DELAY = 1.6;
 const MULTI_KILL_WINDOW = 0.35;
 const SURVIVAL_STAR_EVERY = 10;
+const AUTOSAVE_EVERY = 4;
+const ALL_LEVELS = [...LEVELS, SURVIVAL];
 const TUTORIAL = [
   "Touche une case d'herbe pour construire ta première tour.",
   'Bien joué ! Touche « Lancer la vague 1 » quand tu es prêt.',
@@ -39,7 +42,7 @@ export class Game {
     this.save = save;
 
     const scene = view.scene;
-    this.world = new World(scene, assets);
+    this.world = new World(scene, assets, view.renderer);
     this.effects = new Effects(scene, assets);
     this.towerViews = new TowerViews(scene, assets);
     this.enemyViews = new EnemyViews(scene, assets);
@@ -67,7 +70,10 @@ export class Game {
     this.spellCharges = {};
     this.spellRemaining = {};
     this.tmp = new THREE.Vector3();
+    this.tmp2 = new THREE.Vector3();
     this.resizeQueued = false;
+    this.autosaveTimer = 0;
+    this.runCommitted = false;
 
     this.loop = new FixedLoop({
       step: CONFIG.loop.fixedStep,
@@ -184,6 +190,18 @@ export class Game {
           this.effects.sparksAt(x, y, z);
         }
       },
+      onChain: (tower, chain) => {
+        const from = this.tmp2.set(tower.x, tower.muzzleY + 0.2, tower.z).clone();
+        const points = chain.map((enemy) => this.enemyViews.positionOf(enemy, new THREE.Vector3()));
+        this.spellViews.chain(from, points);
+        for (const point of points) this.effects.sparksAt(point.x, point.y, point.z);
+        this.audio.shoot('tesla');
+      },
+      onMineIncome: (tower, amount) => {
+        this.floatAt(tower.x, 1.4, tower.z, `+${amount}`);
+        this.flyCoinsFrom(tower.x, 1, tower.z, 3);
+        this.effects.goldShower(tower.x, tower.z);
+      },
       onFrostPulse: (tower) => {
         this.effects.frostPulse(tower.x, tower.z, tower.stats.range);
         this.audio.shoot('frost');
@@ -204,6 +222,23 @@ export class Game {
           this.ui.flash('lightning');
           this.audio.lightning();
           this.rig.shake(0.25);
+        } else if (id === 'quake') {
+          const { routeX, routeZ } = this.sim.level;
+          for (let i = 0; i < routeX.length; i += 4) this.effects.quakeDust(routeX[i], routeZ[i]);
+          this.rig.shake(1);
+          this.audio.quake();
+          this.haptics.pulse(CONFIG.haptics.leak);
+        } else if (id === 'repair') {
+          const base = this.sim.level.base;
+          this.effects.heal(base.x, base.z);
+          this.floatAt(base.x, 1.8, base.z, targets > 0 ? `+${targets} ❤` : 'Château intact', targets > 0 ? 'heal' : '');
+          this.audio.heal();
+        } else if (id === 'goldrain') {
+          this.effects.goldShower(0, 0);
+          this.floatAt(0, 1.5, 0, `+${targets} or`, 'combo');
+          this.flyCoinsFrom(0, 1, 0, 12);
+          this.audio.goldRain();
+          this.audio.coin();
         }
       },
       onSpellImpact: (id, x, z) => {
@@ -241,8 +276,14 @@ export class Game {
     const ui = this.ui;
     ui.on('btn-pause', () => this.pause());
     ui.on('btn-resume', () => this.resume());
-    ui.on('btn-restart', () => this.startLevel(this.current));
-    ui.on('btn-quit', () => this.showMenu());
+    ui.on('btn-restart', () => {
+      this.commitRun(false);
+      this.startLevel(this.current);
+    });
+    ui.on('btn-quit', () => {
+      this.persistRun();
+      this.showMenu();
+    });
     ui.on('btn-menu', () => this.showMenu());
     ui.on('btn-retry', () => this.startLevel(this.current));
     ui.on('btn-next', () => {
@@ -254,6 +295,12 @@ export class Game {
     ui.on('btn-upgrade', () => this.upgradeSelected());
     ui.on('btn-sell', () => this.sellSelected());
     ui.on('btn-perks', () => this.showPerks());
+    ui.on('btn-shop', () => this.showShop());
+    ui.on('btn-shop-back', () => this.showMenu());
+    ui.on('btn-achievements', () => this.showAchievements());
+    ui.on('btn-achievements-back', () => this.showMenu());
+    ui.on('btn-resume-run', () => this.resumeRun());
+    ui.on('shopTab', () => this.renderShop());
     ui.on('btn-perks-back', () => this.showMenu());
     ui.on('btn-perks-reset', () => this.resetPerks());
     ui.on('btn-spell-cancel', () => this.armSpell(null));
@@ -282,9 +329,9 @@ export class Game {
         if (event.code === 'Space') {
           event.preventDefault();
           this.callWave();
-        } else if (['Digit1', 'Digit2', 'Digit3'].includes(event.code)) {
-          const id = SPELL_ORDER[Number(event.code.slice(-1)) - 1];
-          this.armSpell(this.armedSpell === id ? null : id);
+        } else if (/^Digit[1-6]$/.test(event.code)) {
+          const id = SPELL_ORDER.filter((spell) => this.sim.hasSpell(spell))[Number(event.code.slice(-1)) - 1];
+          if (id) this.armSpell(this.armedSpell === id ? null : id);
         }
       }
     };
@@ -295,6 +342,7 @@ export class Game {
     this.handleVisibility = () => {
       if (document.hidden) {
         if (this.mode === MODE.PLAYING) this.pause();
+        this.persistRun();
         this.loop.stop();
         this.audio.suspend();
       } else {
@@ -384,6 +432,7 @@ export class Game {
     this.current = { def: LEVELS[unlocked], index: unlocked, heroic: false };
     const backdrop = new Level(LEVELS[unlocked], unlocked);
     this.world.build(backdrop);
+    this.view.setGrade(this.world.theme.grade);
     this.view.renderer.toneMappingExposure = this.world.exposure;
     this.frame(backdrop);
     this.rig.setOrbit(0.25);
@@ -392,6 +441,10 @@ export class Game {
     this.ui.coach(null);
     this.ui.renderLevels(this.menuEntries(), (entry, heroic) => this.startLevel({ def: entry.def, index: entry.index, heroic }));
     this.ui.setStarTotal(this.availableStars, earnedStars(this.save), this.canBuyPerk());
+    this.refreshWallet();
+    const run = loadRun();
+    const runDef = run && ALL_LEVELS.find((def) => def.id === run.levelId);
+    this.ui.setResume(runDef ? `${runDef.name}${run.heroic ? ' · Héroïque' : ''} · vague ${Math.max(1, run.snapshot.nextWave)} · ${run.snapshot.lives} vies` : null);
     this.ui.showScreen('menu');
     this.audio.setIntensity(0);
     this.audio.duck(false);
@@ -431,15 +484,30 @@ export class Game {
     this.renderPerks();
   }
 
-  startLevel(target) {
+  startLevel(target, snapshot = null) {
     if (!target) return;
     this.audio.unlock();
     this.armSpell(null);
     this.clearEntities();
     this.current = target;
     const { def, index, heroic } = target;
-    this.sim = new Simulation(def, index, this.listener, { heroic, modifiers: buildModifiers(this.save.perks) });
+    const options = { heroic, modifiers: buildModifiers(this.save.perks), spells: this.save.owned.spells };
+    if (snapshot) {
+      // Rebuild the saved run silently, then attach the listener and create the views.
+      this.sim = new Simulation(def, index, {}, options);
+      this.sim.restore(snapshot);
+      this.sim.listener = this.listener;
+    } else {
+      clearRun();
+      this.sim = new Simulation(def, index, this.listener, options);
+    }
+    this.runCommitted = false;
+    this.autosaveTimer = AUTOSAVE_EVERY;
     this.world.build(this.sim.level);
+    this.view.setGrade(this.world.theme.grade);
+    for (const tower of this.sim.towers) this.towerViews.add(tower);
+    for (const enemy of this.sim.enemies) if (enemy.active) this.enemyViews.acquire(enemy);
+    this.ui.setSpellCount(Object.keys(this.sim.spells).length);
     this.view.renderer.toneMappingExposure = this.world.exposure;
     this.frame(this.sim.level);
     this.rig.setOrbit(0);
@@ -453,12 +521,13 @@ export class Game {
     this.ui.showScreen(null);
     this.ui.setPlayingUi(true);
     const detail = def.endless ? 'Vagues infinies' : `${def.waves} vagues · ${heroic ? 'Héroïque : 5 vies, ennemis renforcés' : def.subtitle}`;
-    this.ui.showBanner(heroic ? `👑 ${def.name}` : def.name, detail, heroic ? 'danger' : '');
+    if (snapshot) this.ui.showBanner('Partie reprise', `${def.name} · vague ${Math.max(1, this.sim.nextWave)}`);
+    else this.ui.showBanner(heroic ? `👑 ${def.name}` : def.name, detail, heroic ? 'danger' : '');
     this.audio.setIntensity(0);
     this.audio.duck(false);
     this.audio.click();
     this.monitor.reset();
-    this.tutorialStep = index === 0 && !heroic && !def.endless && !this.save.tutorialDone ? 0 : -1;
+    this.tutorialStep = index === 0 && !heroic && !def.endless && !snapshot && !this.save.tutorialDone ? 0 : -1;
     this.ui.coach(this.tutorialStep >= 0 ? TUTORIAL[0] : null);
     this.loop.start();
   }
@@ -485,6 +554,7 @@ export class Game {
     if (this.mode !== MODE.PLAYING) return;
     this.mode = MODE.PAUSED;
     this.armSpell(null);
+    this.persistRun();
     this.loop.stop();
     this.input.reset();
     this.ui.showScreen('pause');
@@ -512,6 +582,8 @@ export class Game {
     this.audio.setIntensity(0);
     const { def, heroic } = this.current;
     const before = earnedStars(this.save);
+    this.wasCleared = (this.save.levels[def.id]?.stars ?? 0) > 0;
+    this.hadCrown = this.save.levels[def.id]?.crown ?? false;
 
     if (def.endless) {
       const reached = Math.max(0, this.sim.nextWave - 1);
@@ -533,7 +605,144 @@ export class Game {
       this.ui.showBanner('Le château est tombé', '', 'danger');
     }
     this.newStars = earnedStars(this.save) - before;
+    clearRun();
+    this.commitRun(victory);
     writeSave(this.save);
+  }
+
+  /** Adds this run to lifetime stats, pays gems and checks achievements (once per run). */
+  commitRun(victory) {
+    const sim = this.sim;
+    if (!sim || this.runCommitted) return;
+    this.runCommitted = true;
+    const { def, heroic } = this.current;
+    const stats = this.save.stats;
+    const run = sim.stats;
+    stats.kills += run.kills;
+    stats.bossKills += run.bossKills;
+    stats.spellsCast += run.spellsCast;
+    stats.perfectWaves += run.perfectWaves;
+    stats.towersMaxed += run.towersMaxed;
+    stats.maxGold = Math.max(stats.maxGold, run.maxGold);
+    const records = Object.values(this.save.levels);
+    stats.levelsWon = LEVELS.filter((level) => (this.save.levels[level.id]?.stars ?? 0) > 0).length;
+    stats.bestStars = Math.max(0, ...records.map((r) => r.stars));
+    stats.crowns = records.filter((r) => r.crown).length;
+    if (def.endless) stats.survivalWave = Math.max(stats.survivalWave, this.save.survival.bestWave);
+    const firstClear = victory && !this.wasCleared;
+    if (victory) stats.wins++;
+    const reward = sim.over ? runReward({
+      victory,
+      stars: sim.stars,
+      firstClear: heroic ? !this.hadCrown : firstClear,
+      heroic,
+      endless: def.endless,
+      wavesCleared: sim.stats.wavesCleared,
+    }) : 0;
+    this.save.gems += reward;
+    this.gemsEarned = reward + this.checkAchievements();
+    writeSave(this.save);
+  }
+
+  /** Unlocks newly met achievements; returns the gems they paid. */
+  checkAchievements() {
+    let gems = 0;
+    const unlocked = [];
+    for (const achievement of ACHIEVEMENTS) {
+      if (this.save.achievements[achievement.id] || !achievement.check(this.save.stats)) continue;
+      this.save.achievements[achievement.id] = true;
+      this.save.gems += achievement.reward;
+      gems += achievement.reward;
+      unlocked.push(achievement);
+    }
+    unlocked.forEach((achievement, i) => {
+      setTimeout(() => {
+        this.ui.showBanner(`🏆 ${achievement.name}`, `Succès débloqué · +${achievement.reward} gemmes`);
+        this.audio.victory();
+      }, 2500 + i * 2400);
+    });
+    return gems;
+  }
+
+  /** Saves the run in progress so it can be resumed after closing the page. */
+  persistRun() {
+    const sim = this.sim;
+    if (!sim || sim.over || !this.current || (this.mode !== MODE.PLAYING && this.mode !== MODE.PAUSED)) return;
+    writeRun({
+      levelId: this.current.def.id,
+      heroic: this.current.heroic,
+      savedAt: Date.now(),
+      snapshot: sim.serialize(),
+    });
+  }
+
+  resumeRun() {
+    const run = loadRun();
+    const index = LEVELS.findIndex((def) => def.id === run?.levelId);
+    const def = index >= 0 ? LEVELS[index] : run?.levelId === SURVIVAL.id ? SURVIVAL : null;
+    if (!def) {
+      clearRun();
+      this.showMenu();
+      return;
+    }
+    this.startLevel({ def, index: def.endless ? SURVIVAL.unlockAfter : index, heroic: run.heroic }, run.snapshot);
+  }
+
+  refreshWallet() {
+    const done = ACHIEVEMENTS.filter((a) => this.save.achievements[a.id]).length;
+    const affordable = this.shopItems().some((item) => !item.owned && item.price <= this.save.gems);
+    this.ui.setWallet(this.save.gems, affordable, done, ACHIEVEMENTS.length);
+  }
+
+  shopItems() {
+    const towers = TOWER_ORDER.filter((id) => TOWERS[id].shopPrice).map((id) => {
+      const def = TOWERS[id];
+      const lv = def.levels[0];
+      const stats = lv.income
+        ? `Coût ${def.cost} or · +${lv.income} or par vague (jusqu’à +${def.levels[2].income})`
+        : `Coût ${def.cost} or · ${lv.damage} dégâts · portée ${lv.range}${lv.chains ? ` · ${lv.chains} rebonds` : ''}${lv.armorPierce ? ' · perce l’armure' : ''}`;
+      return { id, kind: 'tower', name: def.name, blurb: def.blurb, stats, price: def.shopPrice, owned: this.save.owned.towers.includes(id) };
+    });
+    const spells = SPELL_ORDER.filter((id) => SPELLS[id].shopPrice).map((id) => {
+      const def = SPELLS[id];
+      return { id, kind: 'spell', name: def.name, blurb: def.blurb, stats: `Recharge ${def.cooldown} s`, price: def.shopPrice, owned: this.save.owned.spells.includes(id) };
+    });
+    return [...towers, ...spells];
+  }
+
+  showShop() {
+    this.mode = MODE.PERKS;
+    this.renderShop();
+    this.ui.showScreen('shop');
+    this.audio.click();
+  }
+
+  renderShop() {
+    const kind = this.ui.shopTab === 'spells' ? 'spell' : 'tower';
+    this.ui.renderShop(this.shopItems().filter((item) => item.kind === kind), this.save.gems, (item) => this.buyItem(item));
+  }
+
+  buyItem(item) {
+    if (item.owned || this.save.gems < item.price) {
+      this.audio.denied();
+      return;
+    }
+    this.save.gems -= item.price;
+    if (item.kind === 'tower') this.save.owned.towers.push(item.id);
+    else this.save.owned.spells.push(item.id);
+    writeSave(this.save);
+    this.audio.upgrade();
+    this.haptics.pulse(CONFIG.haptics.victory);
+    this.ui.showBanner(`${item.name} débloqué !`, item.kind === 'tower' ? 'Disponible dans le menu de construction' : 'Disponible dans la barre des sorts');
+    this.renderShop();
+    this.refreshWallet();
+  }
+
+  showAchievements() {
+    this.mode = MODE.PERKS;
+    this.ui.renderAchievements(ACHIEVEMENTS.map((a) => ({ ...a, done: Boolean(this.save.achievements[a.id]) })));
+    this.ui.showScreen('achievements');
+    this.audio.click();
   }
 
   showEndScreen() {
@@ -541,7 +750,10 @@ export class Game {
     const { def, index, heroic } = this.current;
     const victory = sim.state === SIM_STATE.WON;
     this.ui.setPlayingUi(false);
-    const reward = this.newStars > 0 ? `+${this.newStars} ★ gagnée${this.newStars > 1 ? 's' : ''} · dépense-les dans Améliorations` : '';
+    const parts = [];
+    if (this.newStars > 0) parts.push(`+${this.newStars} ★`);
+    if (this.gemsEarned > 0) parts.push(`+${this.gemsEarned} gemmes`);
+    const reward = parts.length ? `${parts.join(' · ')} gagnées` : '';
     if (def.endless) {
       this.ui.showEnd({
         victory: false,
@@ -599,6 +811,13 @@ export class Game {
       this.audio.denied();
       return;
     }
+    if (id && SPELLS[id].global) {
+      // Global spells need no aiming.
+      this.sim.castSpell(id, 0, 0);
+      this.armedSpell = null;
+      this.ui.showSpellHint(null);
+      return;
+    }
     this.armedSpell = id;
     if (id) {
       this.deselect();
@@ -621,8 +840,14 @@ export class Game {
       }
       return;
     }
+    // Every tower under the finger, nearest first, then the one on the tile below.
+    // Tapping the same spot again cycles to the next, so a tower hidden behind a tall one stays reachable.
     const cell = hit ? this.sim.level.cellAtWorld(hit.x, hit.z) : null;
-    const tower = cell ? this.sim.towerAt(cell) : null;
+    const candidates = this.towerViews.pick(this.rig.raycaster);
+    const onTile = cell ? this.sim.towerAt(cell) : null;
+    if (onTile && !candidates.includes(onTile)) candidates.push(onTile);
+    const current = this.selection?.kind === 'tower' ? candidates.indexOf(this.selection.tower) : -1;
+    const tower = candidates.length > 0 ? candidates[(current + 1) % candidates.length] : null;
     if (tower) this.selectTower(tower);
     else if (cell && this.sim.canBuild(cell)) this.selectBuildCell(cell);
     else this.deselect();
@@ -633,7 +858,7 @@ export class Game {
     this.effects.showCursor(cell.x, cell.z);
     this.effects.hideRange();
     this.sheetGold = this.sim.gold;
-    this.ui.openBuildSheet(this.sim.gold, null);
+    this.ui.openBuildSheet(this.sim.gold, null, this.save.owned.towers);
     this.audio.click();
     this.haptics.pulse(CONFIG.haptics.tap);
   }
@@ -656,7 +881,8 @@ export class Game {
       return;
     }
     selection.pending = type;
-    this.effects.showRange(selection.cell.x, selection.cell.z, def.levels[0].range * this.sim.modifiers.range, affordable);
+    if (def.levels[0].range > 0) this.effects.showRange(selection.cell.x, selection.cell.z, def.levels[0].range * this.sim.modifiers.range, affordable);
+    else this.effects.hideRange();
     this.ui.refreshBuildSheet(this.sim.gold, type);
     if (affordable) this.audio.click();
     else {
@@ -668,7 +894,8 @@ export class Game {
   selectTower(tower) {
     this.selection = { kind: 'tower', tower, confirmSell: false };
     this.effects.showCursor(tower.x, tower.z);
-    this.effects.showRange(tower.x, tower.z, tower.stats.range);
+    if (tower.stats.range > 0) this.effects.showRange(tower.x, tower.z, tower.stats.range);
+    else this.effects.hideRange();
     this.sheetGold = this.sim.gold;
     this.ui.openTowerSheet(tower, this.sim.gold, false);
     this.audio.click();
@@ -683,7 +910,7 @@ export class Game {
       return;
     }
     selection.confirmSell = false;
-    this.effects.showRange(selection.tower.x, selection.tower.z, selection.tower.stats.range);
+    if (selection.tower.stats.range > 0) this.effects.showRange(selection.tower.x, selection.tower.z, selection.tower.stats.range);
     this.ui.refreshTowerSheet(selection.tower, this.sim.gold, false);
   }
 
@@ -764,6 +991,13 @@ export class Game {
   // ------------------------------------------------------------ loop
 
   onFrame(realDt) {
+    if (this.mode === MODE.PLAYING) {
+      this.autosaveTimer -= realDt;
+      if (this.autosaveTimer <= 0) {
+        this.autosaveTimer = AUTOSAVE_EVERY;
+        this.persistRun();
+      }
+    }
     if (this.endTimer > 0) {
       this.endTimer -= realDt;
       if (this.endTimer <= 0) this.showEndScreen();
@@ -801,6 +1035,10 @@ export class Game {
       this.ui.setStats(sim.lives, sim.gold, sim.nextWave, sim.waveCount);
       this.ui.setWaveButton(this.waveButtonState());
       for (const id of SPELL_ORDER) {
+        if (!sim.hasSpell(id)) {
+          delete this.spellCharges[id];
+          continue;
+        }
         this.spellCharges[id] = sim.spellCharge(id);
         this.spellRemaining[id] = sim.spells[id].cooldown;
       }

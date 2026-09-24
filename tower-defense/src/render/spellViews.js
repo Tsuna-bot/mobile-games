@@ -142,7 +142,16 @@ export class SpellViews {
     }
   }
 
-  bolt(from, to) {
+  /** Tesla arc: short bolts from the crystal to each enemy of the chain. */
+  chain(from, points) {
+    let previous = from;
+    for (const point of points) {
+      this.bolt(previous, point, 0.045, 0.2);
+      previous = point;
+    }
+  }
+
+  bolt(from, to, baseWidth = 0.07, life = 0.35) {
     const slot = this.bolts[this.boltCursor];
     this.boltCursor = (this.boltCursor + 1) % this.bolts.length;
     const positions = slot.mesh.geometry.attributes.position;
@@ -153,7 +162,7 @@ export class SpellViews {
     for (let i = 0; i < BOLT_POINTS; i++) {
       const t = i / (BOLT_POINTS - 1);
       const jag = i === 0 || i === BOLT_POINTS - 1 ? 0 : (Math.random() - 0.5) * length * 0.12;
-      const width = 0.07 * (1 - t * 0.5);
+      const width = baseWidth * (1 - t * 0.5);
       const px = from.x + this.segment.x * t + this.side.x * jag;
       const py = from.y + this.segment.y * t + this.side.y * jag;
       const pz = from.z + this.segment.z * t + this.side.z * jag;
@@ -162,7 +171,7 @@ export class SpellViews {
     }
     positions.needsUpdate = true;
     slot.mesh.geometry.computeBoundingSphere();
-    slot.life = 0.35;
+    slot.life = life;
     slot.mesh.visible = true;
   }
 

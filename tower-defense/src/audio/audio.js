@@ -13,7 +13,7 @@ const EIGHTH = 60 / TEMPO / 2;
 const LOOKAHEAD = 0.15;
 
 // Minimum seconds between two plays of the same sound, so rapid fire stays pleasant.
-const THROTTLE = { turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05 };
+const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05 };
 
 /**
  * Procedural audio (Web Audio API, no sound files). Created on the first user
@@ -194,6 +194,14 @@ export class AudioEngine {
         this.noise({ start: t, duration: 0.35, gain: 0.22, filter: 'bandpass', freq: 500, freqEnd: 160, q: 2 });
         this.tone({ type: 'triangle', freq: 110, freqEnd: 70, start: t, duration: 0.15, gain: 0.25 });
         break;
+      case 'tesla':
+        this.noise({ start: t, duration: 0.18, gain: 0.16, filter: 'bandpass', freq: 3200, freqEnd: 900, q: 3 });
+        this.tone({ type: 'sawtooth', freq: 110, freqEnd: 70, start: t, duration: 0.2, gain: 0.06 });
+        break;
+      case 'sniper':
+        this.tone({ type: 'triangle', freq: 300, freqEnd: 120, start: t, duration: 0.22, gain: 0.25 });
+        this.noise({ start: t, duration: 0.08, gain: 0.2, filter: 'highpass', freq: 2000 });
+        break;
       case 'frost':
         this.tone({ type: 'sine', freq: 1318, start: t, duration: 0.6, gain: 0.09, attack: 0.005 });
         this.tone({ type: 'sine', freq: 1976, start: t + 0.03, duration: 0.5, gain: 0.06, attack: 0.005 });
@@ -304,6 +312,25 @@ export class AudioEngine {
     this.noise({ start: t, duration: 0.12, gain: 0.5, filter: 'highpass', freq: 1500 });
     this.noise({ start: t + 0.08, duration: 1.2, gain: 0.4, filter: 'lowpass', freq: 600, freqEnd: 60 });
     this.tone({ type: 'square', freq: 1800, freqEnd: 200, start: t, duration: 0.15, gain: 0.06 });
+  }
+
+  quake() {
+    const t = this.gate('quake');
+    if (t === null) return;
+    this.tone({ type: 'sine', freq: 45, freqEnd: 28, start: t, duration: 1.6, gain: 0.8, attack: 0.05 });
+    this.noise({ start: t, duration: 1.6, gain: 0.4, filter: 'lowpass', freq: 300, freqEnd: 60 });
+  }
+
+  heal() {
+    const t = this.gate('heal');
+    if (t === null) return;
+    [0, 4, 7, 11, 14].forEach((step, i) => this.tone({ type: 'sine', freq: midi(72 + step), start: t + i * 0.07, duration: 0.5, gain: 0.08 }));
+  }
+
+  goldRain() {
+    const t = this.gate('goldrain');
+    if (t === null) return;
+    for (let i = 0; i < 8; i++) this.tone({ type: 'sine', freq: 1200 + Math.random() * 900, start: t + i * 0.06, duration: 0.1, gain: 0.05, attack: 0.002 });
   }
 
   combo(count) {

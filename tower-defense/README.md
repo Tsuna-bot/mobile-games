@@ -18,7 +18,7 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
 
 - **Mode Survie** : vagues infinies, débloqué après le niveau 3. Le record est sauvegardé.
 - **Mode Héroïque** : se débloque sur un niveau fini avec 3 étoiles. 5 vies, ennemis plus résistants et plus rapides, et une couronne à gagner.
-- **5 tours à 3 niveaux**. Le modèle grandit à chaque amélioration, et une aura dorée apparaît au niveau maximum.
+- **8 tours à 3 niveaux** (5 de départ, 3 à acheter en boutique). Le modèle grandit à chaque amélioration, et une aura dorée apparaît au niveau maximum.
 
   | Tour | Rôle |
   | --- | --- |
@@ -27,11 +27,20 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
   | Mitrailleuse | Rafales très rapides, faible contre l'armure |
   | Catapulte | Très longue portée, tir en cloche qui anticipe la cible |
   | Givre | Onde qui ralentit les ennemis proches |
+  | Tesla (boutique) | Arc électrique qui rebondit sur 3 à 5 ovnis |
+  | Arbalète lourde (boutique) | Portée immense, perce l'armure |
+  | Mine d'or (boutique) | Ne tire pas, rapporte de l'or à chaque vague |
 
-- **3 sorts** à recharge, qu'on vise en touchant la carte. Leur puissance suit la difficulté des vagues.
-  - Météore : un rocher en feu écrase une zone.
-  - Blizzard : gèle les ennemis sur place (moitié du temps pour les boss).
-  - Foudre : éclair en chaîne sur les 5 ennemis les plus proches.
+- **6 sorts** à recharge (3 de départ, 3 à acheter). Leur puissance suit la difficulté des vagues.
+  - Météore : un rocher en feu écrase une zone (à viser).
+  - Blizzard : gèle les ennemis sur place, moitié du temps pour les boss (à viser).
+  - Foudre : éclair en chaîne sur les 5 ennemis les plus proches (à viser).
+  - Séisme (boutique) : étourdit et blesse tous les ovnis.
+  - Réparation (boutique) : rend 3 vies au château.
+  - Pluie d'or (boutique) : or immédiat, qui augmente avec les vagues.
+- **Boutique et gemmes** : on gagne des gemmes en finissant des niveaux (gros bonus la première fois), en Héroïque, en Survie et avec les succès. Elles achètent les nouvelles tours et les nouveaux sorts.
+- **12 succès** (première victoire, 3 étoiles, campagne finie, 3 000 ovnis détruits, vague parfaite…), chacun récompensé en gemmes.
+- **Sauvegarde automatique** : la progression est enregistrée en continu. Une partie en cours est sauvegardée toutes les 4 secondes, en pause et quand on quitte la page. Au retour, la carte « Reprendre la partie » du menu la relance là où on l'avait laissée.
 - **4 ennemis** : Éclaireur, Rapide, Blindé et Vaisseau-mère, qui libère 4 Rapides en mourant.
 - **Progression** :
   - on gagne des étoiles (3 par niveau, 1 couronne en Héroïque, 1 étoile toutes les 10 vagues en Survie, jusqu'à 3) ;
@@ -52,10 +61,17 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
   - traînées derrière les projectiles, flash au tir ;
   - météore enflammé, éclairs en chaîne, traces de brûlure et de givre au sol ;
   - le château fume quand il est endommagé.
+- **Rendu réaliste stylisé** :
+  - éclairage d'environnement (le ciel se reflète sur les modèles) ;
+  - herbe animée par le vent ;
+  - mer avec reflets du ciel (Fresnel) et scintillement du soleil ;
+  - étalonnage couleur filmique par niveau (courbe, tons chauds/froids, vignette, grain).
+- **Barres de vie** : grandes, toujours visibles au-dessus des tours, couleur du vert au rouge selon la vie restante.
 - **Qualité** :
+  - Ultra : tout Haute + occlusion ambiante (GTAO) ;
   - Haute : bloom, ombres 2048 ;
-  - Moyenne : ombres 1024 ;
-  - Basse : pas d'ombres.
+  - Moyenne : ombres 1024, herbe réduite ;
+  - Basse : pas d'ombres ni d'herbe.
 
   En mode Auto, la qualité baisse d'un cran si le jeu ralentit.
 
@@ -64,11 +80,11 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
 | Action | Geste |
 | --- | --- |
 | Construire | Toucher une case d'herbe, choisir une tour (sa portée s'affiche), la toucher à nouveau pour confirmer |
-| Améliorer / vendre / cibler | Toucher une tour |
+| Améliorer / vendre / cibler | Toucher une tour. Si elle est cachée derrière une autre, toucher encore au même endroit passe à la suivante |
 | Déplacer la vue | Glisser un doigt (une fois zoomé) |
 | Zoomer | Pincer, ou molette sur ordinateur |
 | Lancer la vague | Bouton en bas, ou Espace |
-| Lancer un sort | Toucher le sort en bas à gauche, puis la carte (ou touches 1, 2, 3) |
+| Lancer un sort | Toucher le sort en bas à gauche, puis la carte (ou touches 1 à 6). Séisme, Réparation et Pluie d'or partent tout de suite |
 | Pause | Bouton en haut à droite, ou Échap |
 
 ## Architecture
@@ -81,13 +97,13 @@ tower-defense/
 ├── tools/balance.mjs           # Bot d'équilibrage (Node, sans navigateur)
 └── src/
     ├── config.js               # Réglages globaux (économie, caméra, combat)
-    ├── data/                   # Tours, ennemis, sorts, améliorations, cartes, ambiances, vagues
+    ├── data/                   # Tours, ennemis, sorts, améliorations, succès, cartes, ambiances, vagues
     ├── sim/                    # Logique pure, sans Three.js ni DOM
     │   ├── level.js            # Lecture de carte, chemin, virages arrondis
     │   └── simulation.js       # Vagues, ennemis, tours, projectiles, économie
     ├── render/                 # Tout le visuel Three.js
     │   ├── assets.js           # Chargement GLB, matériau unique partagé
-    │   ├── world.js            # Île, mer, nuages, ciel, terrain instancié, lumières
+    │   ├── world.js            # Île, mer, herbe, nuages, ciel, carte d'environnement, lumières
     │   ├── ambient.js          # Particules d'ambiance animées sur le GPU
     │   ├── spellViews.js       # Météore, éclairs, traces au sol
     │   ├── towerViews.js       # Tours empilées, visée, recul, animations
@@ -96,7 +112,7 @@ tower-defense/
     │   ├── effects.js          # Particules, ondes, portée, curseur
     │   ├── cameraRig.js        # Cadrage auto, pan, zoom, tremblement
     │   ├── thumbnails.js       # Icônes générées depuis les vrais modèles 3D
-    │   └── view.js             # Renderer, qualité adaptative, perte de contexte
+    │   └── view.js             # Renderer, post-traitement (GTAO, bloom, étalonnage), qualité adaptative
     ├── input/pointer.js        # Tap, glisser, pincer
     ├── audio/audio.js          # Musique et bruitages générés (Web Audio)
     ├── ui/                     # DOM et vibrations
@@ -112,16 +128,18 @@ node tools/balance.mjs 6 --perks      # même chose avec des améliorations « m
 node tools/balance.mjs 1 --leaks      # détaille les ennemis qui passent
 ```
 
-Résultat actuel (bot qui utilise aussi les sorts) :
+Résultat actuel (bot qui utilise les sorts de départ, mais pas les tours de la boutique) :
 
 | Niveau | Sans amélioration | Avec améliorations moyennes |
 | --- | --- | --- |
-| 1 à 2 | 3 étoiles | 3 étoiles |
-| 3 à 4 | 1 à 3 étoiles | 3 étoiles |
-| 5 | gagne 4 fois sur 6, 1 étoile | 3 étoiles |
-| Survie | vague 22 environ | vague 28 environ |
+| 1. Prairie | gagne toujours, 2 étoiles | 3 étoiles |
+| 2. Col enneigé | gagne 5 fois sur 6, 0 à 2 étoiles | 3 étoiles |
+| 3. Forêt du crépuscule | gagne 5 fois sur 8, 0 à 2 étoiles | 3 étoiles |
+| 4. Canyon cristallin | gagne toujours, 1 à 2 étoiles, peu de vies restantes | 3 étoiles |
+| 5. Citadelle nocturne | perd toujours | gagne toujours, 2 étoiles |
+| Survie | vague 17 | vague 22 |
 
-Le niveau 5 pousse donc à utiliser les améliorations. Toutes les valeurs d'équilibrage sont dans `src/data/` et `src/config.js`.
+La difficulté est volontairement élevée : il faut les améliorations, les tours de la boutique et bien viser ses sorts pour tout finir en 3 étoiles. Toutes les valeurs d'équilibrage sont dans `src/data/` et `src/config.js`.
 
 **Performance** : terrain et décor en InstancedMesh, un seul matériau et une seule texture pour tous les modèles, objets (ennemis, projectiles, particules) réutilisés en pool. La qualité (ombres, pixel ratio, particules) baisse automatiquement si le FPS chute.
 

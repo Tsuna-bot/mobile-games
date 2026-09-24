@@ -30,6 +30,8 @@ export const CONFIG = {
     minDamageShare: 0.2,
     splashEdgeDamage: 0.5,
     projectileHitRadius: 0.18,
+    // Maximum jump distance of the Tesla arc between two enemies.
+    chainJump: 1.4,
   },
 
   stars: {

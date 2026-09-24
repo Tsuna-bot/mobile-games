@@ -13,6 +13,7 @@ const COLORS = {
   alien: new THREE.Color(0x9dff6a),
   spark: new THREE.Color(0xfff2b0),
   magic: new THREE.Color(0xd08cff),
+  heal: new THREE.Color(0x7dff9a),
 };
 
 const RING_POOL = 10;
@@ -147,6 +148,28 @@ export class Effects {
     this.sparks.emit(x + j(), y + j(), z + j(), j(), 0.5, j(), fire, 0.55, 0.35, { endSize: 0.1, drag: 2, brightness: 1.8 });
     this.sparks.emit(x + j(), y + j(), z + j(), j() * 4, j() * 4, j() * 4, ember, 0.15, 0.5, { drag: 1, brightness: 1.6 });
     this.puffs.emit(x + j(), y + j(), z + j(), 0, 0.3, 0, COLORS.smoke, 0.35, 0.9, { endSize: 0.9, drag: 2 });
+  }
+
+  heal(x, z) {
+    const y = CONFIG.world.tileTop + 0.4;
+    this.sparks.burst(x, y, z, this.count(40), 2.5, COLORS.heal, 0.2, 1.2, { upward: 0.95, gravity: -1, drag: 1.5, brightness: 1.6 });
+    this.ring(x, z, 1.2, 0.8, COLORS.heal);
+    this.flash(x, y + 0.6, z, 2);
+  }
+
+  goldShower(x, z) {
+    for (let i = 0; i < this.count(45); i++) {
+      const px = x + (Math.random() - 0.5) * 2.4;
+      const pz = z + (Math.random() - 0.5) * 2.4;
+      this.sparks.emit(px, 3 + Math.random() * 2, pz, 0, -2 - Math.random() * 2, 0, COLORS.gold, 0.2, 1.4, { drag: 0.2, gravity: 4, brightness: 1.5, endSize: 0.15 });
+    }
+    this.ring(x, z, 1.4, 0.7, COLORS.gold);
+  }
+
+  quakeDust(x, z) {
+    const y = CONFIG.world.tileTop + 0.05;
+    this.puffs.burst(x, y, z, this.count(6), 1.5, COLORS.dust, 0.45, 1, { upward: 0.3, drag: 3, endSize: 1 });
+    this.ring(x, z, 0.8, 0.5, COLORS.dust);
   }
 
   /** Continuous smoke from a damaged castle. */

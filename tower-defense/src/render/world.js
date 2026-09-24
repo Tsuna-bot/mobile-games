@@ -122,6 +122,9 @@ uniform vec3 uFoam;
 uniform vec2 uHalf;
 uniform float uRadius;
 uniform float uTime;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uSkyColor;
 varying vec3 vWorld;
 varying float vWave;
 ${NOISE_GLSL}
@@ -139,8 +142,18 @@ void main() {
   float bands = smoothstep(0.7, 1.0, sin(d * 5.5 - uTime * 2.0 + ripples * 2.0)) * (1.0 - smoothstep(0.0, 1.6, d));
   float edge = 1.0 - smoothstep(0.0, 0.22 + ripples * 0.12, d);
   color = mix(color, uFoam, clamp(bands * 0.55 + edge, 0.0, 1.0) * 0.85);
+  // Analytic wave normal + ripples: fresnel sky reflection and a sharp sun glint.
+  float dhdx = cos(vWorld.x * 0.9 + uTime * 1.1) * 0.045 + cos((vWorld.x + vWorld.z) * 2.1 + uTime * 1.7) * 0.042;
+  float dhdz = cos(vWorld.z * 1.3 - uTime * 0.8) * 0.052 + cos((vWorld.x + vWorld.z) * 2.1 + uTime * 1.7) * 0.042;
+  vec3 normal = normalize(vec3(-dhdx - (ripples - 0.5) * 0.3, 1.0, -dhdz - (ripples - 0.5) * 0.3));
+  vec3 view = normalize(cameraPosition - vWorld);
+  float fresnel = pow(1.0 - max(dot(normal, view), 0.0), 4.0);
+  color = mix(color, uSkyColor, fresnel * 0.7 * (1.0 - edge));
+  vec3 halfway = normalize(normalize(uSunDir) + view);
+  float glint = pow(max(dot(normal, halfway), 0.0), 220.0);
+  color += uSunColor * glint * 1.6;
   float sparkle = smoothstep(0.86, 0.97, cloudNoise(vWorld.xz * 6.0 + uTime * vec2(0.6, -0.4)));
-  color += uFoam * sparkle * 0.35;
+  color += uFoam * sparkle * 0.25;
   gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -193,6 +206,28 @@ function createIslandGeometry(halfW, halfH, colors, random) {
   return geometry;
 }
 
+/** Three crossed blades; colors (root → tip) are filled per theme. */
+function createGrassGeometry() {
+  const positions = [];
+  const tips = [];
+  for (let b = 0; b < 3; b++) {
+    const angle = (b / 3) * Math.PI;
+    const ca = Math.cos(angle);
+    const sa = Math.sin(angle);
+    const w = 0.022;
+    const h = 0.13 + b * 0.02;
+    const lean = 0.03 * (b - 1);
+    positions.push(-w * ca, 0, -w * sa, w * ca, 0, w * sa, lean * sa, h, lean * ca);
+    tips.push(0, 0, 1);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(positions.length), 3));
+  geometry.userData.tips = tips;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function createCloudGeometry(random) {
   const parts = [];
   const count = 3 + Math.floor(random() * 3);
@@ -221,9 +256,13 @@ function createCloudGeometry(random) {
  * rocky cliff) in an animated sea, islets, clouds, sky, lights, ambient life.
  */
 export class World {
-  constructor(scene, assets) {
+  constructor(scene, assets, renderer) {
     this.scene = scene;
     this.assets = assets;
+    this.renderer = renderer;
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.envMap = null;
+    this.grassDensity = 1;
     this.root = new THREE.Group();
     scene.add(this.root);
     this.disposables = [];
@@ -242,7 +281,7 @@ export class World {
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
     this.sun.shadow.bias = -0.0008;
     this.sun.shadow.normalBias = 0.045;
-    this.sun.shadow.radius = 2;
+    this.sun.shadow.radius = 4;
     scene.add(this.hemisphere, this.sun, this.sun.target);
 
     // Warm light from the castle windows on dark levels.
@@ -273,6 +312,24 @@ export class World {
 
     this.ambient = new AmbientParticles(scene);
     this.clouds = [];
+
+    // Small copy of the sky, rendered into a prefiltered environment map for image-based lighting.
+    this.envScene = new THREE.Scene();
+    this.envSky = new THREE.Mesh(new THREE.SphereGeometry(20, 32, 16), this.sky.material);
+    this.envScene.add(this.envSky);
+
+    this.grassGeometry = createGrassGeometry();
+    this.grassMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.95 });
+    this.grassMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.uniforms.time;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          float bend = transformed.y * transformed.y * 40.0;
+          vec3 origin = vec3(instanceMatrix[3]);
+          transformed.x += sin(uTime * 2.3 + origin.x * 1.7 + origin.z * 1.3) * 0.012 * bend;
+          transformed.z += cos(uTime * 1.9 + origin.x * 1.1) * 0.008 * bend;`);
+    };
   }
 
   build(level) {
@@ -297,6 +354,12 @@ export class World {
     this.hemisphere.intensity = theme.hemisphereIntensity;
     this.sun.color.set(theme.sun);
     this.sun.intensity = theme.sunIntensity;
+    // Image-based lighting from this level's sky: soft, colored ambient light and reflections.
+    this.envMap?.dispose();
+    this.envMap = this.pmrem.fromScene(this.envScene, 0.04).texture;
+    this.scene.environment = this.envMap;
+    this.scene.environmentIntensity = 0.55;
+    this.hemisphere.intensity = theme.hemisphereIntensity * 0.6;
     this.uniforms.cloudShadow.value = theme.stars ? 0.1 : 0.2;
 
     // Terrain tiles, grouped per model into InstancedMeshes.
@@ -363,6 +426,39 @@ export class World {
       }
     }
 
+    // Grass tufts swaying on grass cells (not on paths).
+    if (theme.grass) {
+      const tufts = [];
+      for (const cell of level.cells) {
+        if (cell.isPath) continue;
+        for (let k = 0; k < 7; k++) tufts.push([cell.x + (random() - 0.5) * 0.9, cell.z + (random() - 0.5) * 0.9, random() * Math.PI, 0.7 + random() * 0.6]);
+      }
+      const colors = this.grassGeometry.attributes.color;
+      const base = new THREE.Color(theme.grass[0]);
+      const tip = new THREE.Color(theme.grass[1]);
+      const tips = this.grassGeometry.userData.tips;
+      for (let i = 0; i < colors.count; i++) {
+        const c = tips[i] ? tip : base;
+        colors.setXYZ(i, c.r, c.g, c.b);
+      }
+      colors.needsUpdate = true;
+      this.grass = new THREE.InstancedMesh(this.grassGeometry, this.grassMaterial, tufts.length);
+      const d = new THREE.Object3D();
+      tufts.forEach(([x, z, r, sc], i) => {
+        d.position.set(x, CONFIG.world.tileTop, z);
+        d.rotation.set(0, r, 0);
+        d.scale.setScalar(sc);
+        d.updateMatrix();
+        this.grass.setMatrixAt(i, d.matrix);
+      });
+      this.grass.userData.total = tufts.length;
+      this.grass.count = Math.round(tufts.length * this.grassDensity);
+      this.grass.receiveShadow = true;
+      this.grass.computeBoundingSphere();
+      this.root.add(this.grass);
+      this.disposables.push(this.grass);
+    }
+
     const dummy = new THREE.Object3D();
     for (const [model, list] of placements) {
       const baseName = model.replace('snow-', '');
@@ -410,6 +506,9 @@ export class World {
           uFoam: { value: new THREE.Color(theme.water.foam) },
           uHalf: { value: new THREE.Vector2(islandHalfW * 0.93, islandHalfH * 0.93) },
           uRadius: { value: 0.9 },
+          uSunDir: { value: new THREE.Vector3(...theme.sunDirection).normalize() },
+          uSunColor: { value: new THREE.Color(theme.sun) },
+          uSkyColor: { value: new THREE.Color(theme.skyBottom).lerp(new THREE.Color(theme.skyTop), 0.35) },
         },
       ]),
     });
@@ -491,6 +590,8 @@ export class World {
       this.sun.shadow.map = null;
     }
     this.ambient.setDensity(preset.effects);
+    this.grassDensity = preset.grass;
+    if (this.grass) this.grass.count = Math.round(this.grass.userData.total * this.grassDensity);
   }
 
   get exposure() {
@@ -533,6 +634,7 @@ export class World {
     this.portal = null;
     this.cloudGroup = null;
     this.waterMaterial = null;
+    this.grass = null;
   }
 
   dispose() {
@@ -541,6 +643,11 @@ export class World {
     this.sky.geometry.dispose();
     this.sky.material.dispose();
     this.foliageMaterial.dispose();
+    this.grassGeometry.dispose();
+    this.grassMaterial.dispose();
+    this.envSky.geometry.dispose();
+    this.envMap?.dispose();
+    this.pmrem.dispose();
     this.sun.shadow.map?.dispose();
   }
 }

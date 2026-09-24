@@ -59,6 +59,7 @@ async function boot() {
   }
 
   window.addEventListener('pagehide', (event) => {
+    game.persistRun();
     if (!event.persisted) game.dispose();
   });
   // `?debug` exposes the game for testing from the console.

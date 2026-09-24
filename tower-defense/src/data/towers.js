@@ -1,5 +1,6 @@
 // Tower catalogue. Ranges and splash radii are in tiles, rates in seconds between shots.
 // `pieces` lists the Kenney models stacked for each level (bottom to top).
+// Towers with `shopPrice` must be bought in the shop (gems) before they can be built.
 
 export const TARGETING = ['first', 'last', 'strong', 'close'];
 
@@ -89,6 +90,7 @@ export const TOWERS = {
     blurb: 'Onde glacée qui ralentit tous les ennemis proches.',
     cost: 80,
     weapon: 'tower-round-crystals',
+    weaponTint: 0x8fdcff,
     projectile: null,
     pieces: [
       ['tower-round-bottom-a'],
@@ -99,6 +101,60 @@ export const TOWERS = {
       { damage: 4, range: 1.8, rate: 1.2, slow: 0.35, slowDuration: 1.4 },
       { upgrade: 70, damage: 7, range: 2.0, rate: 1.1, slow: 0.45, slowDuration: 1.5 },
       { upgrade: 120, damage: 12, range: 2.3, rate: 1.0, slow: 0.55, slowDuration: 1.6 },
+    ],
+  },
+  tesla: {
+    id: 'tesla',
+    name: 'Tesla',
+    blurb: 'Arc électrique qui rebondit d’un ovni à l’autre.',
+    cost: 125,
+    shopPrice: 150,
+    weapon: 'tower-round-crystals',
+    weaponTint: 0xfff07a,
+    weaponScale: [0.8, 0.95, 1.1],
+    projectile: null,
+    pieces: [['tower-round-build-a'], ['tower-round-build-b'], ['tower-round-build-c']],
+    levels: [
+      { damage: 22, range: 2.2, rate: 1.1, chains: 3 },
+      { upgrade: 100, damage: 38, range: 2.4, rate: 1.0, chains: 4 },
+      { upgrade: 170, damage: 62, range: 2.6, rate: 0.9, chains: 5 },
+    ],
+  },
+  sniper: {
+    id: 'sniper',
+    name: 'Arbalète lourde',
+    blurb: 'Portée immense, carreaux qui percent l’armure. Parfaite contre blindés et boss.',
+    cost: 150,
+    shopPrice: 200,
+    weapon: 'weapon-ballista',
+    weaponScale: [1.25, 1.3, 1.35],
+    projectile: 'arrow',
+    pieces: [
+      ['tower-square-bottom-b'],
+      ['tower-square-bottom-b', 'tower-square-middle-b'],
+      ['tower-square-bottom-b', 'tower-square-middle-b', 'tower-square-top-b'],
+    ],
+    levels: [
+      { damage: 75, range: 4.2, rate: 2.2, projectileSpeed: 22, armorPierce: true },
+      { upgrade: 130, damage: 130, range: 4.6, rate: 2.0, projectileSpeed: 24, armorPierce: true },
+      { upgrade: 220, damage: 225, range: 5.0, rate: 1.8, projectileSpeed: 26, armorPierce: true },
+    ],
+  },
+  goldmine: {
+    id: 'goldmine',
+    name: 'Mine d’or',
+    blurb: 'Ne tire pas : rapporte de l’or au début de chaque vague.',
+    cost: 120,
+    shopPrice: 120,
+    weapon: 'detail-crystal-large',
+    weaponTint: 0xffc93c,
+    weaponScale: [0.55, 0.65, 0.75],
+    projectile: null,
+    pieces: [['tower-square-build-a'], ['tower-square-build-b'], ['tower-square-build-c']],
+    levels: [
+      { income: 16, range: 0, rate: 0 },
+      { upgrade: 110, income: 30, range: 0, rate: 0 },
+      { upgrade: 170, income: 50, range: 0, rate: 0 },
     ],
   },
 };
@@ -121,6 +177,15 @@ export const PIECE_HEIGHT = {
   'tower-round-bottom-c': 0.6,
   'tower-round-middle-c': 0.6,
   'tower-round-top-c': 0.5,
+  'tower-square-bottom-b': 0.5,
+  'tower-square-middle-b': 0.5,
+  'tower-square-top-b': 0.5,
+  'tower-round-build-a': 1,
+  'tower-round-build-b': 1,
+  'tower-round-build-c': 1,
+  'tower-square-build-a': 1,
+  'tower-square-build-b': 1,
+  'tower-square-build-c': 1,
 };
 
 /** Height of the stacked body for a tower level (weapon sits on top). */
@@ -128,7 +193,8 @@ export function stackHeight(def, level) {
   return def.pieces[level].reduce((sum, piece) => sum + PIECE_HEIGHT[piece], 0);
 }
 
-export const TOWER_ORDER = ['ballista', 'cannon', 'turret', 'catapult', 'frost'];
+export const TOWER_ORDER = ['ballista', 'cannon', 'turret', 'catapult', 'frost', 'tesla', 'sniper', 'goldmine'];
+export const STARTER_TOWERS = ['ballista', 'cannon', 'turret', 'catapult', 'frost'];
 
 /** Total gold invested in a tower up to (and including) `level`. */
 export function investedGold(def, level) {

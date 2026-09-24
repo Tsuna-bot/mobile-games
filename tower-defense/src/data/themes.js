@@ -3,6 +3,8 @@
 
 export const THEMES = {
   meadow: {
+    grass: [0x2f7a2a, 0x8fe06a],
+    grade: { shadows: 0x35507a, highlights: 0xffd8a0, tone: 0.05, saturation: 1.12 },
     tiles: '',
     skyTop: '#4aa8f0',
     skyBottom: '#d8f1ff',
@@ -20,6 +22,8 @@ export const THEMES = {
     exposure: 1,
   },
   snow: {
+    grass: null,
+    grade: { shadows: 0x4a6a9a, highlights: 0xf0f4ff, tone: 0.06, saturation: 1.05 },
     tiles: 'snow-',
     skyTop: '#7fa6d6',
     skyBottom: '#eef4fb',
@@ -37,6 +41,8 @@ export const THEMES = {
     exposure: 1,
   },
   dusk: {
+    grass: [0x3a5a2a, 0xc0c060],
+    grade: { shadows: 0x4a2a7a, highlights: 0xffa060, tone: 0.05, saturation: 0.95 },
     tiles: '',
     skyTop: '#3b2b6b',
     skyBottom: '#ff9e6b',
@@ -55,6 +61,8 @@ export const THEMES = {
     castleLight: 1.2,
   },
   crystal: {
+    grass: [0x2a7a5a, 0x7ff0c0],
+    grade: { shadows: 0x3a3a9a, highlights: 0xd0f0ff, tone: 0.07, saturation: 1.12 },
     tiles: '',
     skyTop: '#2a4a8f',
     skyBottom: '#b8f0ff',
@@ -72,6 +80,8 @@ export const THEMES = {
     exposure: 1,
   },
   night: {
+    grass: [0x1f4a3a, 0x5a9a7a],
+    grade: { shadows: 0x1a2a6a, highlights: 0xc0d8ff, tone: 0.08, saturation: 1.05 },
     tiles: '',
     skyTop: '#070b24',
     skyBottom: '#2c3f7a',

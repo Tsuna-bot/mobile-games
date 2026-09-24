@@ -3,7 +3,7 @@ import { PERKS } from '../data/perks.js';
 import { SPELLS, SPELL_ORDER } from '../data/spells.js';
 import { TARGETING, TARGETING_LABELS, TOWERS, TOWER_ORDER } from '../data/towers.js';
 
-const QUALITY_LABELS = { auto: 'Auto', high: 'Haute', medium: 'Moyenne', low: 'Basse' };
+const QUALITY_LABELS = { auto: 'Auto', ultra: 'Ultra', high: 'Haute', medium: 'Moyenne', low: 'Basse' };
 const STAR_PATH = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const FLOATER_POOL = 14;
 const COIN_POOL = 24;
@@ -30,7 +30,14 @@ export class UI {
   constructor(doc = document) {
     const $ = (id) => doc.getElementById(id);
     this.$ = $;
-    this.screens = { menu: $('screen-menu'), pause: $('screen-pause'), end: $('screen-end'), perks: $('screen-perks') };
+    this.screens = {
+      menu: $('screen-menu'),
+      pause: $('screen-pause'),
+      end: $('screen-end'),
+      perks: $('screen-perks'),
+      shop: $('screen-shop'),
+      achievements: $('screen-achievements'),
+    };
     this.hud = $('hud');
     this.dock = $('dock');
     this.lives = $('hud-lives');
@@ -90,9 +97,19 @@ export class UI {
       button.addEventListener('click', () => this.handlers.spell?.(id));
     }
     this.spellHint = $('spell-hint');
+    this.spellBar = $('spells');
+    this.shopTab = 'towers';
+    for (const tab of doc.querySelectorAll('[data-tab]')) {
+      tab.addEventListener('click', () => {
+        this.shopTab = tab.dataset.tab;
+        for (const other of doc.querySelectorAll('[data-tab]')) other.setAttribute('aria-selected', String(other === tab));
+        this.handlers.shopTab?.(this.shopTab);
+      });
+    }
+    this.builtFor = '';
     this.screenFlash = $('screen-flash');
 
-    for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel']) {
+    for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -183,6 +200,66 @@ export class UI {
       }
       container.append(card);
     });
+  }
+
+  setWallet(gems, shopBadge, achievementsDone, achievementsTotal) {
+    this.$('gem-count').textContent = number.format(gems);
+    this.$('shop-badge').hidden = !shopBadge;
+    this.$('achievements-count').textContent = `${achievementsDone}/${achievementsTotal}`;
+  }
+
+  setResume(detail) {
+    const card = this.$('btn-resume-run');
+    card.hidden = !detail;
+    if (detail) this.$('resume-detail').textContent = detail;
+  }
+
+  /** @param items [{ id, kind, name, blurb, stats, price, owned }] */
+  renderShop(items, gems, onBuy) {
+    this.$('shop-gems').textContent = number.format(gems);
+    const list = this.$('shop');
+    list.replaceChildren();
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = `shop-item${item.owned ? ' is-owned' : ''}`;
+      const art = item.kind === 'tower'
+        ? `<img src="${this.thumbnails.towers[item.id][2]}" alt="">`
+        : `<span class="spell" data-spell="${item.id}">${this.spellButtons[item.id].button.querySelector('svg').outerHTML}</span>`;
+      row.innerHTML = `
+        <span class="shop-item__art">${art}</span>
+        <span>
+          <span class="shop-item__name">${item.name}</span>
+          <span class="shop-item__blurb">${item.blurb}</span>
+          <span class="shop-item__stats">${item.stats}</span>
+        </span>
+        <span class="shop-item__footer"></span>`;
+      const buy = document.createElement('button');
+      buy.type = 'button';
+      buy.className = 'btn btn--gem shop-item__buy';
+      if (item.owned) {
+        buy.textContent = '✓ Débloqué';
+        buy.disabled = true;
+      } else {
+        buy.innerHTML = `<span class="gem" aria-hidden="true"></span>${item.price}`;
+        buy.disabled = gems < item.price;
+        buy.setAttribute('aria-label', `Acheter ${item.name} pour ${item.price} gemmes`);
+        buy.addEventListener('click', () => onBuy(item));
+      }
+      row.querySelector('.shop-item__footer').append(buy);
+      list.append(row);
+    }
+  }
+
+  /** @param items [{ name, text, reward, done }] */
+  renderAchievements(items) {
+    const list = this.$('achievements');
+    list.innerHTML = items
+      .map((a) => `<div class="achievement${a.done ? ' is-done' : ''}">
+          <span class="achievement__icon" aria-hidden="true">${a.done ? '🏆' : '🔒'}</span>
+          <span><span class="achievement__name">${a.name}</span><span class="achievement__text">${a.text}</span></span>
+          <span class="achievement__reward"><span class="gem" aria-hidden="true"></span>${a.reward}</span>
+        </div>`)
+      .join('');
   }
 
   setStarTotal(available, total, canBuy) {
@@ -306,10 +383,14 @@ export class UI {
 
   // ------------------------------------------------------------ sheets
 
-  openBuildSheet(gold, selectedType) {
+  openBuildSheet(gold, selectedType, owned = TOWER_ORDER) {
     this.towerSheet.classList.remove('is-open');
-    if (!this.buildGrid.childElementCount) {
-      for (const id of TOWER_ORDER) {
+    const key = owned.join();
+    if (this.builtFor !== key) {
+      this.builtFor = key;
+      this.buildGrid.replaceChildren();
+      this.buildGrid.classList.toggle('build-grid--wide', owned.length > 5);
+      for (const id of TOWER_ORDER.filter((t) => owned.includes(t))) {
         const def = TOWERS[id];
         const card = document.createElement('button');
         card.type = 'button';
@@ -351,7 +432,12 @@ export class UI {
   refreshTowerSheet(tower, gold, confirmSell) {
     const def = tower.def;
     const stats = tower.stats;
-    const next = tower.maxed ? null : def.levels[tower.level + 1];
+    const nextBase = tower.maxed ? null : def.levels[tower.level + 1];
+    const next = nextBase && {
+      ...nextBase,
+      range: nextBase.range * tower.modifiers.range,
+      ...(nextBase.damage !== undefined ? { damage: nextBase.damage * tower.modifiers.damage } : {}),
+    };
     this.$('tower-image').src = this.thumbnails.towers[def.id][tower.level];
     this.$('tower-name').textContent = def.name;
     this.$('tower-level').innerHTML = def.levels.map((_, i) => `<i class="${i <= tower.level ? 'on' : ''}"></i>`).join('');
@@ -360,16 +446,22 @@ export class UI {
       const now = format(stats[key]);
       return next && next[key] !== stats[key] ? `${now}<span class="up">→ ${format(next[key])}</span>` : now;
     };
-    rows.push(['Dégâts', diff('damage')]);
-    rows.push(['Portée', diff('range', (v) => v.toFixed(1).replace('.', ','))]);
-    rows.push(['Cadence', diff('rate', formatRate)]);
+    if (stats.income) {
+      rows.push(['Or par vague', diff('income', (v) => `+${v}`)]);
+    } else {
+      rows.push(['Dégâts', diff('damage', (v) => Math.round(v))]);
+      rows.push(['Portée', diff('range', (v) => v.toFixed(1).replace('.', ','))]);
+      rows.push(['Cadence', diff('rate', formatRate)]);
+    }
+    if (stats.chains) rows.push(['Rebonds', diff('chains')]);
+    if (stats.armorPierce) rows.push(['Spécial', 'Perce l’armure']);
     if (stats.splash) rows.push(['Zone', diff('splash', (v) => v.toFixed(1).replace('.', ','))]);
     if (stats.slow) rows.push(['Ralenti', diff('slow', (v) => `${Math.round(v * 100)} %`)]);
-    rows.push(['Éliminés', tower.kills]);
+    if (!stats.income) rows.push(['Éliminés', tower.kills]);
     this.$('tower-stats').innerHTML = rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
 
     const targeting = this.$('tower-targeting');
-    targeting.hidden = def.id === 'frost';
+    targeting.hidden = def.id === 'frost' || def.id === 'goldmine';
     if (!targeting.childElementCount) {
       for (const mode of TARGETING) {
         const button = document.createElement('button');
@@ -400,6 +492,9 @@ export class UI {
   setSpells(charges, remaining, armed, enabled) {
     for (const id of SPELL_ORDER) {
       const ui = this.spellButtons[id];
+      const owned = charges[id] !== undefined;
+      if (ui.button.hidden === owned) ui.button.hidden = !owned;
+      if (!owned) continue;
       const ready = charges[id] >= 1;
       const seconds = ready ? '' : String(Math.ceil(remaining[id]));
       const key = `${ready}|${seconds}|${armed === id}|${enabled}|${Math.round(charges[id] * 60)}`;
@@ -411,6 +506,10 @@ export class UI {
       ui.button.classList.toggle('is-armed', armed === id);
       ui.button.disabled = !enabled;
     }
+  }
+
+  setSpellCount(count) {
+    this.spellBar.classList.toggle('spells--compact', count > 4);
   }
 
   showSpellHint(id) {
