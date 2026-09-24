@@ -1,5 +1,6 @@
 import { AudioEngine } from './audio/audio.js';
-import { loadSave } from './core/storage.js';
+import { flushAll, syncFromCloud } from './core/cloud.js';
+import { RUN_KEY, STORAGE_KEY, loadSave } from './core/storage.js';
 import { Game } from './game/game.js';
 import { Assets } from './render/assets.js';
 import { renderThumbnails } from './render/thumbnails.js';
@@ -38,6 +39,8 @@ async function boot() {
   }
   blockBrowserGestures();
 
+  // In the Claude app the save lives in the artifact database: fetch it before reading.
+  await syncFromCloud([STORAGE_KEY, RUN_KEY]);
   const save = loadSave();
   const audio = new AudioEngine({ sound: save.settings.sound, music: save.settings.music });
   const unlockAudio = () => audio.unlock();
@@ -58,8 +61,12 @@ async function boot() {
     return;
   }
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushAll();
+  });
   window.addEventListener('pagehide', (event) => {
     game.persistRun();
+    flushAll();
     if (!event.persisted) game.dispose();
   });
   // `?debug` exposes the game for testing from the console.

@@ -1,10 +1,11 @@
 import { ACHIEVEMENTS, EMPTY_STATS } from '../data/achievements.js';
+import { persist } from './cloud.js';
 import { PERKS } from '../data/perks.js';
 import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
 import { STARTER_TOWERS, TOWERS } from '../data/towers.js';
 
-const STORAGE_KEY = 'bastion/v1';
-const RUN_KEY = 'bastion/run';
+export const STORAGE_KEY = 'bastion/v1';
+export const RUN_KEY = 'bastion/run';
 
 export const QUALITY_SETTINGS = ['auto', 'ultra', 'high', 'medium', 'low'];
 
@@ -72,11 +73,7 @@ export function loadSave() {
 }
 
 export function writeSave(save) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
-  } catch {
-    // Persistence is optional.
-  }
+  persist(STORAGE_KEY, JSON.stringify(save));
 }
 
 /** The run in progress (resumed after closing the page), or null. */
@@ -91,19 +88,11 @@ export function loadRun() {
 }
 
 export function writeRun(run) {
-  try {
-    localStorage.setItem(RUN_KEY, JSON.stringify(run));
-  } catch {
-    // Full or blocked storage: the run just won't be resumable.
-  }
+  persist(RUN_KEY, JSON.stringify(run));
 }
 
 export function clearRun() {
-  try {
-    localStorage.removeItem(RUN_KEY);
-  } catch {
-    // Nothing to clear.
-  }
+  persist(RUN_KEY, null);
 }
 
 /** Stars earned so far: level stars, heroic crowns and survival milestones. */

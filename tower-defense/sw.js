@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v3';
+const VERSION = 'bastion-v4';
 const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
 
 const APP_SHELL = [
@@ -11,6 +11,7 @@ const APP_SHELL = [
   './icons/icon-512.png',
   './src/audio/audio.js',
   './src/config.js',
+  './src/core/cloud.js',
   './src/core/loop.js',
   './src/core/math.js',
   './src/core/storage.js',

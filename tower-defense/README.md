@@ -40,7 +40,7 @@ Modèles 3D : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit) de
   - Pluie d'or (boutique) : or immédiat, qui augmente avec les vagues.
 - **Boutique et gemmes** : on gagne des gemmes en finissant des niveaux (gros bonus la première fois), en Héroïque, en Survie et avec les succès. Elles achètent les nouvelles tours et les nouveaux sorts.
 - **12 succès** (première victoire, 3 étoiles, campagne finie, 3 000 ovnis détruits, vague parfaite…), chacun récompensé en gemmes.
-- **Sauvegarde automatique** : la progression est enregistrée en continu. Une partie en cours est sauvegardée toutes les 4 secondes, en pause et quand on quitte la page. Au retour, la carte « Reprendre la partie » du menu la relance là où on l'avait laissée.
+- **Sauvegarde automatique** : la progression est enregistrée en continu. Une partie en cours est sauvegardée toutes les 4 secondes, en pause et quand on quitte la page. Au retour, la carte « Reprendre la partie » du menu la relance là où on l'avait laissée. Dans l'app Claude (artefact), une copie privée est aussi gardée dans la base de données de l'artefact, liée à ton compte : elle survit même si le navigateur de l'app efface son stockage (`src/core/cloud.js`).
 - **4 ennemis** : Éclaireur, Rapide, Blindé et Vaisseau-mère, qui libère 4 Rapides en mourant.
 - **Progression** :
   - on gagne des étoiles (3 par niveau, 1 couronne en Héroïque, 1 étoile toutes les 10 vagues en Survie, jusqu'à 3) ;
