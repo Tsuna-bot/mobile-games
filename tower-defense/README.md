@@ -200,3 +200,5 @@ Même procédure que pour Neon Drift (voir `../neon-drift/README.md`) :
 - **Netlify** : glisser-déposer le dossier `tower-defense/`.
 
 Incrémente `VERSION` dans `sw.js` à chaque mise à jour des fichiers.
+
+three.js 0.186 est inclus dans `vendor/three/` (licence MIT) : le jeu ne dépend d'aucun CDN et marche entièrement hors ligne une fois installé sur l'écran d'accueil.

@@ -95,3 +95,5 @@ Tous les chemins sont relatifs : le jeu fonctionne dans un sous-dossier.
 ## Compatibilité
 
 Navigateurs avec WebGL 2 et import maps : Chrome/Edge 89+, Safari 16.4+ (iOS 16.4+), Firefox 108+. Sur un navigateur non compatible, un message clair s'affiche à la place du jeu.
+
+three.js 0.186 est inclus dans `vendor/three/` (licence MIT) : le jeu ne dépend d'aucun CDN et marche entièrement hors ligne une fois installé sur l'écran d'accueil.

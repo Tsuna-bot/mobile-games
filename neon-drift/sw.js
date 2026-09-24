@@ -1,6 +1,5 @@
 // Offline support. Bump VERSION whenever app files change to refresh caches.
-const VERSION = 'neon-drift-v1';
-const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
+const VERSION = 'neon-drift-v2';
 
 const APP_SHELL = [
   './',
@@ -29,30 +28,26 @@ const APP_SHELL = [
   './src/audio/audio.js',
   './src/ui/ui.js',
   './src/ui/haptics.js',
+  './vendor/three/build/three.module.js',
+  './vendor/three/build/three.core.js',
+  './vendor/three/examples/jsm/postprocessing/EffectComposer.js',
+  './vendor/three/examples/jsm/postprocessing/RenderPass.js',
+  './vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js',
+  './vendor/three/examples/jsm/postprocessing/OutputPass.js',
+  './vendor/three/examples/jsm/postprocessing/ShaderPass.js',
+  './vendor/three/examples/jsm/postprocessing/MaskPass.js',
+  './vendor/three/examples/jsm/postprocessing/Pass.js',
+  './vendor/three/examples/jsm/shaders/CopyShader.js',
+  './vendor/three/examples/jsm/shaders/LuminosityHighPassShader.js',
+  './vendor/three/examples/jsm/shaders/OutputShader.js',
 ];
 
-const THREE_FILES = [
-  'build/three.module.js',
-  'build/three.core.js',
-  'examples/jsm/postprocessing/EffectComposer.js',
-  'examples/jsm/postprocessing/RenderPass.js',
-  'examples/jsm/postprocessing/UnrealBloomPass.js',
-  'examples/jsm/postprocessing/OutputPass.js',
-  'examples/jsm/postprocessing/ShaderPass.js',
-  'examples/jsm/postprocessing/MaskPass.js',
-  'examples/jsm/postprocessing/Pass.js',
-  'examples/jsm/shaders/CopyShader.js',
-  'examples/jsm/shaders/LuminosityHighPassShader.js',
-  'examples/jsm/shaders/OutputShader.js',
-].map((path) => THREE_CDN + path);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(VERSION);
       await cache.addAll(APP_SHELL);
-      // CDN files are cached best-effort: a CDN hiccup must not block installation.
-      await Promise.all(THREE_FILES.map((url) => cache.add(new Request(url, { mode: 'cors' })).catch(() => {})));
       await self.skipWaiting();
     })(),
   );
@@ -99,7 +94,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin) {
     // Same-origin: always fresh when online, cached when offline.
     event.respondWith(networkFirst(request));
-  } else if (url.href.startsWith(THREE_CDN) || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+  } else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
     // Versioned CDN files and fonts never change: serve from cache.
     event.respondWith(cacheFirst(request));
   }
