@@ -8,7 +8,8 @@
   <meta name="description" content="Bastion — tower defense 3D pour mobile : construis, améliore et défends ton château contre l'invasion d'ovnis.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Not "black-translucent": iOS then shortens the home-screen app's viewport by the status bar height, leaving an empty band at the bottom. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Bastion">
   <meta name="format-detection" content="telephone=no">
   <title>Bastion</title>
@@ -244,7 +245,7 @@
         <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
         <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
       </div>
-      <p class="credits">Sauvegarde automatique · Modèles 3D : Tower Defense Kit, Survival Kit et Mini Characters de Kenney (CC0)</p>
+      <p class="credits">Version 10 · Sauvegarde automatique · Modèles 3D de Kenney (CC0)</p>
     </section>
 
     <section id="screen-perks" class="screen" aria-labelledby="perks-title">

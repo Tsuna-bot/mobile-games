@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change to refresh caches.
-const VERSION = 'neon-drift-v2';
+const VERSION = 'neon-drift-v3';
 
 const APP_SHELL = [
   './',
