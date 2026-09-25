@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v8';
+const VERSION = 'bastion-v9';
 
 const APP_SHELL = [
   './',

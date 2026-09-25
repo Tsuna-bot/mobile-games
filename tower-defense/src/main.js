@@ -8,6 +8,9 @@ import { View } from './render/view.js';
 import { Haptics } from './ui/haptics.js';
 import { UI } from './ui/ui.js';
 
+// iOS home-screen app (older versions lack the display-mode media query).
+if (navigator.standalone) document.documentElement.classList.add('ios-app');
+
 function supportsWebGL2() {
   try {
     return Boolean(document.createElement('canvas').getContext('webgl2'));

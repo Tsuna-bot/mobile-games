@@ -58,6 +58,34 @@ body {
   overflow: clip;
 }
 
+/*
+ * Home-screen app on iPhone: with a translucent status bar, "inset: 0" stops short of
+ * the bottom edge (by the status bar height). Size the game to the full screen instead.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html,
+  body {
+    height: 100lvh;
+  }
+
+  #app {
+    bottom: auto;
+    height: 100vh;
+    height: 100lvh;
+  }
+}
+
+html.ios-app,
+html.ios-app body {
+  height: 100lvh;
+}
+
+html.ios-app #app {
+  bottom: auto;
+  height: 100vh;
+  height: 100lvh;
+}
+
 #scene {
   position: absolute;
   inset: 0;
