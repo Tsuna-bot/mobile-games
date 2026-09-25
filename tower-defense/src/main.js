@@ -8,45 +8,47 @@ import { View } from './render/view.js';
 import { Haptics } from './ui/haptics.js';
 import { UI } from './ui/ui.js';
 
+
+const SAVE_KEYS = [STORAGE_KEY, RUN_KEY, REALM_KEY];
+
 /**
- * iPhone home-screen app installed with a translucent status bar: iOS keeps that
- * setting from install time and gives the page a viewport shorter than the screen
- * by the status bar height, leaving an empty band at the bottom. Stretch the game
- * layer down to the real screen edge.
+ * Save transfer: "Exporter" copies a code holding the whole save, "Importer" restores
+ * one (e.g. to move it into a reinstalled home-screen app, which has its own storage).
  */
-function fitHomeScreenApp() {
-  if (!navigator.standalone) return;
-  const app = document.getElementById('app');
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
-  document.body.append(probe);
-  const fit = () => {
-    const portrait = window.innerHeight >= window.innerWidth;
-    const screenHeight = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-    // Translucent status bar (content under it: top inset > 0) is the buggy case.
-    const insetTop = parseFloat(getComputedStyle(probe).paddingTop) || 0;
-    const gap = screenHeight - app.getBoundingClientRect().top - window.innerHeight;
-    const stretch = portrait && insetTop > 0 && gap >= 0 && gap <= 120;
-    window.__viewportInfo = { screenHeight, innerHeight: window.innerHeight, insetTop, gap, stretch };
-    app.style.bottom = stretch ? 'auto' : '';
-    app.style.height = stretch ? `${screenHeight}px` : '';
-    // The home indicator sits in the stretched part: keep the dock clear of it.
-    const insetBottom = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
-    document.documentElement.style.setProperty('--safe-bottom', stretch && insetBottom < 20 ? '34px' : '');
-  };
-  fit();
-  let last = '';
-  const check = () => {
-    const key = `${window.innerWidth}x${window.innerHeight}`;
-    if (key === last) return;
-    last = key;
-    fit();
-    window.dispatchEvent(new Event('resize'));
-  };
-  window.addEventListener('resize', () => requestAnimationFrame(check));
-  window.addEventListener('orientationchange', () => setTimeout(check, 300));
+function bindSaveTransfer() {
+  document.getElementById('btn-export')?.addEventListener('click', async () => {
+    const data = {};
+    for (const key of SAVE_KEYS) {
+      const value = localStorage.getItem(key);
+      if (value !== null) data[key] = value;
+    }
+    const code = `BASTION1:${btoa(unescape(encodeURIComponent(JSON.stringify(data))))}`;
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+    } catch {
+      // Clipboard refused: the code is shown to copy by hand.
+    }
+    if (copied) window.alert('Sauvegarde copiée ! Colle-la dans Notes pour la garder, puis utilise « Importer » pour la restaurer.');
+    else window.prompt('Copie ce code et garde-le (Notes par exemple) :', code);
+  });
+  document.getElementById('btn-import')?.addEventListener('click', () => {
+    const code = window.prompt('Colle ici le code de sauvegarde (il remplace la progression actuelle) :', '');
+    if (!code) return;
+    try {
+      const data = JSON.parse(decodeURIComponent(escape(atob(code.trim().replace(/^BASTION1:/, '')))));
+      const keys = Object.keys(data).filter((key) => SAVE_KEYS.includes(key));
+      if (!keys.length) throw new Error('empty');
+      for (const key of SAVE_KEYS) localStorage.removeItem(key);
+      for (const key of keys) localStorage.setItem(key, data[key]);
+      window.alert('Sauvegarde importée : le jeu redémarre.');
+      window.location.reload();
+    } catch {
+      window.alert('Ce code ne correspond pas à une sauvegarde Bastion.');
+    }
+  });
 }
-fitHomeScreenApp();
 
 /** Tapping the version line on the menu shows screen measurements (to diagnose display issues). */
 function bindDiagnostics() {
@@ -65,7 +67,7 @@ function bindDiagnostics() {
       `100lvh ${Math.round(probe.getBoundingClientRect().height)} · html ${document.documentElement.clientHeight}`,
       `jeu y ${Math.round(app.top)} h ${Math.round(app.height)}`,
       `encoches haut ${style.paddingTop} bas ${style.paddingBottom}`,
-      `app écran d'accueil ${Boolean(navigator.standalone)} · ${JSON.stringify(window.__viewportInfo ?? null)}`,
+      `app écran d'accueil ${Boolean(navigator.standalone)}`,
       `hors ligne ${navigator.serviceWorker?.controller ? 'actif' : 'inactif'} · cache ${keys.join(', ') || 'aucun'}`,
     ];
     probe.remove();
@@ -160,6 +162,7 @@ async function boot() {
   game.start();
   registerServiceWorker();
   bindDiagnostics();
+  bindSaveTransfer();
 }
 
 boot();
