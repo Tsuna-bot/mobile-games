@@ -17,17 +17,39 @@ const TERRAIN = [
 export const SURVIVAL_MODELS = [
   'tree', 'tree-tall', 'tree-autumn', 'tree-trunk', 'rock-a', 'rock-b', 'rock-c', 'rock-flat',
   'fence-fortified', 'structure-roof', 'resource-wood', 'resource-stone', 'resource-planks',
-  'workbench-anvil', 'chest', 'barrel', 'box-large', 'box', 'tool-axe', 'tool-pickaxe',
+  'workbench-anvil', 'chest', 'barrel', 'box-large', 'box', 'tool-axe', 'tool-pickaxe', 'tool-hammer', 'structure',
 ].map((name) => `survival/${name}`);
 export const CHARACTER_MODELS = [
   'character-male-a', 'character-male-c', 'character-female-b', 'character-female-d', 'character-male-e', 'character-female-f',
 ].map((name) => `characters/${name}`);
+// Kingdom buildings and decoration: Castle Kit (walls, keep, flags), Fantasy Town Kit
+// (modular houses, market props) and Nature Kit (flowers, bushes, decorative trees).
+export const CASTLE_MODELS = [
+  'wall', 'wall-corner', 'wall-pillar', 'wall-half', 'wall-narrow-wood', 'wall-narrow-wood-fence', 'wall-narrow', 'wall-doorway', 'gate',
+  'tower-square-base', 'tower-square-mid', 'tower-square-mid-windows', 'tower-square-mid-door', 'tower-square-top-roof',
+  'tower-square-top-roof-high', 'tower-square-top-roof-high-windows', 'tower-hexagon-base', 'tower-hexagon-mid', 'tower-hexagon-roof',
+  'tower-hexagon-top', 'tower-base', 'tower-top', 'flag', 'flag-banner-long', 'flag-pennant', 'flag-wide', 'ground-hills', 'rocks-small',
+  'stairs-stone',
+].map((name) => `castle/${name}`);
+export const TOWN_MODELS = [
+  'wall', 'wall-door', 'wall-window-shutters', 'wall-window-glass', 'wall-window-small', 'wall-wood', 'wall-wood-door',
+  'wall-wood-window-shutters', 'wall-wood-window-small', 'roof-gable', 'roof-high-gable', 'roof-point', 'roof-high-point', 'chimney',
+  'lantern', 'windmill', 'stall-red', 'stall-green', 'cart', 'banner-red', 'banner-green', 'fountain-round', 'hedge', 'planks',
+  'fence', 'poles', 'overhang', 'wheel',
+].map((name) => `town/${name}`);
+export const NATURE_MODELS = [
+  'flower_redA', 'flower_yellowA', 'flower_purpleA', 'flower_redB', 'flower_yellowB', 'plant_bush', 'plant_bushSmall', 'plant_bushLarge',
+  'plant_bushDetailed', 'grass_large', 'grass_leafs', 'mushroom_redGroup', 'mushroom_tanGroup', 'stump_round', 'log_stack',
+  'rock_smallA', 'rock_smallC', 'rock_smallFlatA', 'rock_tallA', 'tree_oak', 'tree_pineRoundA', 'tree_pineRoundC', 'tree_default',
+  'tree_fat', 'tree_cone', 'tree_detailed', 'tree_oak_fall', 'tree_default_fall',
+].map((name) => `nature/${name}`);
 const REALM_EXTRA = [
   'tower-square-roof-a', 'tower-square-roof-b', 'tower-square-roof-c', 'tower-round-roof-a', 'tower-round-build-d', 'detail-crystal-large',
 ];
 
 function modelList() {
-  const names = new Set([...TERRAIN, ...TERRAIN.map((name) => `snow-${name}`), ...SURVIVAL_MODELS, ...CHARACTER_MODELS, ...REALM_EXTRA]);
+  const names = new Set([...TERRAIN, ...TERRAIN.map((name) => `snow-${name}`), ...SURVIVAL_MODELS, ...CHARACTER_MODELS, ...REALM_EXTRA,
+    ...CASTLE_MODELS, ...TOWN_MODELS, ...NATURE_MODELS]);
   for (const tower of Object.values(TOWERS)) {
     tower.pieces.flat().forEach((piece) => names.add(piece));
     names.add(tower.weapon);
@@ -86,6 +108,19 @@ export class Assets {
     scene.traverse((object) => {
       if (!object.isMesh) return;
       if (object.isSkinnedMesh) skinned = true;
+      // The Nature Kit uses flat-colored materials: bake each color into the vertices so
+      // every nature model shares one vertex-colored material (and can be instanced).
+      if (palette === 'nature' && !object.geometry.attributes.color) {
+        const color = (object.material.color ?? new THREE.Color(1, 1, 1)).clone();
+        // The kit's teal greens clash with the meadow: pull them toward its yellow-green.
+        const hsl = color.getHSL({});
+        if (hsl.h > 0.26 && hsl.h < 0.56 && hsl.s > 0.15) color.setHSL(0.24 + (hsl.h - 0.26) * 0.22, hsl.s * 0.9, hsl.l * 1.02);
+        const count = object.geometry.attributes.position.count;
+        const colors = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) colors.set([color.r, color.g, color.b], i * 3);
+        object.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        if (!this.materials.nature) this.materials.nature = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+      }
       const shared = this.materials[palette];
       if (!shared) {
         this.materials[palette] = object.material;
@@ -118,9 +153,11 @@ export class Assets {
     source.traverse((object) => {
       if (!object.isMesh) return;
       const part = object.geometry.clone().applyMatrix4(object.matrixWorld);
-      for (const key of Object.keys(part.attributes)) if (!['position', 'normal', 'uv'].includes(key)) part.deleteAttribute(key);
-      parts.push(part);
+      parts.push(part.index ? part : part.setIndex([...Array(part.attributes.position.count).keys()]));
     });
+    // Merging needs the same attributes everywhere: keep the ones all parts share.
+    const keep = ['position', 'normal', 'uv', 'color'].filter((key) => parts.every((part) => part.attributes[key]));
+    for (const part of parts) for (const key of Object.keys(part.attributes)) if (!keep.includes(key)) part.deleteAttribute(key);
     const merged = parts.length === 1 ? parts[0] : mergeGeometries(parts, false);
     if (parts.length > 1) for (const part of parts) part.dispose();
     this.geometries.set(name, merged);

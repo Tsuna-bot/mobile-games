@@ -127,7 +127,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -543,6 +543,23 @@ export class UI {
   }
 
   /** Same bar as the spell hint, for a building mode (walls). */
+  /** Short "Annuler" toast after placing something (the timer bar runs down). */
+  showUndo(text, seconds) {
+    const el = this.$('undo');
+    this.$('undo-text').textContent = text;
+    const timer = this.$('undo-timer');
+    timer.style.animationDuration = `${seconds}s`;
+    this.restartAnimation(timer, 'is-running');
+    el.classList.add('is-visible');
+    clearTimeout(this.undoTimeout);
+    this.undoTimeout = setTimeout(() => this.hideUndo(), seconds * 1000);
+  }
+
+  hideUndo() {
+    clearTimeout(this.undoTimeout);
+    this.$('undo').classList.remove('is-visible');
+  }
+
   showModeHint(text, buttonText) {
     this.$('spell-hint-text').textContent = text;
     this.$('btn-spell-cancel').textContent = buttonText;
@@ -701,7 +718,20 @@ export class UI {
       }
     }
     for (const button of targeting.children) button.setAttribute('aria-pressed', String(button.dataset.mode === info.targeting));
+    const work = this.$('realm-info-work');
+    work.hidden = !info.work;
+    if (info.work) {
+      this.$('realm-info-work-fill').style.width = `${Math.round(info.work.fraction * 100)}%`;
+      this.$('realm-info-work-text').textContent = info.work.text;
+    }
+    const extra = this.$('btn-realm-extra');
+    extra.hidden = !info.extra;
+    if (info.extra) {
+      extra.innerHTML = `${info.extra.label} ${info.extra.cost ? this.costHtml(info.extra.cost, have) : ''}`;
+      extra.disabled = !info.extra.enabled;
+    }
     const upgrade = this.$('btn-realm-upgrade');
+    upgrade.hidden = info.upgrade === false;
     if (info.upgrade) {
       upgrade.innerHTML = `${info.upgradeLabel ?? 'Améliorer'} ${this.costHtml(info.upgrade.cost, have)}`;
       upgrade.disabled = !info.upgrade.affordable;
@@ -710,9 +740,11 @@ export class UI {
       upgrade.disabled = true;
     }
     const demolish = this.$('btn-demolish');
+    demolish.hidden = info.demolish === null;
     demolish.classList.toggle('btn--danger', info.confirm);
     demolish.classList.toggle('btn--ghost', !info.confirm);
-    demolish.innerHTML = info.confirm ? `Confirmer ${info.demolish}` : `Démolir ${info.demolish}`;
+    const verb = info.demolishLabel ?? 'Démolir';
+    demolish.innerHTML = info.confirm ? `Confirmer ${info.demolish ?? ''}` : `${verb} ${info.demolish ?? ''}`;
     this.realmInfoSheet.classList.add('is-open');
   }
 

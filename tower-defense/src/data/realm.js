@@ -93,6 +93,39 @@ export const BUILDINGS = {
 
 export const BUILDING_ORDER = ['wall', 'house', 'depot', 'academy'];
 
+/**
+ * The castle itself can be upgraded (a long construction site): more hit points,
+ * storage and a lodged worker per level.
+ */
+export const CASTLE_LEVELS = [
+  { name: 'Fort', hp: 0, storage: 0, workers: 0 },
+  { name: 'Château', cost: { wood: 160, stone: 160, gold: 120 }, hp: 30, storage: 150, workers: 1 },
+  { name: 'Citadelle', cost: { wood: 260, stone: 320, crystal: 80, gold: 260 }, hp: 70, storage: 350, workers: 2 },
+];
+
+/** Seconds of builder work for a construction site (level 0 = new, > 0 = upgrade). */
+export function buildTime(typeId, level = 0) {
+  if (typeId === 'castle') return [0, 24, 34][level];
+  const tower = TOWERS[typeId];
+  if (tower) return level === 0 ? 3.5 + tower.cost / 45 : 3 + level * 2.5;
+  return { house: [6, 7, 9], depot: [8, 10], wall: [0.9, 1.6], academy: [14] }[typeId]?.[level] ?? 5;
+}
+
+/** Builders needed on a site (the big ones take two). */
+export function buildersFor(work) {
+  return work >= 8 ? 2 : 1;
+}
+
+/** Undoing a site within this many seconds refunds it in full. */
+export const UNDO_WINDOW = 5;
+
+/** Repair price for missing hit points: stone for masonry, wood for scaffolding. */
+export function repairCost(missingHp) {
+  if (missingHp <= 0) return {};
+  const cost = { wood: Math.ceil(missingHp / 30), stone: Math.ceil(missingHp / 18) };
+  return cost;
+}
+
 // Share of each resource in a tower's build cost, and the scale from its gold cost.
 const TOWER_MIX = {
   ballista: { wood: 0.7, stone: 0.3 },
@@ -152,6 +185,7 @@ export const RESEARCH = [
   { id: 'tools', group: 'Économie', icon: '🪓', name: 'Outils affûtés', effect: (l) => `Récolte ${15 * l} % plus rapide`, costs: [{ gold: 40 }, { gold: 90, crystal: 10 }, { gold: 160, crystal: 25 }] },
   { id: 'bags', group: 'Économie', icon: '🎒', name: 'Sacoches', effect: (l) => `+${2 * l} ressources par voyage`, costs: [{ gold: 35 }, { gold: 80, crystal: 8 }, { gold: 140, crystal: 20 }] },
   { id: 'boots', group: 'Économie', icon: '🥾', name: 'Bottes de marche', effect: (l) => `Ouvriers ${15 * l} % plus rapides`, costs: [{ gold: 50 }, { gold: 120, crystal: 15 }] },
+  { id: 'carpentry', group: 'Économie', icon: '🔨', name: 'Charpentiers', effect: (l) => `Chantiers ${35 * l} % plus rapides`, costs: [{ gold: 45 }, { gold: 110, crystal: 10 }] },
   { id: 'granary', group: 'Économie', icon: '🏚️', name: 'Greniers', effect: (l) => `Stockage +${40 * l} %`, costs: [{ gold: 60, wood: 40 }, { gold: 140, wood: 80, crystal: 15 }] },
   // Defense
   { id: 'ballistics', group: 'Défense', icon: '🎯', name: 'Balistique', effect: (l) => `Dégâts des tours +${10 * l} %`, costs: [{ gold: 60, crystal: 5 }, { gold: 110, crystal: 15 }, { gold: 170, crystal: 30 }, { gold: 250, crystal: 50 }, { gold: 350, crystal: 80 }] },
@@ -211,6 +245,7 @@ export function realmModifiers(research) {
     storage: 1 + 0.4 * r('granary'),
     hp: 1 + 0.4 * r('masonry'),
     castleHp: 20 * r('bastion'),
+    buildSpeed: 1 + 0.35 * r('carpentry'),
   };
 }
 

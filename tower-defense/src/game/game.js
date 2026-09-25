@@ -50,7 +50,7 @@ export class Game {
     this.enemyViews = new EnemyViews(scene, assets);
     this.projectileViews = new ProjectileViews(scene, assets, this.effects);
     this.spellViews = new SpellViews(scene, assets, this.effects, view.camera);
-    this.realmViews = new RealmViews(scene, assets, this.world);
+    this.realmViews = new RealmViews(scene, assets, this.world, this.effects);
     this.rig = new CameraRig(view.camera);
     this.input = new PointerInput(view.canvas);
     this.monitor = new FrameRateMonitor();
@@ -1180,6 +1180,7 @@ export class Game {
     this.world.setViewDistance(this.rig.fitDistance);
     this.effects.setViewport(height * this.view.pixelRatio, this.view.camera.fov);
     this.world.ambient.setViewport(height * this.view.pixelRatio, this.view.camera.fov);
+    this.realmViews.setViewport(height * this.view.pixelRatio, this.view.camera.fov);
     if (!this.loop.running) this.loop.renderOnce();
   }
 

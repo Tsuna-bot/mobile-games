@@ -47,6 +47,8 @@ export class ParticleSystem {
     this.gravity = new Float32Array(capacity);
     this.startSize = new Float32Array(capacity);
     this.endSize = new Float32Array(capacity);
+    this.peak = new Float32Array(capacity);
+    this.fadeIn = new Float32Array(capacity);
 
     this.geometry = new THREE.BufferGeometry();
     this.attributes = {
@@ -75,7 +77,7 @@ export class ParticleSystem {
     this.material.uniforms.uScale.value = drawingBufferHeight / (2 * Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2));
   }
 
-  emit(x, y, z, vx, vy, vz, color, size, life, { endSize = size * 0.3, drag = 2, gravity = 0, brightness = 1 } = {}) {
+  emit(x, y, z, vx, vy, vz, color, size, life, { endSize = size * 0.3, drag = 2, gravity = 0, brightness = 1, opacity = 1, fadeIn = 0 } = {}) {
     const i = this.cursor;
     this.cursor = (this.cursor + 1) % this.capacity;
     const i3 = i * 3;
@@ -95,7 +97,9 @@ export class ParticleSystem {
     this.startSize[i] = size;
     this.endSize[i] = endSize;
     this.sizes[i] = size;
-    this.alphas[i] = 1;
+    this.peak[i] = opacity;
+    this.fadeIn[i] = fadeIn;
+    this.alphas[i] = fadeIn > 0 ? 0 : opacity;
   }
 
   /** Radial burst around a point, biased upward. */
@@ -132,7 +136,9 @@ export class ParticleSystem {
       this.positions[i3 + 1] = Math.max(0.05, this.positions[i3 + 1] + this.velocities[i3 + 1] * dt);
       this.positions[i3 + 2] += this.velocities[i3 + 2] * dt;
       const t = this.life[i] / this.maxLife[i];
-      this.alphas[i] = Math.min(1, t * 2);
+      // Fade out over the second half of life; optionally fade in (smoke, mist).
+      const fadeIn = this.fadeIn[i] > 0 ? Math.min(1, (1 - t) / this.fadeIn[i]) : 1;
+      this.alphas[i] = Math.min(1, t * 2) * fadeIn * this.peak[i];
       this.sizes[i] = this.endSize[i] + (this.startSize[i] - this.endSize[i]) * t;
     }
     for (const attribute of Object.values(this.attributes)) attribute.needsUpdate = true;

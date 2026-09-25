@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { THEMES } from '../data/themes.js';
 import { AmbientParticles } from './ambient.js';
+import { REALM_MARGIN, RealmTerrain } from './realmTerrain.js';
 
 const TREES = ['tile-tree', 'tile-tree-double', 'tile-tree-quad'];
 const DECORATION_MODELS = { rock: ['tile-rock'], crystal: ['tile-crystal'], hill: ['tile-hill'] };
@@ -277,6 +278,15 @@ export class World {
     this.foliageMaterial = assets.material.clone();
     patchMaterial(this.foliageMaterial, this.uniforms, { sway: true });
     // Survival Kit props (Kingdom mode): same cloud shadows, trees sway too.
+    // Kingdom kits share the same cloud shadows; nature props sway gently.
+    for (const palette of ['castle', 'town']) {
+      const material = assets.materials[palette];
+      if (!material) continue;
+      material.shadowSide = THREE.BackSide;
+      patchMaterial(material, this.uniforms);
+    }
+    if (assets.materials.nature) patchMaterial(assets.materials.nature, this.uniforms, { sway: true });
+    this.terrain = new RealmTerrain(this);
     const survival = assets.materials.survival;
     if (survival) {
       survival.shadowSide = THREE.BackSide;
@@ -378,7 +388,10 @@ export class World {
       placements.get(model).push({ x, y, z, rotation, scale });
     };
     const pathTiles = new Map(level.pathTiles.map((tile) => [tile.cell.index, tile]));
-    for (const cell of level.cells) {
+    const realm = Boolean(level.portals);
+    this.realm = realm;
+    if (realm) this.terrain.build(level, random);
+    for (const cell of realm ? [] : level.cells) {
       const randomTurn = Math.floor(random() * 4) * (Math.PI / 2);
       const tile = pathTiles.get(cell.index);
       if (tile) {
@@ -397,7 +410,7 @@ export class World {
     const halfW = level.width / 2;
     const halfH = level.height / 2;
     const rimModels = prefix ? ['snow-detail-tree', 'snow-detail-rocks', 'snow-detail-tree-large'] : ['detail-tree', 'detail-rocks', 'detail-tree-large', 'detail-crystal'];
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < (realm ? 0 : 26); i++) {
       const side = Math.floor(random() * 4);
       const along = random() * 2 - 1;
       const x = side < 2 ? along * (halfW - 0.2) : (side === 2 ? -1 : 1) * (halfW + 0.3);
@@ -414,7 +427,7 @@ export class World {
     this.disposables.push(isletGeometry, isletMaterial, isletTopMaterial, isletTop);
     for (let i = 0; i < 7; i++) {
       const angle = (i / 7) * Math.PI * 2 + random() * 0.6;
-      const distance = 3.2 + random() * 4;
+      const distance = (realm ? REALM_MARGIN + 2.5 : 3.2) + random() * 4;
       const x = Math.cos(angle) * (halfW + distance);
       const z = Math.sin(angle) * (halfH + distance * 0.7);
       const size = 0.45 + random() * 0.55;
@@ -489,8 +502,8 @@ export class World {
     }
 
     // The floating island under the tiles.
-    const islandHalfW = halfW + ISLAND_MARGIN;
-    const islandHalfH = halfH + ISLAND_MARGIN;
+    const islandHalfW = halfW + (realm ? REALM_MARGIN : ISLAND_MARGIN);
+    const islandHalfH = halfH + (realm ? REALM_MARGIN : ISLAND_MARGIN);
     const islandGeometry = createIslandGeometry(islandHalfW, islandHalfH, theme.cliff, random);
     const islandMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
     const island = new THREE.Mesh(islandGeometry, islandMaterial);
@@ -552,25 +565,19 @@ export class World {
     this.root.add(this.cloudGroup);
 
     // Castle at the end of the path, turned toward the incoming road (the Kingdom castle is bigger).
+    // Kingdom: RealmViews builds the (upgradable) castle itself.
     const baseTile = pathTiles.get(level.base.index);
-    this.castleScale = level.portals ? 1.9 : 0.9;
-    this.castle = this.assets.clone('tower-round-build-f');
-    this.castle.position.set(level.base.x, CONFIG.world.tileTop, level.base.z);
-    this.castle.rotation.y = baseTile?.rotation ?? 0;
-    this.castle.scale.setScalar(this.castleScale);
-    this.root.add(this.castle);
-    if (level.portals) {
-      // Corner turrets around the Kingdom keep.
-      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        const turret = this.assets.clone('tower-round-roof-a');
-        turret.position.set(level.base.x + dx * 1.05, CONFIG.world.tileTop, level.base.z + dz * 1.05);
-        turret.scale.setScalar(0.62);
-        this.root.add(turret);
-      }
+    this.castleScale = realm ? 1 : 0.9;
+    if (!realm) {
+      this.castle = this.assets.clone('tower-round-build-f');
+      this.castle.position.set(level.base.x, CONFIG.world.tileTop, level.base.z);
+      this.castle.rotation.y = baseTile?.rotation ?? 0;
+      this.castle.scale.setScalar(this.castleScale);
+      this.root.add(this.castle);
     }
 
-    this.castleLight.position.set(level.base.x, CONFIG.world.tileTop + 1.6 * this.castleScale, level.base.z + 0.9 * this.castleScale);
-    this.castleLight.distance = 5 * this.castleScale;
+    this.castleLight.position.set(level.base.x, CONFIG.world.tileTop + (realm ? 2.6 : 1.6 * this.castleScale), level.base.z + (realm ? 2 : 0.9 * this.castleScale));
+    this.castleLight.distance = realm ? 9 : 5 * this.castleScale;
     this.castleLight.intensity = theme.castleLight ?? 0;
 
     this.portals = (level.portals ?? [level.spawn]).map((cell) => {
@@ -586,7 +593,7 @@ export class World {
   }
 
   fitShadows(level, theme) {
-    const span = Math.max(level.width, level.height) / 2 + 2;
+    const span = Math.max(level.width, level.height) / 2 + (level.portals ? 3.5 : 2);
     const direction = new THREE.Vector3(...theme.sunDirection).normalize();
     this.sun.position.copy(direction).multiplyScalar(16);
     this.sun.target.position.set(0, 0, 0);
@@ -626,24 +633,32 @@ export class World {
    * Day/night cycle (Kingdom): `t` = 0 full day theme, 1 full night theme.
    * Lerps sky, fog, lights, water and stars; the environment map follows in steps.
    */
-  setCycle(t, dayTheme, nightTheme) {
+  setCycle(t, dayTheme, nightTheme, dayProgress = 0.5) {
+    // The sun rises in the east, crosses the sky and sets golden in the west.
+    const arc = Math.sin(Math.PI * THREE.MathUtils.clamp(dayProgress, 0, 1));
+    const golden = (1 - arc) ** 2;
+    const azimuth = (dayProgress - 0.5) * Math.PI * 0.9;
+    const elevation = 0.28 + arc * 0.85;
+    const dayDirection = new THREE.Vector3(-Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation), Math.cos(azimuth) * Math.cos(elevation) * 0.55 + 0.3).normalize();
+    const warm = new THREE.Color(0xffa25a);
+    const dayTint = (color, amount) => new THREE.Color(color).lerp(warm, golden * amount);
     const c = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), t);
     const n = (a, b) => a + (b - a) * t;
     const sky = this.sky.material.uniforms;
-    sky.uTop.value.copy(c(dayTheme.skyTop, nightTheme.skyTop));
-    sky.uBottom.value.copy(c(dayTheme.skyBottom, nightTheme.skyBottom));
-    sky.uSunColor.value.copy(c(dayTheme.sun, nightTheme.sun));
-    const direction = new THREE.Vector3(...dayTheme.sunDirection).normalize().lerp(new THREE.Vector3(...nightTheme.sunDirection).normalize(), t).normalize();
+    sky.uTop.value.copy(dayTint(dayTheme.skyTop, 0.25).lerp(new THREE.Color(nightTheme.skyTop), t));
+    sky.uBottom.value.copy(dayTint(dayTheme.skyBottom, 0.6).lerp(new THREE.Color(nightTheme.skyBottom), t));
+    sky.uSunColor.value.copy(dayTint(dayTheme.sun, 0.8).lerp(new THREE.Color(nightTheme.sun), t));
+    const direction = dayDirection.lerp(new THREE.Vector3(...nightTheme.sunDirection).normalize(), t).normalize();
     sky.uSunDir.value.copy(direction);
     sky.uStars.value = Math.max(0, (t - 0.4) / 0.6);
-    const fog = c(dayTheme.fog, nightTheme.fog);
+    const fog = dayTint(dayTheme.fog, 0.35).lerp(new THREE.Color(nightTheme.fog), t);
     this.scene.background.copy(fog);
     this.scene.fog.color.copy(fog);
     this.hemisphere.color.copy(c(dayTheme.hemisphereSky, nightTheme.hemisphereSky));
     this.hemisphere.groundColor.copy(c(dayTheme.hemisphereGround, nightTheme.hemisphereGround));
     this.hemisphere.intensity = n(dayTheme.hemisphereIntensity, nightTheme.hemisphereIntensity) * 0.6;
-    this.sun.color.copy(c(dayTheme.sun, nightTheme.sun));
-    this.sun.intensity = n(dayTheme.sunIntensity, nightTheme.sunIntensity);
+    this.sun.color.copy(sky.uSunColor.value);
+    this.sun.intensity = n(dayTheme.sunIntensity * (0.75 + 0.25 * arc), nightTheme.sunIntensity);
     this.sun.position.copy(direction).multiplyScalar(16);
     if (this.waterMaterial) {
       const w = this.waterMaterial.uniforms;
@@ -651,7 +666,7 @@ export class World {
       w.uShallow.value.copy(c(dayTheme.water.shallow, nightTheme.water.shallow));
       w.uFoam.value.copy(c(dayTheme.water.foam, nightTheme.water.foam));
       w.uSunDir.value.copy(direction);
-      w.uSunColor.value.copy(c(dayTheme.sun, nightTheme.sun));
+      w.uSunColor.value.copy(sky.uSunColor.value);
       w.uSkyColor.value.copy(sky.uBottom.value).lerp(sky.uTop.value, 0.35);
     }
     this.uniforms.cloudShadow.value = n(0.2, 0.08);
@@ -660,8 +675,9 @@ export class World {
       exposure: n(dayTheme.exposure ?? 1, nightTheme.exposure ?? 1),
       castleLight: n(dayTheme.castleLight ?? 0, nightTheme.castleLight ?? 0),
     };
-    if (this.envT === undefined || Math.abs(this.envT - t) > 0.12 || (t !== this.envT && (t === 0 || t === 1))) {
-      this.envT = t;
+    const envKey = t + golden * 0.5;
+    if (this.envT === undefined || Math.abs(this.envT - envKey) > 0.1 || (envKey !== this.envT && (t === 0 || t === 1) && Math.abs(this.envT - envKey) > 0.02)) {
+      this.envT = envKey;
       this.envMap?.dispose();
       this.envMap = this.pmrem.fromScene(this.envScene, 0.04).texture;
       this.scene.environment = this.envMap;
@@ -688,6 +704,7 @@ export class World {
       }
     }
     for (const portal of this.portals ?? []) portal.rotation.y = this.time * 0.8;
+    if (this.realm) this.terrain.update(dt);
     if (this.castle) {
       this.castleHit = Math.max(0, this.castleHit - dt);
       const k = this.castleHit * 2;

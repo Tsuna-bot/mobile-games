@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { damp } from '../core/math.js';
 import { clearRealm, loadRealm, writeRealm, writeSave } from '../core/storage.js';
-import { BUILDINGS, REALM, RESEARCH, RESEARCH_GROUPS, RESOURCE_INFO } from '../data/realm.js';
+import { BUILDINGS, CASTLE_LEVELS, REALM, RESEARCH, RESEARCH_GROUPS, RESOURCE_INFO, UNDO_WINDOW } from '../data/realm.js';
 import { SPELLS } from '../data/spells.js';
 import { THEMES } from '../data/themes.js';
 import { TOWERS, TOWER_ORDER } from '../data/towers.js';
@@ -12,6 +12,7 @@ const REALM_DEF = { id: 'realm', theme: 'meadow', name: 'Royaume', endless: true
 const DUSK = 12;
 const OFFLINE_MIN = 60;
 const SWING_EVERY = 0.8;
+const HAMMER_EVERY = 0.55;
 const TUTORIAL = [
   'Tes ouvriers récoltent tout seuls. Touche un arbre, un rocher ou un cristal pour y envoyer un ouvrier.',
   'Touche une case d’herbe libre pour construire : tours, palissades, maisons…',
@@ -45,7 +46,18 @@ export class RealmMode {
     this.sheetKey = '';
     this.tutorialStep = -1;
     this.confirmReset = false;
+    this.dayProgress = 0;
+    this.lastSite = null;
     this.bindUi();
+    // A felled tree hits the ground: dust and a thud.
+    game.realmViews.onTreeLanded = (cell) => {
+      if (!this.active) return;
+      game.effects.depleted(cell.x, cell.z, 'wood');
+      if (this.nearCamera(cell.x, cell.z, 10)) {
+        game.audio.thud();
+        game.haptics.pulse(CONFIG.haptics.tap);
+      }
+    };
   }
 
   get ui() {
@@ -65,6 +77,8 @@ export class RealmMode {
     ui.on('btn-realm-upgrade', () => this.upgradeSelected());
     ui.on('btn-demolish', () => this.demolishSelected());
     ui.on('btn-new-realm', () => this.newRealm());
+    ui.on('btn-realm-extra', () => this.extraSelected());
+    ui.on('btn-undo', () => this.undoLast());
     ui.on('realmTab', () => this.refreshBuild(true));
     ui.on('realmBuildCard', (id) => this.chooseItem(id));
     ui.on('job', (resource, delta) => this.changeJob(resource, delta));
@@ -106,10 +120,13 @@ export class RealmMode {
 
     game.world.build(this.sim.level);
     this.cycleT = this.sim.phase === PHASE.NIGHT ? 1 : 0;
+    this.dayProgress = this.dayTarget();
     this.ambientNight = null;
+    this.lastSite = null;
     this.applyCycle(true);
     game.realmViews.build(this.sim);
     for (const tower of this.sim.towers) game.towerViews.add(tower);
+    game.realmViews.warmUp(game.view.renderer, game.view.camera);
     for (const enemy of this.sim.enemies) if (enemy.active) game.enemyViews.acquire(enemy);
     this.ui.setSpellCount(Object.keys(this.sim.spells).length);
 
@@ -150,6 +167,8 @@ export class RealmMode {
     this.persist();
     this.active = false;
     this.game.realm = null;
+    this.ui.hideUndo();
+    this.game.world.terrain.showGrid(false);
     this.ui.setRealmMode(false);
     this.game.realmViews.clear();
     this.sim = null;
@@ -187,10 +206,15 @@ export class RealmMode {
     const views = game.realmViews;
     const effects = game.effects;
     const removeView = (structure) => {
-      if (structure.kind === 'tower') game.towerViews.remove(structure);
-      views.removeStructure(structure);
-      if (game.selection?.structure === structure) game.deselect();
+      if (structure.kind === 'site') views.removeSite(structure);
+      else {
+        if (structure.kind === 'tower') game.towerViews.remove(structure);
+        views.removeStructure(structure);
+      }
+      const selected = game.selection?.structure;
+      if (selected === structure || (selected?.kind === 'site' && selected.target === structure)) game.deselect();
     };
+    const siteName = (site) => (site.target?.kind === 'castle' ? CASTLE_LEVELS[site.level].name : site.def.name);
     return {
       ...base,
       onEnemySpawn: (enemy) => {
@@ -210,24 +234,68 @@ export class RealmMode {
         game.audio.leak();
         game.haptics.pulse(CONFIG.haptics.leak);
       },
-      onTowerBuilt: (tower) => {
-        base.onTowerBuilt(tower);
-        views.trackTower(tower);
-        this.advanceTutorial(1);
-      },
-      onBuildingBuilt: (building) => {
-        views.addStructure(building);
-        effects.build(building.cell.x, building.cell.z, false);
+      // Construction sites: placing pays and opens a site, workers build it.
+      onSiteStarted: (site) => {
+        views.addSite(site);
+        effects.build(site.x, site.z, false);
         game.audio.build();
         game.haptics.pulse(CONFIG.haptics.tap);
         this.advanceTutorial(1);
       },
+      onSiteComplete: (site, structure) => {
+        views.removeSite(site);
+        const wall = site.typeId === 'wall';
+        effects.siteDone(site.x, site.z, site.target?.kind === 'castle');
+        if (!wall && this.nearCamera(site.x, site.z, 14)) {
+          game.floatAt(site.x, 1.8, site.z, site.target ? `⬆ ${siteName(site)} niv. ${site.level + 1}` : `✔ ${siteName(site)}`, 'res');
+          game.audio.upgrade();
+          game.haptics.pulse(CONFIG.haptics.build);
+        }
+        if (game.selection?.structure === site) this.selectStructure(structure, false);
+        this.persist();
+      },
+      onSiteRemoved: (site, back) => {
+        removeView(site);
+        effects.sell(site.x, site.z);
+        const text = costText(back);
+        if (text) game.floatAt(site.x, 1, site.z, `+${text}`, 'res');
+        game.audio.sell();
+        if (this.lastSite === site) this.ui.hideUndo();
+        this.persist();
+      },
+      onTowerBuilt: (tower) => {
+        game.towerViews.add(tower);
+        if (tower.view) tower.view.pop = 1;
+        views.trackTower(tower);
+      },
+      onTowerUpgraded: (tower) => {
+        game.towerViews.upgrade(tower);
+        effects.upgrade(tower.x, tower.z);
+      },
+      onBuildingBuilt: (building) => {
+        views.addStructure(building);
+      },
       onBuildingUpgraded: (building) => {
         views.upgradeStructure(building);
         effects.upgrade(building.cell.x, building.cell.z);
+      },
+      onCastleUpgraded: (castle) => {
+        views.upgradeStructure(castle);
+        effects.upgrade(castle.x, castle.z);
+        game.rig.shake(0.35);
+        const now = CASTLE_LEVELS[castle.level];
+        const before = CASTLE_LEVELS[castle.level - 1];
+        this.ui.showBanner(`🏰 ${now.name}`, `+${now.hp - before.hp} vie · +${now.storage - before.storage} stockage · +${now.workers - before.workers} ouvrier`);
+        game.audio.victory();
+        game.haptics.pulse(CONFIG.haptics.victory);
+      },
+      onRepaired: (damaged) => {
+        for (const s of damaged) effects.heal(s.cell.x, s.cell.z);
         game.audio.upgrade();
+        game.haptics.pulse(CONFIG.haptics.build);
       },
       onStructureRemoved: (structure, back) => {
+        if (structure.kind === 'site') return;
         effects.sell(structure.cell.x, structure.cell.z);
         const text = costText(back);
         if (text) game.floatAt(structure.cell.x, 1, structure.cell.z, `+${text}`, 'res');
@@ -236,7 +304,7 @@ export class RealmMode {
       },
       onStructureDestroyed: (structure) => {
         effects.destroyed(structure.cell.x, structure.cell.z);
-        game.floatAt(structure.cell.x, 1.2, structure.cell.z, structure.def.id === 'wall' ? 'Brèche !' : 'Détruit !', 'danger');
+        game.floatAt(structure.cell.x, 1.2, structure.cell.z, structure.kind === 'site' ? 'Chantier détruit !' : structure.def.id === 'wall' ? 'Brèche !' : 'Détruit !', 'danger');
         removeView(structure);
         game.audio.explosion(false);
         game.rig.shake(0.15);
@@ -256,8 +324,14 @@ export class RealmMode {
       },
       onNodeDepleted: (cell) => {
         views.nodeChanged(cell);
-        effects.depleted(cell.x, cell.z, REALM.nodes[cell.node?.type ?? 'tree'].resource);
-        if (cell.node?.type === 'tree') game.audio.treeFall();
+        const near = this.nearCamera(cell.x, cell.z, 10);
+        // Trees topple first (dust when they land); rocks and crystals burst at once.
+        if (cell.node?.type === 'tree') {
+          if (near) game.audio.treeFall();
+          return;
+        }
+        effects.depleted(cell.x, cell.z, REALM.nodes[cell.node?.type ?? 'rock'].resource);
+        if (near) game.audio.thud(0.6);
       },
       onNodeRegrown: (cell) => views.nodeChanged(cell),
       onNodeRemoved: (cell) => views.nodeChanged(cell),
@@ -357,7 +431,7 @@ export class RealmMode {
     } else if (cell && sim.canPlace(cell)) {
       this.openBuild(cell);
     } else if (cell?.castle) {
-      this.toggleWorkers(true);
+      this.selectStructure(sim.castle);
     } else {
       game.deselect();
     }
@@ -485,12 +559,14 @@ export class RealmMode {
   buildAt(cell, id) {
     const game = this.game;
     const sim = this.sim;
-    const built = TOWERS[id] ? sim.build(id, cell) : sim.placeBuilding(id, cell);
-    if (!built) {
+    const site = TOWERS[id] ? sim.build(id, cell) : sim.placeBuilding(id, cell);
+    if (!site) {
       game.audio.denied();
       this.ui.denyRealmCard(id);
       return;
     }
+    this.lastSite = site;
+    this.ui.showUndo(id === 'wall' ? 'Palissade en chantier' : `${site.def.name} en chantier`, UNDO_WINDOW);
     if (id === 'wall') {
       // Wall mode: the sheet steps aside and every tap on free grass extends the wall.
       const first = !game.selection?.repeat;
@@ -510,29 +586,67 @@ export class RealmMode {
 
   // ------------------------------------------------------------ info sheet
 
-  selectStructure(structure) {
+  selectStructure(structure, feedback = true) {
     const game = this.game;
     this.keepVisible(structure.cell);
     game.selection = { kind: 'structure', structure, confirm: false };
-    game.effects.showCursor(structure.cell.x, structure.cell.z);
-    if (structure.kind === 'tower' && structure.stats.range > 0) game.effects.showRange(structure.cell.x, structure.cell.z, structure.stats.range);
+    if (structure.kind === 'castle') game.effects.hideCursor();
+    else game.effects.showCursor(structure.cell.x, structure.cell.z);
+    const range = structure.kind === 'tower' ? structure.stats.range : structure.kind === 'site' && structure.tower && !structure.target ? structure.def.levels[0].range * this.sim.modifiers.range : 0;
+    if (range > 0) game.effects.showRange(structure.cell.x, structure.cell.z, range);
     else game.effects.hideRange();
     this.sheetKey = '';
     this.refreshInfo(true);
+    if (!feedback) return;
     game.audio.click();
     game.haptics.pulse(CONFIG.haptics.tap);
+  }
+
+  /** Thumbnail of a structure (or of a site's future structure) at `level`. */
+  imageOf(kind, def, level) {
+    const thumbs = this.ui.thumbnails;
+    if (kind === 'castle') return thumbs.castle[level];
+    return (kind === 'tower' ? thumbs.towers[def.id] : thumbs.buildings[def.id])[level];
+  }
+
+  /** Progress line of a site: percent, builders and time left. */
+  workInfo(site) {
+    const fraction = Math.min(1, site.progress / site.work);
+    const working = site.builders.filter((w) => w.state === 'building').length;
+    const rate = Math.max(1, site.builders.length) * this.sim.modifiers.buildSpeed;
+    const left = Math.max(1, Math.ceil((site.work - site.progress) / rate));
+    let text = `${Math.floor(fraction * 100)} %`;
+    if (!site.builders.length) text += ' · en attente d’un ouvrier';
+    else if (!working) text += ' · l’ouvrier arrive';
+    else text += ` · ~${left} s`;
+    return { fraction, text };
+  }
+
+  undoWindowOpen(site) {
+    return site === this.lastSite && this.sim.time - site.startedAt <= UNDO_WINDOW;
   }
 
   refreshInfo(force = false) {
     const selection = this.game.selection;
     if (selection?.kind !== 'structure') return;
     const s = selection.structure;
-    const key = `${this.stockKey()}|${Math.ceil(s.hp)}|${s.level}|${selection.confirm}|${s.targeting ?? ''}`;
+    const sim = this.sim;
+    const site = s.kind === 'site' ? s : s.upgrading;
+    const work = site ? this.workInfo(site) : null;
+    const hpNow = s.kind === 'castle' ? sim.lives : s.hp;
+    const key = `${this.stockKey()}|${Math.ceil(hpNow)}|${s.level}|${selection.confirm}|${s.targeting ?? ''}|${work?.text ?? ''}|${site ? this.undoWindowOpen(site) : ''}`;
     if (!force && key === this.sheetKey) return;
     this.sheetKey = key;
-    const sim = this.sim;
     const have = (r) => sim.amountOf(r);
     const affordable = (cost) => Object.entries(cost).every(([r, a]) => have(r) >= a);
+    if (s.kind === 'site') {
+      this.refreshSiteInfo(s, work, selection.confirm, have);
+      return;
+    }
+    if (s.kind === 'castle') {
+      this.refreshCastleInfo(s, work, have, affordable);
+      return;
+    }
     const hp = `${Math.ceil(s.hp)}/${s.maxHp}`;
     const back = {};
     for (const [r, a] of Object.entries(sim.spentOn(s))) if (Math.floor(a * 0.5) > 0) back[r] = Math.floor(a * 0.5);
@@ -560,6 +674,8 @@ export class RealmMode {
         levels: s.def.levels.length,
         stats: rows,
         upgrade: cost ? { cost, affordable: affordable(cost) } : null,
+        maxText: s.upgrading ? '🔨 Amélioration en cours' : 'Niveau max',
+        work,
         demolish,
         confirm: selection.confirm,
         targeting: ['frost', 'goldmine'].includes(s.def.id) ? null : s.targeting,
@@ -581,9 +697,65 @@ export class RealmMode {
       stats: rows,
       upgrade: def.id === 'academy' ? { cost: {}, affordable: true } : cost ? { cost, affordable: affordable(cost) } : null,
       upgradeLabel: def.id === 'academy' ? '📜 Ouvrir la recherche' : def.id === 'wall' ? 'En pierre' : 'Améliorer',
-      maxText: 'Niveau max',
+      maxText: s.upgrading ? '🔨 Amélioration en cours' : 'Niveau max',
+      work,
       demolish,
       confirm: selection.confirm,
+      targeting: null,
+    }, have);
+  }
+
+  refreshSiteInfo(site, work, confirm, have) {
+    const target = site.target;
+    const kind = target?.kind ?? (site.tower ? 'tower' : 'building');
+    const undo = this.undoWindowOpen(site);
+    const back = {};
+    for (const [r, a] of Object.entries(site.cost)) if (Math.floor(a * (undo ? 1 : 0.8)) > 0) back[r] = Math.floor(a * (undo ? 1 : 0.8));
+    const name = target?.kind === 'castle' ? CASTLE_LEVELS[site.level].name : site.def.levels?.[site.level]?.name ?? site.def.name;
+    const rows = [['Ouvriers', `${site.builders.length}`]];
+    if (!target && site.hp < site.maxHp - 0.5) rows.push(['Solidité', `${Math.ceil(site.hp)}/${site.maxHp}`]);
+    if (site.typeId !== 'wall' && site.builders.length < 2 && site.work >= 8) rows.push(['Astuce', 'Un 2ᵉ ouvrier viendra aider']);
+    this.ui.openRealmInfo({
+      image: this.imageOf(kind, site.def, site.level),
+      name: target ? `${name} · niv. ${site.level + 1}` : name,
+      level: site.level,
+      levels: kind === 'castle' ? CASTLE_LEVELS.length : site.def.levels.length,
+      stats: rows,
+      work,
+      upgrade: false,
+      demolish: `<span class="costs">+${costText(back)}</span>`,
+      demolishLabel: undo ? 'Annuler' : 'Annuler le chantier',
+      confirm,
+      targeting: null,
+    }, have);
+  }
+
+  refreshCastleInfo(castle, work, have, affordable) {
+    const sim = this.sim;
+    const level = CASTLE_LEVELS[castle.level];
+    const next = CASTLE_LEVELS[castle.level + 1];
+    const cost = sim.upgradeCostOf(castle);
+    const counts = sim.jobCounts();
+    const rows = [
+      ['Vie', `${Math.ceil(sim.lives)}/${sim.startLives}`],
+      ['Stockage', `${sim.storageCap()}`],
+      ['Ouvriers', `${sim.workers.length} (${counts.idle} libre${counts.idle > 1 ? 's' : ''})`],
+    ];
+    if (next && !castle.upgrading) rows.push([`${next.name}`, `+${next.hp - level.hp} vie · +${next.storage - level.storage} stock`]);
+    const quote = sim.repairQuote();
+    this.ui.openRealmInfo({
+      image: this.imageOf('castle', null, castle.level),
+      name: level.name,
+      level: castle.level,
+      levels: CASTLE_LEVELS.length,
+      stats: rows,
+      work,
+      upgrade: cost ? { cost, affordable: affordable(cost) } : null,
+      upgradeLabel: next ? `→ ${next.name}` : 'Améliorer',
+      maxText: castle.upgrading ? '🔨 Travaux en cours' : 'Niveau max',
+      extra: { label: quote.damaged.length ? `🔧 Réparer (${quote.damaged.length})` : '🔧 Rien à réparer', cost: quote.damaged.length ? quote.cost : null, enabled: quote.damaged.length > 0 && affordable(quote.cost) },
+      demolish: null,
+      confirm: false,
       targeting: null,
     }, have);
   }
@@ -592,33 +764,57 @@ export class RealmMode {
     const selection = this.game.selection;
     if (selection?.kind !== 'structure') return;
     const s = selection.structure;
-    if (s.def.id === 'academy') {
+    if (s.def?.id === 'academy') {
       this.openResearch();
       return;
     }
-    const ok = s.kind === 'tower' ? this.sim.upgrade(s) : this.sim.upgradeBuilding(s);
+    const ok = Boolean(this.sim.startUpgrade(s));
     if (!ok) {
       this.game.audio.denied();
       return;
     }
     selection.confirm = false;
-    if (s.kind === 'tower' && s.stats.range > 0) this.game.effects.showRange(s.cell.x, s.cell.z, s.stats.range);
     this.refreshInfo(true);
     this.persist();
   }
 
   demolishSelected() {
     const selection = this.game.selection;
-    if (selection?.kind !== 'structure') return;
+    if (selection?.kind !== 'structure' || selection.structure.kind === 'castle') return;
+    const s = selection.structure;
     if (!selection.confirm) {
       selection.confirm = true;
       this.refreshInfo(true);
       this.game.audio.click();
       return;
     }
-    this.sim.demolish(selection.structure);
+    if (s.kind === 'site' && this.undoWindowOpen(s)) this.sim.cancelSite(s, 1);
+    else this.sim.demolish(s);
     this.game.deselect();
     this.persist();
+  }
+
+  /** Third button of the info sheet: "Tout réparer" on the castle. */
+  extraSelected() {
+    const selection = this.game.selection;
+    if (selection?.kind !== 'structure' || selection.structure.kind !== 'castle') return;
+    if (!this.sim.repairAll()) {
+      this.game.audio.denied();
+      return;
+    }
+    this.refreshInfo(true);
+    this.persist();
+  }
+
+  /** "Annuler" toast: takes back the last site, fully refunded. */
+  undoLast() {
+    const site = this.lastSite;
+    this.ui.hideUndo();
+    if (!site || !this.sim.sites.includes(site) || !this.undoWindowOpen(site)) return;
+    this.sim.cancelSite(site, 1);
+    this.lastSite = null;
+    if (this.game.selection?.kind === 'build' && this.game.selection.repeat && !this.sim.sites.some((x) => x.typeId === 'wall')) this.game.deselect();
+    this.game.haptics.pulse(CONFIG.haptics.tap);
   }
 
   setTargeting(mode) {
@@ -754,15 +950,35 @@ export class RealmMode {
     return Math.max(0, Math.min(1, 1 - sim.phaseTimer / DUSK)) * 0.85;
   }
 
+  /** How far the sun has travelled across the sky (0 sunrise, 1 sunset). */
+  dayTarget() {
+    const sim = this.sim;
+    if (sim.phase === PHASE.NIGHT) return 1;
+    const length = sim.day === 1 ? REALM.firstDayLength : REALM.dayLength;
+    return Math.max(0, Math.min(1, 1 - sim.phaseTimer / length));
+  }
+
+  nearCamera(x, z, radius) {
+    const target = this.game.rig.target;
+    return Math.hypot(x - target.x, z - target.z) < radius;
+  }
+
   applyCycle(instant = false, dt = 0) {
     const game = this.game;
     const target = this.cycleTarget();
     const previous = this.cycleT;
+    const previousSun = this.dayProgress;
     this.cycleT = instant ? target : damp(this.cycleT, target, target > this.cycleT ? 1.2 : 0.8, dt);
     if (Math.abs(this.cycleT - target) < 0.002) this.cycleT = target;
-    if (!instant && this.cycleT === previous) return;
+    // The sun keeps moving by day; at dawn it jumps back below the eastern horizon while it is still dark.
+    const sun = this.dayTarget();
+    this.dayProgress = instant || sun < this.dayProgress - 0.5 ? sun : damp(this.dayProgress, sun, 2, dt);
+    if (!instant && this.cycleT === previous && Math.abs(this.dayProgress - previousSun) < 0.0015) {
+      this.dayProgress = previousSun;
+      return;
+    }
     const t = this.cycleT;
-    game.world.setCycle(t, THEMES.meadow, THEMES.night);
+    game.world.setCycle(t, THEMES.meadow, THEMES.night, this.dayProgress);
     const day = THEMES.meadow.grade;
     const night = THEMES.night.grade;
     game.view.setGrade({
@@ -784,7 +1000,8 @@ export class RealmMode {
     const game = this.game;
     const sim = this.sim;
     this.applyCycle(false, realDt);
-    game.realmViews.update(dt, time, game.view.camera);
+    game.realmViews.update(dt, time, game.view.camera, this.cycleT);
+    game.world.terrain.showGrid(game.selection?.kind === 'build');
 
     // Swings of the axe and pick: chips and sounds near the camera.
     for (const worker of sim.workers) {
@@ -800,6 +1017,21 @@ export class RealmMode {
       game.effects.chips(cell.x, cell.z, resource);
       game.realmViews.harvestHit(cell);
       if (Math.hypot(cell.x - game.rig.target.x, cell.z - game.rig.target.z) < 9) game.audio.chop(resource);
+    }
+
+    // Builders hammer away: dust, sparks and knocks.
+    for (const worker of sim.workers) {
+      if (worker.state !== 'building' || !worker.site) {
+        worker.hammer = Math.random() * HAMMER_EVERY;
+        continue;
+      }
+      worker.hammer = (worker.hammer ?? 0) - dt;
+      if (worker.hammer > 0) continue;
+      worker.hammer = HAMMER_EVERY * (0.85 + Math.random() * 0.3);
+      const x = worker.x + worker.dirX * 0.35;
+      const z = worker.z + worker.dirZ * 0.35;
+      game.effects.hammer(x, CONFIG.world.tileTop + 0.25, z);
+      if (this.nearCamera(x, z, 9)) game.audio.hammer();
     }
 
     if (game.mode !== 'playing') return;

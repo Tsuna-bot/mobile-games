@@ -10,8 +10,8 @@
 import { makeNoise, seededRandom } from '../core/random.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
-  BUILDINGS, BUILDING_COST_GROWTH, REALM, RESEARCH, TOWER_COST_GROWTH, makeNight, portalsOpen, realmModifiers,
-  scaleCost, towerCost, towerHp, unlockedSpells, unlockedTowers,
+  BUILDINGS, BUILDING_COST_GROWTH, CASTLE_LEVELS, REALM, RESEARCH, TOWER_COST_GROWTH, buildTime, buildersFor, makeNight,
+  portalsOpen, realmModifiers, repairCost, scaleCost, towerCost, towerHp, unlockedSpells, unlockedTowers,
 } from '../data/realm.js';
 import { SPELLS } from '../data/spells.js';
 import { TOWERS } from '../data/towers.js';
@@ -224,8 +224,12 @@ function createWorker(id) {
   return {
     id, job: null, state: 'idle', x: 0, z: 0, dirX: 0, dirZ: 1,
     cell: null, path: [], pathIndex: 0, node: null, preferred: null,
-    carry: null, timer: 0, retry: 0, view: null,
+    carry: null, timer: 0, retry: 0, site: null, view: null,
   };
+}
+
+function emptyNightReport(night) {
+  return { night, kills: 0, bossKills: 0, leaks: 0, gold: 0, lost: 0, damage: new Map() };
 }
 
 export class RealmSim extends Simulation {
@@ -250,6 +254,10 @@ export class RealmSim extends Simulation {
     this.startLives = REALM.castleHp;
     this.lives = this.startLives;
     this.buildings = [];
+    this.sites = [];
+    this.nextSiteId = 1;
+    this.castle = { kind: 'castle', id: 0, def: { id: 'castle', name: 'Château' }, level: 0, cell: this.level.base, x: this.level.base.x, z: this.level.base.z, upgrading: null };
+    this.report = emptyNightReport(1);
     this.workers = [];
     this.nextWorkerId = 1;
     this.nextBuildingId = 1;
@@ -283,7 +291,7 @@ export class RealmSim extends Simulation {
   // ------------------------------------------------------------ resources
 
   storageCap() {
-    let cap = REALM.baseStorage;
+    let cap = REALM.baseStorage + CASTLE_LEVELS[this.castle.level].storage;
     for (const b of this.buildings) if (b.def.id === 'depot') cap += b.def.levels[b.level].storage;
     return Math.round(cap * this.modifiers.storage);
   }
@@ -364,44 +372,230 @@ export class RealmSim extends Simulation {
 
   /** Price of a new tower or building now (towers, houses and depots get pricier as you own more). */
   buildCost(typeId) {
-    if (TOWERS[typeId]) return scaleCost(towerCost(typeId, 0), 1 + TOWER_COST_GROWTH * this.towers.length);
+    const pending = this.sites.filter((site) => !site.target && site.typeId === typeId).length;
+    if (TOWERS[typeId]) {
+      const towerSites = this.sites.filter((site) => !site.target && site.tower).length;
+      return scaleCost(towerCost(typeId, 0), 1 + TOWER_COST_GROWTH * (this.towers.length + towerSites));
+    }
     const def = BUILDINGS[typeId];
     if (def.id === 'wall' || def.unique) return def.levels[0].cost;
-    const owned = this.buildings.filter((b) => b.def.id === typeId).length;
+    const owned = this.buildings.filter((b) => b.def.id === typeId).length + pending;
     return scaleCost(def.levels[0].cost, 1 + BUILDING_COST_GROWTH * owned);
   }
 
-  build(typeId, cell) {
-    const def = TOWERS[typeId];
-    if (!def || !this.canPlace(cell) || !this.unlockedTowers.includes(typeId)) return null;
+  // ------------------------------------------------------------ construction sites
+  //
+  // Placing a tower or building pays for it and opens a site on its cell; workers come
+  // and build it (idle ones first, then gatherers who carry nothing). Upgrades are sites
+  // too, on the existing structure (a tower keeps firing while it is being upgraded).
+
+  /** New tower (`typeId` in TOWERS) or building: returns the site, or null. */
+  startSite(typeId, cell, { free = false } = {}) {
+    const tower = Boolean(TOWERS[typeId]);
+    const def = tower ? TOWERS[typeId] : BUILDINGS[typeId];
+    if (!def || !this.canPlace(cell)) return null;
+    if (tower && !this.unlockedTowers.includes(typeId)) return null;
+    if (def.unique && (this.buildings.some((b) => b.def.id === typeId) || this.sites.some((site) => site.typeId === typeId))) return null;
     const cost = this.buildCost(typeId);
-    if (!this.pay(cost)) return null;
-    const tower = new Tower(this.nextTowerId++, def, cell, this.modifiers);
-    tower.kind = 'tower';
-    tower.maxHp = Math.round(towerHp(0) * this.modifiers.hp);
-    tower.hp = tower.maxHp;
-    tower.spentCost = cost;
-    this.towers.push(tower);
-    this.towerByCell.set(cell.index, tower);
-    this.occupy(cell, tower);
-    this.stats.towersBuilt++;
-    this.listener.onTowerBuilt?.(tower);
-    return tower;
+    if (!free && !this.pay(cost)) return null;
+    const work = buildTime(typeId, 0);
+    const site = {
+      kind: 'site', id: this.nextSiteId++, typeId, tower, def, target: null, level: 0, cell, x: cell.x, z: cell.z,
+      work, progress: 0, cost, hp: 60, maxHp: 60, builders: [], startedAt: this.time, view: null,
+    };
+    this.sites.push(site);
+    this.occupy(cell, site);
+    this.listener.onSiteStarted?.(site);
+    return site;
+  }
+
+  build(typeId, cell) {
+    return TOWERS[typeId] ? this.startSite(typeId, cell) : null;
+  }
+
+  placeBuilding(typeId, cell) {
+    return BUILDINGS[typeId] ? this.startSite(typeId, cell) : null;
+  }
+
+  upgradeCostOf(structure) {
+    if (structure.upgrading) return null;
+    if (structure.kind === 'castle') return CASTLE_LEVELS[structure.level + 1]?.cost ?? null;
+    if (structure.kind === 'tower') return structure.maxed ? null : towerCost(structure.def.id, structure.level + 1, this.modifiers.upgradeCost);
+    return structure.def.levels[structure.level + 1]?.cost ?? null;
+  }
+
+  /** Upgrade site on a tower, building or the castle. */
+  startUpgrade(structure, { free = false } = {}) {
+    const cost = this.upgradeCostOf(structure);
+    if (!cost || (!free && !this.pay(cost))) return null;
+    const typeId = structure.kind === 'castle' ? 'castle' : structure.def.id;
+    const work = buildTime(typeId, structure.level + 1);
+    const site = {
+      kind: 'site', id: this.nextSiteId++, typeId, tower: structure.kind === 'tower', def: structure.def, target: structure,
+      level: structure.level + 1, cell: structure.cell, x: structure.cell.x, z: structure.cell.z,
+      work, progress: 0, cost, hp: 1, maxHp: 1, builders: [], startedAt: this.time, view: null,
+    };
+    structure.upgrading = site;
+    this.sites.push(site);
+    this.listener.onSiteStarted?.(site);
+    return site;
   }
 
   towerUpgradeCost(tower) {
-    return tower.maxed ? null : towerCost(tower.def.id, tower.level + 1, this.modifiers.upgradeCost);
+    return this.upgradeCostOf(tower);
   }
 
   upgrade(tower) {
-    const cost = this.towerUpgradeCost(tower);
-    if (!cost || !this.pay(cost)) return false;
-    tower.level++;
-    tower.refreshStats();
-    this.refreshHp(tower);
-    if (tower.maxed) this.stats.towersMaxed++;
-    this.listener.onTowerUpgraded?.(tower);
+    return Boolean(this.startUpgrade(tower));
+  }
+
+  /** Called when the builders finish: the site becomes the real thing. */
+  completeSite(site) {
+    this.dropSite(site);
+    this.releaseBuilders(site);
+    let structure;
+    if (site.target) {
+      structure = site.target;
+      structure.upgrading = null;
+      structure.level = site.level;
+      if (structure.kind === 'castle') {
+        this.refreshCastle();
+        this.lives = this.startLives;
+        this.syncWorkers();
+        this.listener.onCastleUpgraded?.(structure);
+      } else if (structure.kind === 'tower') {
+        structure.refreshStats();
+        this.refreshHp(structure);
+        structure.hp = structure.maxHp;
+        if (structure.maxed) this.stats.towersMaxed++;
+        this.listener.onTowerUpgraded?.(structure);
+      } else {
+        this.refreshHp(structure);
+        structure.hp = structure.maxHp;
+        this.syncWorkers();
+        this.listener.onBuildingUpgraded?.(structure);
+      }
+    } else if (site.tower) {
+      const tower = new Tower(this.nextTowerId++, site.def, site.cell, this.modifiers);
+      tower.kind = 'tower';
+      tower.maxHp = Math.round(towerHp(0) * this.modifiers.hp);
+      tower.hp = tower.maxHp;
+      tower.spentCost = site.cost;
+      this.towers.push(tower);
+      this.towerByCell.set(site.cell.index, tower);
+      this.occupy(site.cell, tower);
+      this.stats.towersBuilt++;
+      this.listener.onTowerBuilt?.(tower);
+      structure = tower;
+    } else {
+      structure = this.addBuilding(site.def, site.cell, 0);
+      structure.spentCost = site.cost;
+    }
+    this.listener.onSiteComplete?.(site, structure);
+    return structure;
+  }
+
+  /** Cancels a site; `share` of its price comes back (all of it just after placing). */
+  cancelSite(site, share) {
+    if (!this.sites.includes(site)) return {};
+    const back = this.refund(site.cost, share);
+    this.dropSite(site);
+    this.releaseBuilders(site);
+    if (site.target) site.target.upgrading = null;
+    this.listener.onSiteRemoved?.(site, back);
+    return back;
+  }
+
+  dropSite(site) {
+    const i = this.sites.indexOf(site);
+    if (i >= 0) this.sites.splice(i, 1);
+    if (!site.target && site.cell.structure === site) {
+      site.cell.structure = null;
+      this.flowDirty = true;
+      this.rerouteWorkers();
+    }
+    for (const enemy of this.enemies) if (enemy.attacking === site) enemy.attacking = null;
+  }
+
+  releaseBuilders(site) {
+    for (const worker of this.workers) {
+      if (worker.site !== site) continue;
+      worker.site = null;
+      worker.path = [];
+      if (this.phase === PHASE.NIGHT) this.sendHome(worker);
+      else worker.state = 'idle';
+    }
+    site.builders = [];
+  }
+
+  /** Assigns workers to sites that lack builders. */
+  staffSites() {
+    if (!this.sites.length) return;
+    const limit = Math.max(1, Math.ceil(this.workers.length * 0.5));
+    let busy = this.workers.filter((w) => w.site).length;
+    for (const site of this.sites) {
+      site.builders = site.builders.filter((w) => w.site === site);
+      const want = buildersFor(site.work);
+      while (site.builders.length < want && busy < limit) {
+        const worker = this.pickBuilder(site);
+        if (!worker || !this.assignBuilder(worker, site)) break;
+        busy++;
+      }
+    }
+  }
+
+  pickBuilder(site) {
+    const free = (w) => !w.site && !w.carry && w.state !== 'goingHome';
+    return this.nearestWorker(site.cell, (w) => free(w) && !w.job)
+      ?? this.nearestWorker(site.cell, (w) => free(w) && w.state !== 'harvest')
+      ?? this.nearestWorker(site.cell, free);
+  }
+
+  siteStands(site) {
+    return site.target?.kind === 'castle' ? this.castleRing() : this.standCells(site.cell);
+  }
+
+  assignBuilder(worker, site) {
+    this.releaseNode(worker);
+    if (worker.state === 'hidden') {
+      const spot = this.homeSpot(worker.id);
+      worker.cell = spot;
+      worker.x = spot.x;
+      worker.z = spot.z;
+      this.listener.onWorkerShown?.(worker);
+    }
+    worker.site = site;
+    if (!this.walkTo(worker, this.siteStands(site), 'toSite')) {
+      worker.site = null;
+      worker.state = this.phase === PHASE.NIGHT ? 'hidden' : 'idle';
+      return false;
+    }
+    site.builders.push(worker);
+    this.listener.onBuilderAssigned?.(worker, site);
     return true;
+  }
+
+  // ------------------------------------------------------------ castle & repairs
+
+  refreshCastle() {
+    const max = REALM.castleHp + this.modifiers.castleHp + CASTLE_LEVELS[this.castle.level].hp;
+    this.lives = Math.max(1, this.lives + max - this.startLives);
+    this.startLives = max;
+  }
+
+  /** Everything damaged (walls, buildings, towers) and the price to fix it all now. */
+  repairQuote() {
+    const damaged = [...this.buildings, ...this.towers].filter((s) => s.hp < s.maxHp - 0.5);
+    const missing = damaged.reduce((sum, s) => sum + (s.maxHp - s.hp), 0);
+    return { damaged, cost: repairCost(missing) };
+  }
+
+  repairAll() {
+    const { damaged, cost } = this.repairQuote();
+    if (!damaged.length || !this.pay(cost)) return null;
+    for (const s of damaged) s.hp = s.maxHp;
+    this.listener.onRepaired?.(damaged);
+    return damaged;
   }
 
   maxHpOf(structure) {
@@ -415,19 +609,8 @@ export class RealmSim extends Simulation {
     structure.maxHp = max;
   }
 
-  placeBuilding(typeId, cell) {
-    const def = BUILDINGS[typeId];
-    if (!def || !this.canPlace(cell)) return null;
-    if (def.unique && this.buildings.some((b) => b.def.id === typeId)) return null;
-    const cost = this.buildCost(typeId);
-    if (!this.pay(cost)) return null;
-    const building = this.addBuilding(def, cell, 0);
-    building.spentCost = cost;
-    return building;
-  }
-
   addBuilding(def, cell, level, hp) {
-    const building = { kind: 'building', id: this.nextBuildingId++, def, cell, x: cell.x, z: cell.z, level, hp: 0, maxHp: 0, view: null };
+    const building = { kind: 'building', id: this.nextBuildingId++, def, cell, x: cell.x, z: cell.z, level, hp: 0, maxHp: 0, upgrading: null, view: null };
     building.maxHp = this.maxHpOf(building);
     building.hp = hp ?? building.maxHp;
     this.buildings.push(building);
@@ -439,18 +622,11 @@ export class RealmSim extends Simulation {
   }
 
   buildingUpgradeCost(building) {
-    return building.def.levels[building.level + 1]?.cost ?? null;
+    return this.upgradeCostOf(building);
   }
 
   upgradeBuilding(building) {
-    const cost = this.buildingUpgradeCost(building);
-    if (!cost || !this.pay(cost)) return false;
-    building.level++;
-    this.refreshHp(building);
-    building.hp = building.maxHp;
-    this.syncWorkers();
-    this.listener.onBuildingUpgraded?.(building);
-    return true;
+    return Boolean(this.startUpgrade(building));
   }
 
   /** Everything spent on a structure so far (for the demolish refund). */
@@ -466,6 +642,8 @@ export class RealmSim extends Simulation {
 
   /** Demolish a wall, building or tower: half of what it cost comes back. */
   demolish(structure) {
+    if (structure.kind === 'site') return this.cancelSite(structure, 0.8);
+    if (structure.upgrading) this.cancelSite(structure.upgrading, 1);
     const back = this.refund(this.spentOn(structure), 0.5);
     this.removeStructure(structure);
     this.listener.onStructureRemoved?.(structure, back);
@@ -478,6 +656,16 @@ export class RealmSim extends Simulation {
   }
 
   removeStructure(structure) {
+    if (structure.kind === 'site') {
+      this.dropSite(structure);
+      this.releaseBuilders(structure);
+      return;
+    }
+    if (structure.upgrading) {
+      this.dropSite(structure.upgrading);
+      this.releaseBuilders(structure.upgrading);
+      structure.upgrading = null;
+    }
     const cell = structure.cell;
     if (cell.structure === structure) cell.structure = null;
     if (structure.kind === 'tower') {
@@ -525,9 +713,7 @@ export class RealmSim extends Simulation {
       this.refreshHp(tower);
     }
     for (const building of this.buildings) this.refreshHp(building);
-    const max = REALM.castleHp + this.modifiers.castleHp;
-    this.lives += max - this.startLives;
-    this.startLives = max;
+    this.refreshCastle();
     this.refreshSpells();
   }
 
@@ -592,7 +778,9 @@ export class RealmSim extends Simulation {
     this.waveLeaks = [];
     this.waveLeaks[this.day] = 0;
     this.dawnTimer = -1;
-    for (const worker of this.workers) this.sendHome(worker);
+    this.report = emptyNightReport(this.day);
+    this.report.goldStart = this.gold;
+    for (const worker of this.workers) if (!worker.site) this.sendHome(worker);
     this.listener.onNightStart?.(this.day, this.nightWave, bonus);
   }
 
@@ -625,10 +813,16 @@ export class RealmSim extends Simulation {
     }
     this.regrowNodes();
     for (const worker of this.workers) {
+      if (worker.site) continue;
       worker.state = 'idle';
       worker.retry = 0;
     }
-    this.listener.onDawn?.(this.day, { night, gold, income, fallen, gems: fallen ? 0 : REALM.dawnGems(night) });
+    const report = this.report;
+    report.gold = this.gold - (report.goldStart ?? this.gold);
+    let best = null;
+    for (const [tower, damage] of report.damage) if (!best || damage > best.damage) best = { tower, damage };
+    report.best = best && { type: best.tower.def.id, name: best.tower.def.name, level: best.tower.level, damage: Math.round(best.damage) };
+    this.listener.onDawn?.(this.day, { night, gold, income, fallen, gems: fallen ? 0 : REALM.dawnGems(night), report });
   }
 
   regrowNodes() {
@@ -757,7 +951,17 @@ export class RealmSim extends Simulation {
     enemy.distance = FLOW_MAX - this.flow[source.cell.index];
   }
 
+  damage(enemy, amount, tower, pierce = false, silent = false) {
+    if (tower && enemy.active && this.phase === PHASE.NIGHT) {
+      const dealt = Math.min(enemy.hp, pierce ? amount : Math.max(amount * 0.2, amount - enemy.armor));
+      this.report.damage.set(tower, (this.report.damage.get(tower) ?? 0) + dealt);
+    }
+    super.damage(enemy, amount, tower, pierce, silent);
+  }
+
   kill(enemy, tower) {
+    this.report.kills++;
+    if (enemy.def.id === 'boss') this.report.bossKills++;
     // Children of a mothership appear where it died.
     this.pendingSpawnAt = { cell: enemy.cell, x: enemy.x, z: enemy.z };
     super.kill(enemy, tower);
@@ -772,6 +976,7 @@ export class RealmSim extends Simulation {
   }
 
   leak(enemy) {
+    this.report.leaks++;
     enemy.active = false;
     this.lives = Math.max(0, this.lives - enemy.def.leak * REALM.leakDamage);
     this.stats.leaked++;
@@ -880,6 +1085,7 @@ export class RealmSim extends Simulation {
       this.listener.onSiegeHit?.(enemy, target);
     }
     if (target.hp <= 0) {
+      if (target.kind !== 'site') this.report.lost++;
       this.removeStructure(target);
       this.listener.onStructureDestroyed?.(target);
     }
@@ -888,7 +1094,7 @@ export class RealmSim extends Simulation {
   // ------------------------------------------------------------ workers
 
   get workerCapacity() {
-    let total = REALM.startWorkers;
+    let total = REALM.startWorkers + CASTLE_LEVELS[this.castle.level].workers;
     for (const b of this.buildings) if (b.def.id === 'house') total += b.def.levels[b.level].workers;
     return total;
   }
@@ -907,7 +1113,8 @@ export class RealmSim extends Simulation {
       this.listener.onWorkerAdded?.(worker);
     }
     while (this.workers.length > capacity) {
-      const worker = this.workers.findLast((w) => !w.job) ?? this.workers[this.workers.length - 1];
+      const worker = this.workers.findLast((w) => !w.job && !w.site) ?? this.workers.findLast((w) => !w.site) ?? this.workers[this.workers.length - 1];
+      if (worker.site) worker.site.builders = worker.site.builders.filter((w) => w !== worker);
       this.releaseNode(worker);
       this.workers.splice(this.workers.indexOf(worker), 1);
       this.listener.onWorkerRemoved?.(worker);
@@ -934,8 +1141,11 @@ export class RealmSim extends Simulation {
   }
 
   jobCounts() {
-    const counts = { wood: 0, stone: 0, crystal: 0, idle: 0 };
-    for (const w of this.workers) counts[w.job ?? 'idle']++;
+    const counts = { wood: 0, stone: 0, crystal: 0, idle: 0, building: 0 };
+    for (const w of this.workers) {
+      counts[w.job ?? 'idle']++;
+      if (w.site) counts.building++;
+    }
     return counts;
   }
 
@@ -1117,13 +1327,21 @@ export class RealmSim extends Simulation {
       if (!worker.path.slice(worker.pathIndex).some((cell) => cell.structure || nodeBlocks(cell))) continue;
       if (worker.state === 'toNode' && worker.node) this.goToNode(worker, worker.node);
       else if (worker.state === 'toDrop') this.goDeliver(worker);
+      else if (worker.state === 'toSite' && worker.site) this.walkTo(worker, this.siteStands(worker.site), 'toSite');
       else if (worker.state === 'goingHome' || worker.state === 'home') this.walkTo(worker, this.castleRing(), worker.state);
     }
   }
 
   updateWorkers(dt) {
     const speed = REALM.worker.speed * this.modifiers.workerSpeed;
+    this.staffSites();
     for (const worker of this.workers) {
+      if (worker.site && !this.sites.includes(worker.site)) {
+        worker.site = null;
+        worker.path = [];
+        if (this.phase === PHASE.NIGHT) this.sendHome(worker);
+        else worker.state = 'idle';
+      }
       if (worker.state === 'hidden') {
         if (this.phase === PHASE.DAY) {
           const spot = this.homeSpot(worker.id);
@@ -1140,6 +1358,31 @@ export class RealmSim extends Simulation {
         continue;
       }
       switch (worker.state) {
+        case 'toSite': {
+          const site = worker.site;
+          if (!site) {
+            worker.state = 'idle';
+            break;
+          }
+          const dx = site.x - worker.x;
+          const dz = site.z - worker.z;
+          const d = Math.hypot(dx, dz) || 1;
+          worker.dirX = dx / d;
+          worker.dirZ = dz / d;
+          worker.state = 'building';
+          worker.path = [];
+          break;
+        }
+        case 'building': {
+          const site = worker.site;
+          if (!site) {
+            worker.state = 'idle';
+            break;
+          }
+          site.progress += dt * this.modifiers.buildSpeed;
+          if (site.progress >= site.work) this.completeSite(site);
+          break;
+        }
         case 'toNode':
           this.arriveAtNode(worker);
           break;
@@ -1158,6 +1401,10 @@ export class RealmSim extends Simulation {
           break;
         case 'home':
         case 'idle':
+          if (this.phase === PHASE.NIGHT && worker.state === 'idle') {
+            this.sendHome(worker);
+            break;
+          }
           if (this.phase !== PHASE.DAY || !worker.job) break;
           if (worker.retry > 0) {
             worker.retry -= dt;
@@ -1285,6 +1532,8 @@ export class RealmSim extends Simulation {
 
   /** What the workers gathered while the page was closed (daytime saves only). */
   offlineGains(seconds) {
+    // Builders finished every site meanwhile.
+    for (const site of [...this.sites]) this.completeSite(site);
     const time = Math.min(seconds, REALM.offlineCap);
     const counts = this.jobCounts();
     const trip = REALM.worker.harvestTime * this.modifiers.harvest + 12 / (REALM.worker.speed * this.modifiers.workerSpeed);
@@ -1325,6 +1574,8 @@ export class RealmSim extends Simulation {
       buildings: this.buildings.map((b) => [b.def.id, b.cell.index, b.level, Math.round(b.hp)]),
       towers: this.towers.map((t) => [t.def.id, t.cell.index, t.level, Math.round(t.hp), t.targeting, t.kills]),
       jobs: this.workers.map((w) => w.job),
+      castle: this.castle.level,
+      sites: this.sites.map((site) => [site.typeId, site.target?.kind === 'castle' ? -1 : site.cell.index, round(site.progress), site.cost, site.target ? 1 : 0]),
       night: this.phase === PHASE.NIGHT ? {
         spawner: this.spawners[0] ? { cursor: this.spawners[0].cursor, elapsed: round(this.spawners[0].elapsed) } : null,
         remaining: this.waveRemaining[this.day] ?? 0,
@@ -1383,6 +1634,21 @@ export class RealmSim extends Simulation {
       this.towers.push(tower);
       this.towerByCell.set(cell.index, tower);
       cell.structure = tower;
+    }
+    this.castle.level = Math.min(CASTLE_LEVELS.length - 1, data.castle ?? 0);
+    this.refreshCastle();
+    this.lives = Math.min(this.startLives, data.lives);
+    for (const [typeId, index, progress, cost, upgrade] of data.sites ?? []) {
+      let site = null;
+      if (upgrade) {
+        const target = index < 0 ? this.castle : cells[index]?.structure;
+        if (target && target.kind !== 'site') site = this.startUpgrade(target, { free: true });
+      } else {
+        site = this.startSite(typeId, cells[index], { free: true });
+      }
+      if (!site) continue;
+      site.progress = progress;
+      site.cost = cost;
     }
     Object.assign(this.stats, data.stats);
     this.syncWorkers();

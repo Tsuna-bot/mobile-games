@@ -291,6 +291,27 @@ export class Effects {
     this.sparks.burst(x, CONFIG.world.tileTop + 0.4, z, this.count(12), 2.5, COLORS.gold, 0.16, 0.7, { upward: 0.9, gravity: 3 });
   }
 
+  /** A puff of chimney smoke drifting with the wind. */
+  chimneySmoke(x, y, z) {
+    const j = () => (Math.random() - 0.5) * 0.06;
+    this.puffs.emit(x + j(), y, z + j(), 0.18 + j(), 0.42, 0.05 + j(), COLORS.smoke, 0.1, 2.4, { endSize: 0.55, drag: 0.3, opacity: 0.5, fadeIn: 0.15 });
+  }
+
+  /** Hammer blow on a construction site: dust and a few sparks. */
+  hammer(x, y, z) {
+    this.puffs.burst(x, y, z, this.count(3), 0.7, COLORS.dust, 0.14, 0.45, { upward: 0.6, drag: 3, endSize: 0.3 });
+    this.sparks.burst(x, y + 0.05, z, this.count(3), 1.6, COLORS.spark, 0.07, 0.25, { gravity: 6, brightness: 1.4 });
+  }
+
+  /** A construction site pops up (scaffold arrives) or finishes. */
+  siteDone(x, z, big = false) {
+    const y = CONFIG.world.tileTop + 0.1;
+    const r = big ? 2.2 : 1;
+    this.puffs.burst(x, y, z, this.count(18 * r), 2.4 * r, COLORS.dust, 0.35 * r, 0.8, { upward: 0.3, drag: 3.5, endSize: 0.9 * r });
+    this.sparks.burst(x, y + 0.9 * r, z, this.count(22 * r), 3 * r, COLORS.gold, 0.14, 0.9, { upward: 0.95, gravity: 3, brightness: 1.4 });
+    this.ring(x, z, 1.1 * r, 0.55, COLORS.gold);
+  }
+
   castleHit(x, z) {
     this.sparks.burst(x, CONFIG.world.tileTop + 0.8, z, this.count(20), 3, COLORS.ember, 0.25, 0.6, { gravity: 3, brightness: 1.4 });
     this.puffs.burst(x, CONFIG.world.tileTop + 0.8, z, this.count(10), 1.5, COLORS.smoke, 0.5, 1, { upward: 0.8, endSize: 1.2 });

@@ -159,10 +159,15 @@
         </div>
         <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
       </div>
+      <div class="work" id="realm-info-work" hidden>
+        <div class="work__bar"><i id="realm-info-work-fill"></i></div>
+        <span id="realm-info-work-text"></span>
+      </div>
       <dl class="tower-stats" id="realm-info-stats"></dl>
       <div class="segmented" id="realm-info-targeting" role="group" aria-label="Cible prioritaire"></div>
       <div class="sheet__actions">
         <button id="btn-demolish" class="btn btn--ghost" type="button">Démolir</button>
+        <button id="btn-realm-extra" class="btn btn--ghost" type="button" hidden>Tout réparer</button>
         <button id="btn-realm-upgrade" class="btn btn--gold" type="button">Améliorer</button>
       </div>
     </section>
@@ -180,6 +185,11 @@
     <div id="floaters" class="floaters" aria-hidden="true"></div>
     <div id="coins" class="coins" aria-hidden="true"></div>
     <div id="coach" class="coach" role="status"></div>
+    <div id="undo" class="undo" role="status">
+      <span id="undo-text">Chantier lancé</span>
+      <button id="btn-undo" type="button">Annuler</button>
+      <i class="undo__timer" id="undo-timer"></i>
+    </div>
     <div id="spell-hint" class="spell-hint" role="status">
       <span id="spell-hint-text">Touche la carte pour lancer le sort</span>
       <button id="btn-spell-cancel" type="button">Annuler</button>

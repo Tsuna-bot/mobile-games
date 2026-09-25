@@ -13,7 +13,7 @@ const EIGHTH = 60 / TEMPO / 2;
 const LOOKAHEAD = 0.15;
 
 // Minimum seconds between two plays of the same sound, so rapid fire stays pleasant.
-const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, flame: 0.12, laser: 0.35, poison: 0.1, mortar: 0.15, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05, chop: 0.12, deliver: 0.08, siege: 0.15 };
+const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, flame: 0.12, laser: 0.35, poison: 0.1, mortar: 0.15, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05, chop: 0.12, deliver: 0.08, siege: 0.15, hammer: 0.09, thud: 0.12 };
 
 /**
  * Procedural audio (Web Audio API, no sound files). Created on the first user
@@ -376,11 +376,30 @@ export class AudioEngine {
     this.tone({ type: 'sine', freq: 990, start: t + 0.05, duration: 0.09, gain: 0.04, attack: 0.003 });
   }
 
+  /** The creak of a tree starting to fall (the thud comes when it lands). */
   treeFall() {
     const t = this.gate('treeFall');
     if (t === null) return;
-    this.noise({ start: t, duration: 0.5, gain: 0.18, filter: 'lowpass', freq: 1200, freqEnd: 200 });
-    this.tone({ type: 'sine', freq: 90, freqEnd: 50, start: t + 0.35, duration: 0.25, gain: 0.3, attack: 0.003 });
+    this.noise({ start: t, duration: 0.7, gain: 0.12, filter: 'bandpass', freq: 500, freqEnd: 260, q: 4 });
+    this.tone({ type: 'sawtooth', freq: 120, freqEnd: 70, start: t, duration: 0.6, gain: 0.025 });
+  }
+
+  /** Something heavy hits the ground (felled tree, dropped stone). */
+  thud(gain = 1) {
+    const t = this.gate('thud');
+    if (t === null) return;
+    this.noise({ start: t, duration: 0.35, gain: 0.16 * gain, filter: 'lowpass', freq: 900, freqEnd: 150 });
+    this.tone({ type: 'sine', freq: 85, freqEnd: 45, start: t, duration: 0.3, gain: 0.32 * gain, attack: 0.003 });
+  }
+
+  /** Hammer blow on a construction site. */
+  hammer() {
+    const t = this.gate('hammer');
+    if (t === null) return;
+    const pitch = 0.9 + Math.random() * 0.2;
+    this.tone({ type: 'triangle', freq: 1250 * pitch, freqEnd: 820 * pitch, start: t, duration: 0.05, gain: 0.05, attack: 0.001 });
+    this.tone({ type: 'sine', freq: 210 * pitch, freqEnd: 120, start: t, duration: 0.07, gain: 0.12, attack: 0.001 });
+    this.noise({ start: t, duration: 0.03, gain: 0.06, filter: 'bandpass', freq: 2600, q: 2 });
   }
 
   siege() {
