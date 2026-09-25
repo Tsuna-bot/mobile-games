@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v12';
+const VERSION = 'bastion-v13';
 
 const APP_SHELL = [
   './',
@@ -276,7 +276,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(VERSION);
-      await cache.addAll(APP_SHELL);
+      // cache: 'reload' skips the browser's HTTP cache (GitHub Pages keeps files 10 min),
+      // so a new version never stores stale copies of the previous one.
+      await cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: 'reload' })));
       await self.skipWaiting();
     })(),
   );
@@ -300,7 +302,7 @@ async function fromCache(request) {
   const cached = await cache.match(request, { ignoreSearch: true });
   if (cached) return cached;
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-cache' });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch (error) {
