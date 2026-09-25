@@ -18,13 +18,16 @@ function fitHomeScreenApp() {
   if (!navigator.standalone) return;
   const app = document.getElementById('app');
   const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
   document.body.append(probe);
   const fit = () => {
     const portrait = window.innerHeight >= window.innerWidth;
     const screenHeight = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-    const gap = screenHeight - window.innerHeight;
-    const stretch = gap > 0 && gap <= 100;
+    // Translucent status bar (content under it: top inset > 0) is the buggy case.
+    const insetTop = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    const gap = screenHeight - app.getBoundingClientRect().top - window.innerHeight;
+    const stretch = portrait && insetTop > 0 && gap >= 0 && gap <= 120;
+    window.__viewportInfo = { screenHeight, innerHeight: window.innerHeight, insetTop, gap, stretch };
     app.style.bottom = stretch ? 'auto' : '';
     app.style.height = stretch ? `${screenHeight}px` : '';
     // The home indicator sits in the stretched part: keep the dock clear of it.
@@ -45,6 +48,31 @@ function fitHomeScreenApp() {
 }
 fitHomeScreenApp();
 
+/** Tapping the version line on the menu shows screen measurements (to diagnose display issues). */
+function bindDiagnostics() {
+  const line = document.querySelector('.credits');
+  if (!line) return;
+  line.addEventListener('click', async () => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;height:100lvh;width:1px;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+    document.body.append(probe);
+    const style = getComputedStyle(probe);
+    const app = document.getElementById('app').getBoundingClientRect();
+    const keys = 'caches' in window ? await caches.keys() : [];
+    const lines = [
+      `écran ${screen.width}×${screen.height}`,
+      `fenêtre ${window.innerWidth}×${window.innerHeight} · visible ${Math.round(window.visualViewport?.height ?? 0)}`,
+      `100lvh ${Math.round(probe.getBoundingClientRect().height)} · html ${document.documentElement.clientHeight}`,
+      `jeu y ${Math.round(app.top)} h ${Math.round(app.height)}`,
+      `encoches haut ${style.paddingTop} bas ${style.paddingBottom}`,
+      `app écran d'accueil ${Boolean(navigator.standalone)} · ${JSON.stringify(window.__viewportInfo ?? null)}`,
+      `hors ligne ${navigator.serviceWorker?.controller ? 'actif' : 'inactif'} · cache ${keys.join(', ') || 'aucun'}`,
+    ];
+    probe.remove();
+    window.alert(lines.join('\n'));
+  });
+}
+
 function supportsWebGL2() {
   try {
     return Boolean(document.createElement('canvas').getContext('webgl2'));
@@ -62,7 +90,26 @@ function blockBrowserGestures() {
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
-  navigator.serviceWorker.register('./sw.js').catch(() => {
+  // The service worker serves the game from its cache; when a new version has been
+  // downloaded and takes over, reload into it (right away from the menu, else at the next menu).
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || window.__bastionReloading) return;
+    const reload = () => {
+      window.__bastionReloading = true;
+      window.location.reload();
+    };
+    const onMenu = () => document.getElementById('screen-menu')?.classList.contains('is-visible');
+    if (onMenu()) reload();
+    else {
+      const timer = setInterval(() => {
+        if (!onMenu()) return;
+        clearInterval(timer);
+        reload();
+      }, 1000);
+    }
+  });
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {
     // Offline support is optional.
   });
 }
@@ -112,6 +159,7 @@ async function boot() {
   ui.hideLoading();
   game.start();
   registerServiceWorker();
+  bindDiagnostics();
 }
 
 boot();

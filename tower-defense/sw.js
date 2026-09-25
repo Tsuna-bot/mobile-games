@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v11';
+const VERSION = 'bastion-v12';
 
 const APP_SHELL = [
   './',
@@ -292,21 +292,27 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-async function networkFirst(request) {
+// Everything is served from the cache first: the game starts instantly and works with no
+// network (or a bad one). Updates come from a new sw.js (new VERSION), which the browser
+// checks on each launch; the page reloads into the new version from the menu.
+async function fromCache(request) {
   const cache = await caches.open(VERSION);
+  const cached = await cache.match(request, { ignoreSearch: true });
+  if (cached) return cached;
   try {
     const response = await fetch(request);
     if (response.ok) cache.put(request, response.clone());
     return response;
-  } catch {
-    const cached = await cache.match(request, { ignoreSearch: true });
-    if (cached) return cached;
-    if (request.mode === 'navigate') return (await cache.match('./index.html')) ?? Response.error();
-    return Response.error();
+  } catch (error) {
+    if (request.mode === 'navigate') {
+      const page = (await cache.match('./')) ?? (await cache.match('./index.html'));
+      if (page) return page;
+    }
+    throw error;
   }
 }
 
-async function cacheFirst(request) {
+async function fonts(request) {
   const cache = await caches.open(VERSION);
   const cached = await cache.match(request);
   if (cached) return cached;
@@ -319,10 +325,6 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.origin === self.location.origin) {
-    // Models and three.js never change within a version: serve them from cache for instant loads.
-    event.respondWith(url.pathname.includes('/assets/') || url.pathname.includes('/vendor/') ? cacheFirst(request) : networkFirst(request));
-  } else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(cacheFirst(request));
-  }
+  if (url.origin === self.location.origin) event.respondWith(fromCache(request));
+  else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') event.respondWith(fonts(request));
 });
