@@ -8,6 +8,43 @@ import { View } from './render/view.js';
 import { Haptics } from './ui/haptics.js';
 import { UI } from './ui/ui.js';
 
+/**
+ * iPhone home-screen app installed with a translucent status bar: iOS keeps that
+ * setting from install time and gives the page a viewport shorter than the screen
+ * by the status bar height, leaving an empty band at the bottom. Stretch the game
+ * layer down to the real screen edge.
+ */
+function fitHomeScreenApp() {
+  if (!navigator.standalone) return;
+  const app = document.getElementById('app');
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
+  document.body.append(probe);
+  const fit = () => {
+    const portrait = window.innerHeight >= window.innerWidth;
+    const screenHeight = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    const gap = screenHeight - window.innerHeight;
+    const stretch = gap > 0 && gap <= 100;
+    app.style.bottom = stretch ? 'auto' : '';
+    app.style.height = stretch ? `${screenHeight}px` : '';
+    // The home indicator sits in the stretched part: keep the dock clear of it.
+    const insetBottom = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    document.documentElement.style.setProperty('--safe-bottom', stretch && insetBottom < 20 ? '34px' : '');
+  };
+  fit();
+  let last = '';
+  const check = () => {
+    const key = `${window.innerWidth}x${window.innerHeight}`;
+    if (key === last) return;
+    last = key;
+    fit();
+    window.dispatchEvent(new Event('resize'));
+  };
+  window.addEventListener('resize', () => requestAnimationFrame(check));
+  window.addEventListener('orientationchange', () => setTimeout(check, 300));
+}
+fitHomeScreenApp();
+
 function supportsWebGL2() {
   try {
     return Boolean(document.createElement('canvas').getContext('webgl2'));
