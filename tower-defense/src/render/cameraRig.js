@@ -113,6 +113,11 @@ export class CameraRig {
     this.trauma = 0;
   }
 
+  /** A quick zoom-in kick that springs back (big moments: level up, nightfall). */
+  punch(amount = 0.06) {
+    this.punchAmount = Math.min(0.15, (this.punchAmount ?? 0) + amount);
+  }
+
   shake(amount) {
     this.trauma = Math.min(1, this.trauma + amount);
   }
@@ -139,7 +144,9 @@ export class CameraRig {
     this.trauma = Math.max(0, this.trauma - dt * 1.8);
     const shake = this.trauma * this.trauma * 0.35;
     const t = this.time * 30;
-    const distance = this.fitDistance * this.zoom;
+    this.punchAmount = Math.max(0, (this.punchAmount ?? 0) - dt * 0.35);
+    const kick = this.punchAmount > 0 ? Math.sin(Math.min(1, this.punchAmount / 0.15) * Math.PI * 0.5) * this.punchAmount : 0;
+    const distance = this.fitDistance * this.zoom * (1 - kick);
     this.place(this.camera, distance, this.target.x + shake * wobble(t), this.target.z + this.lookOffset(distance) + shake * wobble(t + 9), yaw);
   }
 

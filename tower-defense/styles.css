@@ -54,6 +54,8 @@ body {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  /* clip: not even scripts or focus can scroll the game layer. */
+  overflow: clip;
 }
 
 #scene {
@@ -417,6 +419,419 @@ button:disabled {
   font-size: 13px;
 }
 
+/* Kingdom HUD row: current objective and minimap. */
+.hud__row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.hud__row[hidden] {
+  display: none;
+}
+
+.objective {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 300px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 9px 8px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--cream);
+  text-align: left;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+}
+
+.objective[hidden] {
+  display: none;
+}
+
+.objective__icon {
+  font-size: 18px;
+}
+
+.objective__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.objective__body b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.objective__body small {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.objective__body small .costs span {
+  color: var(--gold);
+}
+
+.objective__count {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--gold);
+}
+
+.objective__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.objective__bar i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.4s var(--ease-out);
+}
+
+.objective.is-done {
+  background: linear-gradient(180deg, #ffd65c, #f0a92a);
+  color: var(--ink);
+}
+
+.objective.is-done .objective__body small,
+.objective.is-done .objective__count {
+  color: var(--ink);
+}
+
+.objective.is-cheering {
+  animation: objective-cheer 0.7s var(--spring);
+}
+
+.objective.is-new {
+  animation: objective-new 0.5s var(--spring);
+}
+
+@keyframes objective-cheer {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.08) rotate(-1.5deg); }
+  70% { transform: scale(0.98) rotate(1deg); }
+  100% { transform: none; }
+}
+
+@keyframes objective-new {
+  from { transform: translateX(-30px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.minimap {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+  pointer-events: auto;
+}
+
+.minimap canvas {
+  display: block;
+  width: 84px;
+  height: 84px;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px rgba(255, 248, 234, 0.85), 0 4px 12px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+}
+
+.minimap__recenter {
+  position: absolute;
+  left: 50%;
+  bottom: -40px;
+  width: 36px;
+  height: 36px;
+  margin-left: -18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cream);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  animation: objective-new 0.3s var(--spring);
+}
+
+.minimap__recenter[hidden] {
+  display: none;
+}
+
+.minimap__recenter svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--ink);
+}
+
+/* Arrows toward UFOs off screen. */
+.arrows {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.edge-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  display: grid;
+  place-items: center;
+}
+
+.edge-arrow[hidden] {
+  display: none;
+}
+
+.edge-arrow svg {
+  width: 30px;
+  height: 30px;
+  fill: #ff5d5d;
+  filter: drop-shadow(0 0 6px rgba(255, 60, 60, 0.8));
+  animation: edge-pulse 0.9s ease-in-out infinite;
+}
+
+.edge-arrow b {
+  position: absolute;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 13px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+@keyframes edge-pulse {
+  50% { opacity: 0.6; }
+}
+
+/* Dawn report after each night. */
+.screen--report {
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 200, 120, 0.25), rgba(20, 24, 48, 0.6) 70%);
+}
+
+.screen--report.is-danger {
+  background: radial-gradient(circle at 50% 40%, rgba(255, 90, 90, 0.25), rgba(20, 24, 48, 0.65) 70%);
+}
+
+.report {
+  width: min(100%, 360px);
+  padding: 22px 20px 18px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #fff8ea, #f4e6c8);
+  color: var(--ink);
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35), inset 0 -5px 0 rgba(0, 0, 0, 0.08);
+  transform: translateY(24px) scale(0.92);
+  opacity: 0;
+}
+
+.screen--report.is-visible .report {
+  animation: report-in 0.55s var(--spring) forwards;
+}
+
+@keyframes report-in {
+  to { transform: none; opacity: 1; }
+}
+
+.report__kicker {
+  margin: 0;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b07a2a;
+}
+
+.report__title {
+  margin: 2px 0 6px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.is-danger .report__title {
+  color: #c0392b;
+}
+
+.report__stars {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.report__stars i {
+  width: 38px;
+  height: 38px;
+  transform: scale(0);
+}
+
+.report__stars i:nth-child(2) {
+  width: 46px;
+  height: 46px;
+  margin-top: -6px;
+}
+
+.screen--report.is-visible .report__stars i {
+  animation: star-pop 0.45s var(--spring) forwards;
+}
+
+@keyframes star-pop {
+  to { transform: scale(1); }
+}
+
+.report__stars svg {
+  width: 100%;
+  height: 100%;
+  fill: rgba(27, 33, 64, 0.14);
+}
+
+.report__stars i.on svg {
+  fill: var(--gold);
+  filter: drop-shadow(0 2px 0 var(--gold-deep));
+}
+
+.report__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.report__stats div {
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(27, 33, 64, 0.07);
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.screen--report.is-visible .report__stats div {
+  animation: report-row 0.4s var(--ease-out) forwards;
+}
+
+@keyframes report-row {
+  to { opacity: 1; transform: none; }
+}
+
+.report__stats dt {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(27, 33, 64, 0.55);
+}
+
+.report__stats dd {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.report__stats .good dd {
+  color: #2f9a4e;
+}
+
+.report__stats .bad dd {
+  color: #c0392b;
+}
+
+.report__stats .gold dd {
+  color: #c07f0c;
+}
+
+.report__best {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  background: rgba(255, 201, 60, 0.22);
+  text-align: left;
+}
+
+.report__best[hidden] {
+  display: none;
+}
+
+.report__best img {
+  width: 56px;
+  height: 56px;
+}
+
+.report__best small {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b07a2a;
+}
+
+.report__best b {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 19px;
+}
+
+.report__best span {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(27, 33, 64, 0.65);
+}
+
+.report__note {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(27, 33, 64, 0.7);
+}
+
+.report__note:empty {
+  display: none;
+}
+
+.report__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report__actions .btn {
+  flex: 1;
+}
+
+.report__actions .btn[hidden] {
+  display: none;
+}
+
+.report__actions .btn--ghost {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px rgba(27, 33, 64, 0.18);
+}
+
 /* Undo toast after placing a construction site. */
 .undo {
   position: absolute;
@@ -548,6 +963,20 @@ button:disabled {
   background: radial-gradient(circle at 35% 35%, #fff3b0, var(--gold) 45%, var(--gold-deep));
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
   opacity: 0;
+}
+
+.res-fly {
+  position: absolute;
+  margin: -11px 0 0 -11px;
+  font-size: 20px;
+  line-height: 22px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+  opacity: 0;
+}
+
+.res-fly.is-flying {
+  opacity: 1;
+  transition: transform 0.62s cubic-bezier(0.5, -0.4, 0.75, 0.55);
 }
 
 .coin.is-flying {
@@ -988,6 +1417,10 @@ button:disabled {
   opacity: 0;
   transform: translate(-50%, 8px);
   transition: opacity 0.3s ease, transform 0.4s var(--spring);
+}
+
+.is-realm .coach {
+  top: calc(var(--safe-top) + 205px);
 }
 
 .coach.is-visible {
@@ -1877,11 +2310,54 @@ button:disabled {
   font-size: 14px;
 }
 
+/* Kingdom build menu: one row of cards that scrolls sideways, so the map stays visible. */
 .build-grid--realm {
-  grid-template-columns: repeat(4, 1fr);
-  max-height: 46vh;
-  overflow-y: auto;
-  padding-top: 4px;
+  display: flex;
+  gap: 8px;
+  margin: 0 calc(-14px - var(--safe-right)) 0 calc(-14px - var(--safe-left));
+  padding: 4px calc(14px + var(--safe-right)) 6px calc(14px + var(--safe-left));
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+}
+
+.build-grid--realm::-webkit-scrollbar {
+  display: none;
+}
+
+.build-grid--realm .build-card {
+  flex: none;
+  width: 86px;
+  scroll-snap-align: start;
+}
+
+.build-grid--realm .build-card img {
+  max-width: 62px;
+}
+
+#sheet-realm-build .sheet__head {
+  margin-bottom: 4px;
+}
+
+#sheet-realm-build .sheet__hint {
+  margin-top: 4px;
+  min-height: 2.6em;
+}
+
+/* Kingdom: toasts sit above the taller dock, banners below the taller HUD. */
+.is-realm .undo {
+  bottom: calc(var(--safe-bottom) + 212px);
+}
+
+.is-realm .spell-hint {
+  bottom: calc(var(--safe-bottom) + 262px);
+}
+
+.is-realm .banner {
+  top: calc(var(--safe-top) + 285px);
 }
 
 .build-card__costs {

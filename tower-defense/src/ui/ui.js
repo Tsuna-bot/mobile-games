@@ -8,6 +8,7 @@ const QUALITY_LABELS = { auto: 'Auto', ultra: 'Ultra', high: 'Haute', medium: 'M
 const STAR_PATH = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const FLOATER_POOL = 14;
 const COIN_POOL = 24;
+const RES_FLY_POOL = 24;
 const number = new Intl.NumberFormat('fr-FR');
 
 const MAP_COLORS = {
@@ -39,6 +40,7 @@ export class UI {
       shop: $('screen-shop'),
       achievements: $('screen-achievements'),
       research: $('screen-research'),
+      report: $('screen-report'),
     };
     this.hud = $('hud');
     this.dock = $('dock');
@@ -87,6 +89,28 @@ export class UI {
     });
     this.coinCursor = 0;
 
+    // Kingdom: resource icons that fly from the map into the counters.
+    this.resFlyers = Array.from({ length: RES_FLY_POOL }, () => {
+      const el = doc.createElement('div');
+      el.className = 'res-fly';
+      $('coins').append(el);
+      return el;
+    });
+    this.resFlyCursor = 0;
+    this.resHold = {};
+    this.resValue = {};
+    this.resTarget = {};
+
+    // Minimap: a tap moves the camera there (coordinates 0..1 across the map).
+    this.minimap = $('minimap');
+    this.minimap.addEventListener('pointerdown', (event) => {
+      const rect = this.minimap.getBoundingClientRect();
+      this.handlers.minimap?.((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+      event.preventDefault();
+    });
+    this.arrowLayer = $('arrows');
+    this.arrows = [];
+
     this.spellButtons = {};
     for (const button of doc.querySelectorAll('[data-spell]')) {
       const id = button.dataset.spell;
@@ -127,7 +151,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -543,6 +567,52 @@ export class UI {
   }
 
   /** Same bar as the spell hint, for a building mode (walls). */
+  /**
+   * Dawn report: title, stars (0..3), counters that roll up one after the other,
+   * the best tower and an optional repair button.
+   * @param report { kicker, title, danger, stars, stats: [{ label, value, prefix, suffix, tone }], best, note, repair }
+   */
+  showNightReport(report, have) {
+    const screen = this.screens.report;
+    screen.classList.toggle('is-danger', Boolean(report.danger));
+    this.$('report-kicker').textContent = report.kicker;
+    this.$('report-title').textContent = report.title;
+    const stars = this.$('report-stars');
+    const star = '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg>';
+    stars.innerHTML = [0, 1, 2].map((i) => `<i class="${i < report.stars ? 'on' : ''}" style="animation-delay:${0.35 + i * 0.22}s">${star}</i>`).join('');
+    const stats = this.$('report-stats');
+    stats.innerHTML = report.stats.map((row, i) => `<div class="${row.tone ?? ''}" style="animation-delay:${0.2 + i * 0.12}s"><dt>${row.label}</dt><dd data-value="${row.value}" data-prefix="${row.prefix ?? ''}" data-suffix="${row.suffix ?? ''}">${row.prefix ?? ''}0${row.suffix ?? ''}</dd></div>`).join('');
+    const best = this.$('report-best');
+    best.hidden = !report.best;
+    if (report.best) {
+      this.$('report-best-image').src = report.best.image;
+      this.$('report-best-name').textContent = report.best.name;
+      this.$('report-best-damage').textContent = `${number.format(report.best.damage)} dégâts`;
+    }
+    this.$('report-note').textContent = report.note ?? '';
+    const repair = this.$('btn-report-repair');
+    repair.hidden = !report.repair;
+    if (report.repair) {
+      repair.innerHTML = `🔧 Réparer tout ${this.costHtml(report.repair.cost, have)}`;
+      repair.disabled = !report.repair.affordable;
+    }
+    this.showScreen('report');
+    // Counters roll up one after the other.
+    const cells = [...stats.querySelectorAll('dd')];
+    const start = performance.now() + 250;
+    const tick = (now) => {
+      let running = false;
+      cells.forEach((dd, i) => {
+        const t = Math.min(1, Math.max(0, (now - start - i * 120) / 700));
+        if (t < 1) running = true;
+        const eased = 1 - (1 - t) ** 3;
+        dd.textContent = `${dd.dataset.prefix}${number.format(Math.round(Number(dd.dataset.value) * eased))}${dd.dataset.suffix}`;
+      });
+      if (running && screen.classList.contains('is-visible')) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   /** Short "Annuler" toast after placing something (the timer bar runs down). */
   showUndo(text, seconds) {
     const el = this.$('undo');
@@ -609,13 +679,61 @@ export class UI {
       .join('')}</span>`;
   }
 
+  /** @param o { text, count, goal, reward (html), done, fresh } */
+  setObjective(o) {
+    const el = this.$('objective');
+    const key = o ? `${o.text}|${o.count}|${o.done}` : '';
+    if (key === this.shown.objective) return;
+    const fresh = o && this.shown.objectiveText !== o.text;
+    this.shown.objective = key;
+    this.shown.objectiveText = o?.text;
+    el.hidden = !o;
+    if (!o) return;
+    this.$('objective-text').textContent = o.done ? 'Objectif atteint !' : o.text;
+    this.$('objective-reward').innerHTML = o.reward;
+    this.$('objective-count').textContent = o.goal > 1 && !o.done ? `${Math.min(o.count, o.goal)}/${o.goal}` : o.done ? '✓' : '';
+    this.$('objective-fill').style.width = `${Math.round(Math.min(1, o.count / o.goal) * 100)}%`;
+    el.classList.toggle('is-done', Boolean(o.done));
+    if (o.done) this.restartAnimation(el, 'is-cheering');
+    else if (fresh) this.restartAnimation(el, 'is-new');
+  }
+
+  /**
+   * Arrows at the screen edge pointing to enemies out of view.
+   * @param list [{ x, y, angle, count }] in CSS pixels
+   */
+  setArrows(list) {
+    while (this.arrows.length < list.length) {
+      const el = document.createElement('div');
+      el.className = 'edge-arrow';
+      el.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 12L7 4v16z"/></svg><b></b>';
+      this.arrowLayer.append(el);
+      this.arrows.push(el);
+    }
+    this.arrows.forEach((el, i) => {
+      const a = list[i];
+      el.hidden = !a;
+      if (!a) return;
+      el.style.transform = `translate(${a.x}px, ${a.y}px)`;
+      el.firstChild.style.transform = `rotate(${a.angle}rad)`;
+      el.lastChild.textContent = a.count > 1 ? a.count : '';
+    });
+  }
+
   setRealmMode(on) {
+    document.body.classList.toggle('is-realm', on);
+    this.$('hud-row').hidden = !on;
+    if (!on) this.setArrows([]);
+    this.shown.objective = '';
     this.$('hud-res').hidden = !on;
     this.$('realm-bar').hidden = !on;
     this.$('hud-wave-label').textContent = on ? 'Jour' : 'Vague';
     this.$('btn-restart').hidden = on;
     this.$('btn-new-realm').hidden = !on;
     this.shownRes = {};
+    this.resValue = {};
+    this.resTarget = {};
+    this.resHold = {};
     this.shown.wave = '';
   }
 
@@ -625,18 +743,72 @@ export class UI {
   }
 
   /** Resource chips under the HUD: amounts and storage cap. */
+  /**
+   * Resource counters roll toward the stock; amounts still flying to the HUD
+   * (see `flyResource`) are held back until they land.
+   */
   setResources(stock, cap) {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - (this.resTime ?? now)) / 1000);
+    this.resTime = now;
     for (const el of this.$('hud-res').children) {
       const resource = el.dataset.res;
-      const value = stock[resource];
+      const target = Math.max(0, stock[resource] - (this.resHold[resource] ?? 0));
+      let shown = this.resValue[resource] ?? target;
+      if (shown !== target) {
+        const diff = target - shown;
+        const step = Math.sign(diff) * Math.max(dt * 30, Math.abs(diff) * Math.min(1, dt * 9));
+        shown = Math.abs(step) >= Math.abs(diff) ? target : shown + step;
+      }
+      this.resValue[resource] = shown;
+      if (target > (this.resTarget[resource] ?? target)) this.restartAnimation(el, 'bump');
+      this.resTarget[resource] = target;
+      const value = Math.round(shown);
       const key = `${value}/${cap}`;
       if (this.shownRes[resource] === key) continue;
-      const previous = this.shownRes[resource] ? Number(this.shownRes[resource].split('/')[0]) : value;
       this.shownRes[resource] = key;
       el.querySelector('b').textContent = number.format(value);
       el.querySelector('small').textContent = `/${number.format(cap)}`;
       el.classList.toggle('is-full', value >= cap);
-      if (value > previous) this.restartAnimation(el, 'bump');
+    }
+  }
+
+  /** Resource icons fly from a screen point into their counter; `onLand(i)` per icon. */
+  flyResource(x, y, resource, amount, icon, onLand) {
+    const counter = this.$('hud-res').querySelector(`[data-res="${resource}"]`);
+    if (!counter || amount <= 0) return;
+    const target = counter.getBoundingClientRect();
+    const tx = target.left + 14;
+    const ty = target.top + target.height / 2;
+    const count = Math.min(4, Math.max(1, Math.round(amount / 3)));
+    this.resHold[resource] = (this.resHold[resource] ?? 0) + amount;
+    let landed = 0;
+    const release = () => {
+      if (landed >= count) return;
+      landed++;
+      onLand?.(landed - 1);
+      if (landed === count) this.resHold[resource] = Math.max(0, (this.resHold[resource] ?? 0) - amount);
+    };
+    for (let i = 0; i < count; i++) {
+      const el = this.resFlyers[this.resFlyCursor];
+      this.resFlyCursor = (this.resFlyCursor + 1) % this.resFlyers.length;
+      el.textContent = icon;
+      const sx = x + (Math.random() - 0.5) * 26;
+      const sy = y + (Math.random() - 0.5) * 16;
+      el.classList.remove('is-flying');
+      el.style.transitionDelay = `${i * 0.07}s`;
+      el.style.left = `${sx}px`;
+      el.style.top = `${sy}px`;
+      el.style.transform = 'translate(0, 0) scale(1.15)';
+      void el.offsetWidth;
+      el.classList.add('is-flying');
+      el.style.transform = `translate(${tx - sx}px, ${ty - sy}px) scale(0.75)`;
+      // Timer rather than transitionend: it also fires when the page is hidden.
+      setTimeout(() => {
+        el.classList.remove('is-flying');
+        el.style.transform = '';
+        release();
+      }, 700 + i * 70);
     }
   }
 

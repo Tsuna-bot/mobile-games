@@ -51,11 +51,20 @@ export class RealmTerrain {
     this.wearTexture.magFilter = THREE.LinearFilter;
     this.wearTexture.minFilter = THREE.LinearFilter;
     this.wearTexture.needsUpdate = true;
+    // Scorch marks left by the night's battle; they fade during the day.
+    this.scorch = new Uint8Array(res * res);
+    this.scorchTexture = new THREE.DataTexture(this.scorch, res, res, THREE.RedFormat, THREE.UnsignedByteType);
+    this.scorchTexture.magFilter = THREE.LinearFilter;
+    this.scorchTexture.minFilter = THREE.LinearFilter;
+    this.scorchTexture.needsUpdate = true;
+    this.scorchCount = 0;
+    this.scorchTimer = 0;
 
     this.uniforms = {
       uTime: world.uniforms.time,
       uCloudShadow: world.uniforms.cloudShadow,
       uWear: { value: this.wearTexture },
+      uScorch: { value: this.scorchTexture },
       uGrid: { value: 0 },
       uHalf: { value: half },
       uGrassA: { value: new THREE.Color(0x4f9a3a) },
@@ -76,6 +85,7 @@ export class RealmTerrain {
           uniform float uTime;
           uniform float uCloudShadow;
           uniform sampler2D uWear;
+          uniform sampler2D uScorch;
           uniform float uGrid;
           uniform float uHalf;
           uniform vec3 uGrassA;
@@ -91,6 +101,9 @@ export class RealmTerrain {
           wear = smoothstep(0.12, 0.75, wear + (gNoise(p * 5.0) - 0.5) * 0.25);
           vec3 dirt = uDirt * (0.85 + gNoise(p * 6.0) * 0.3);
           vec3 ground = mix(grass, dirt, wear);
+          float burn = texture2D(uScorch, p / (2.0 * uHalf) + 0.5).r;
+          burn = smoothstep(0.08, 0.7, burn + (gNoise(p * 7.0) - 0.5) * 0.3);
+          ground = mix(ground, vec3(0.16, 0.12, 0.09) * (0.8 + gNoise(p * 13.0) * 0.4), burn * 0.62);
           vec2 cellEdge = abs(fract(p + 0.5) - 0.5);
           float line = 1.0 - smoothstep(0.0, 0.035, min(cellEdge.x, cellEdge.y));
           ground = mix(ground, vec3(1.0), line * uGrid * 0.35);
@@ -103,7 +116,7 @@ export class RealmTerrain {
     ground.position.y = TOP;
     ground.receiveShadow = true;
     world.root.add(ground);
-    world.disposables.push(groundGeometry, groundMaterial, this.wearTexture);
+    world.disposables.push(groundGeometry, groundMaterial, this.wearTexture, this.scorchTexture);
 
     // Worn areas from the start: around the castle and at each portal.
     const base = level.base;
@@ -223,6 +236,26 @@ export class RealmTerrain {
     this.wearDirty = true;
   }
 
+  /** A burnt patch on the grass (explosions, UFO lasers). */
+  addScorch(x, z, radius, amount = 1) {
+    if (!this.scorch) return;
+    const res = this.res;
+    const scale = res / this.size;
+    const cx = (x + this.half) * scale;
+    const cz = (z + this.half) * scale;
+    const r = radius * scale;
+    for (let tz = Math.max(0, Math.floor(cz - r)); tz <= Math.min(res - 1, Math.ceil(cz + r)); tz++) {
+      for (let tx = Math.max(0, Math.floor(cx - r)); tx <= Math.min(res - 1, Math.ceil(cx + r)); tx++) {
+        const d = Math.hypot(tx + 0.5 - cx, tz + 0.5 - cz) / r;
+        if (d >= 1) continue;
+        const i = tz * res + tx;
+        this.scorch[i] = Math.min(255, this.scorch[i] + amount * 255 * (1 - d * d));
+      }
+    }
+    this.scorchCount = 1;
+    this.wearDirty = true;
+  }
+
   /** Grid lines while placing buildings. */
   showGrid(on) {
     this.gridTarget = on ? 1 : 0;
@@ -236,6 +269,20 @@ export class RealmTerrain {
       this.wearTimer = 0.4;
       this.wearDirty = false;
       this.wearTexture.needsUpdate = true;
+      this.scorchTexture.needsUpdate = true;
+    }
+    // Burns fade out over a couple of minutes.
+    this.scorchTimer -= dt;
+    if (this.scorchCount && this.scorchTimer <= 0) {
+      this.scorchTimer = 1;
+      let left = 0;
+      for (let i = 0; i < this.scorch.length; i++) {
+        if (!this.scorch[i]) continue;
+        this.scorch[i] = Math.max(0, this.scorch[i] - 2);
+        left += this.scorch[i] > 0 ? 1 : 0;
+      }
+      this.scorchCount = left;
+      this.scorchTexture.needsUpdate = true;
     }
   }
 

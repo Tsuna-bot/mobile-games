@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v7';
+const VERSION = 'bastion-v8';
 
 const APP_SHELL = [
   './',
@@ -219,6 +219,7 @@ const APP_SHELL = [
   './src/data/achievements.js',
   './src/data/enemies.js',
   './src/data/levels.js',
+  './src/data/objectives.js',
   './src/data/perks.js',
   './src/data/realm.js',
   './src/data/spells.js',
@@ -226,6 +227,7 @@ const APP_SHELL = [
   './src/data/towers.js',
   './src/data/waves.js',
   './src/game/game.js',
+  './src/game/realmHud.js',
   './src/game/realmMode.js',
   './src/input/pointer.js',
   './src/main.js',

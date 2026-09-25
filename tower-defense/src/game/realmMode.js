@@ -2,22 +2,23 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { damp } from '../core/math.js';
 import { clearRealm, loadRealm, writeRealm, writeSave } from '../core/storage.js';
+import { OBJECTIVES, TUTORIAL_OBJECTIVES, objectiveAt } from '../data/objectives.js';
 import { BUILDINGS, CASTLE_LEVELS, REALM, RESEARCH, RESEARCH_GROUPS, RESOURCE_INFO, UNDO_WINDOW } from '../data/realm.js';
 import { SPELLS } from '../data/spells.js';
 import { THEMES } from '../data/themes.js';
 import { TOWERS, TOWER_ORDER } from '../data/towers.js';
 import { PHASE, RealmSim } from '../sim/realm.js';
+import { RealmHud } from './realmHud.js';
 
 const REALM_DEF = { id: 'realm', theme: 'meadow', name: 'Royaume', endless: true };
 const DUSK = 12;
+const WARNINGS = [30, 10];
+const MIST_TIME = 50;
 const OFFLINE_MIN = 60;
 const SWING_EVERY = 0.8;
 const HAMMER_EVERY = 0.55;
-const TUTORIAL = [
-  'Tes ouvriers récoltent tout seuls. Touche un arbre, un rocher ou un cristal pour y envoyer un ouvrier.',
-  'Touche une case d’herbe libre pour construire : tours, palissades, maisons…',
-  'À la nuit, les ovnis sortent du portail et foncent vers le château. Lance la nuit quand tu es prêt !',
-];
+const OBJECTIVE_CHEER = 2.4;
+const HINT_TIME = 6000;
 
 function formatTime(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
@@ -26,6 +27,10 @@ function formatTime(seconds) {
 
 function formatRate(seconds) {
   return `${(1 / seconds).toFixed(seconds < 0.5 ? 1 : 2).replace('.', ',')}/s`;
+}
+
+function rewardText(reward) {
+  return Object.entries(reward).map(([r, a]) => (r === 'gems' ? `${a} 💎` : `${a} ${RESOURCE_INFO[r].icon}`)).join(' ');
 }
 
 function costText(cost) {
@@ -44,15 +49,19 @@ export class RealmMode {
     this.cycleT = 0;
     this.ambientNight = null;
     this.sheetKey = '';
-    this.tutorialStep = -1;
     this.confirmReset = false;
+    this.objectiveIndex = 0;
+    this.objectiveDoneAt = 0;
+    this.flags = {};
     this.dayProgress = 0;
-    this.lastSite = null;
+    this.undoSites = [];
+    this.stroke = null;
     this.bindUi();
+    this.hud = new RealmHud(this);
     // A felled tree hits the ground: dust and a thud.
-    game.realmViews.onTreeLanded = (cell) => {
+    game.realmViews.onTreeLanded = (cell, dirX, dirZ) => {
       if (!this.active) return;
-      game.effects.depleted(cell.x, cell.z, 'wood');
+      game.effects.treeLanded(cell.x, cell.z, dirX, dirZ);
       if (this.nearCamera(cell.x, cell.z, 10)) {
         game.audio.thud();
         game.haptics.pulse(CONFIG.haptics.tap);
@@ -79,6 +88,9 @@ export class RealmMode {
     ui.on('btn-new-realm', () => this.newRealm());
     ui.on('btn-realm-extra', () => this.extraSelected());
     ui.on('btn-undo', () => this.undoLast());
+    ui.on('btn-report-ok', () => this.closeReport());
+    ui.on('objective', () => this.showObjectiveHint());
+    ui.on('btn-report-repair', () => this.repairFromReport());
     ui.on('realmTab', () => this.refreshBuild(true));
     ui.on('realmBuildCard', (id) => this.chooseItem(id));
     ui.on('job', (resource, delta) => this.changeJob(resource, delta));
@@ -122,7 +134,8 @@ export class RealmMode {
     this.cycleT = this.sim.phase === PHASE.NIGHT ? 1 : 0;
     this.dayProgress = this.dayTarget();
     this.ambientNight = null;
-    this.lastSite = null;
+    this.undoSites = [];
+    this.warned = this.sim.phase === PHASE.DAY ? WARNINGS.filter((w) => this.sim.phaseTimer <= w) : [...WARNINGS];
     this.applyCycle(true);
     game.realmViews.build(this.sim);
     for (const tower of this.sim.towers) game.towerViews.add(tower);
@@ -156,8 +169,12 @@ export class RealmMode {
     game.tutorialStep = -1;
     this.save.realm.played = true;
     writeSave(this.save);
-    this.tutorialStep = this.save.realm.tutorialDone ? -1 : 0;
-    this.ui.coach(this.tutorialStep >= 0 ? TUTORIAL[0] : null);
+    // Objectives: resume, skipping any an older save already fulfils.
+    this.flags = { sent: Boolean(data), ...(data?.flags ?? {}) };
+    this.objectiveIndex = data?.objective ?? 0;
+    this.objectiveDoneAt = 0;
+    while (this.objectiveIndex < OBJECTIVES.length && data?.objective === undefined && this.objectiveProgress() >= objectiveAt(this.objectiveIndex).goal) this.objectiveIndex++;
+    this.coachObjective();
     this.persist();
     game.loop.start();
   }
@@ -176,7 +193,7 @@ export class RealmMode {
 
   persist() {
     if (!this.active || !this.sim) return;
-    writeRealm({ ...this.sim.serialize(), savedAt: Date.now() });
+    writeRealm({ ...this.sim.serialize(), savedAt: Date.now(), objective: this.objectiveIndex, flags: this.flags });
   }
 
   newRealm() {
@@ -215,8 +232,17 @@ export class RealmMode {
       if (selected === structure || (selected?.kind === 'site' && selected.target === structure)) game.deselect();
     };
     const siteName = (site) => (site.target?.kind === 'castle' ? CASTLE_LEVELS[site.level].name : site.def.name);
+    const terrain = game.world.terrain;
     return {
       ...base,
+      onEnemyKilled: (enemy) => {
+        terrain.addScorch(enemy.x, enemy.z, enemy.def.id === 'boss' ? 1.3 : 0.55, 0.45);
+        base.onEnemyKilled(enemy);
+      },
+      onImpact: (projectile) => {
+        if (projectile.splash > 0 && projectile.kind !== 'poison') terrain.addScorch(projectile.x, projectile.z, projectile.splash * 0.55, 0.3);
+        base.onImpact(projectile);
+      },
       onEnemySpawn: (enemy) => {
         game.enemyViews.acquire(enemy);
         if (enemy.fromPortal) effects.spawnBeam(enemy.x, enemy.z);
@@ -240,7 +266,6 @@ export class RealmMode {
         effects.build(site.x, site.z, false);
         game.audio.build();
         game.haptics.pulse(CONFIG.haptics.tap);
-        this.advanceTutorial(1);
       },
       onSiteComplete: (site, structure) => {
         views.removeSite(site);
@@ -249,7 +274,7 @@ export class RealmMode {
         if (!wall && this.nearCamera(site.x, site.z, 14)) {
           game.floatAt(site.x, 1.8, site.z, site.target ? `⬆ ${siteName(site)} niv. ${site.level + 1}` : `✔ ${siteName(site)}`, 'res');
           game.audio.upgrade();
-          game.haptics.pulse(CONFIG.haptics.build);
+          game.haptics.pulse(CONFIG.haptics.complete);
         }
         if (game.selection?.structure === site) this.selectStructure(structure, false);
         this.persist();
@@ -260,7 +285,8 @@ export class RealmMode {
         const text = costText(back);
         if (text) game.floatAt(site.x, 1, site.z, `+${text}`, 'res');
         game.audio.sell();
-        if (this.lastSite === site) this.ui.hideUndo();
+        this.undoSites = this.undoSites.filter((x) => x !== site);
+        if (!this.undoSites.length) this.ui.hideUndo();
         this.persist();
       },
       onTowerBuilt: (tower) => {
@@ -282,7 +308,9 @@ export class RealmMode {
       onCastleUpgraded: (castle) => {
         views.upgradeStructure(castle);
         effects.upgrade(castle.x, castle.z);
+        effects.siteDone(castle.x, castle.z, true);
         game.rig.shake(0.35);
+        game.rig.punch(0.1);
         const now = CASTLE_LEVELS[castle.level];
         const before = CASTLE_LEVELS[castle.level - 1];
         this.ui.showBanner(`🏰 ${now.name}`, `+${now.hp - before.hp} vie · +${now.storage - before.storage} stockage · +${now.workers - before.workers} ouvrier`);
@@ -304,13 +332,20 @@ export class RealmMode {
       },
       onStructureDestroyed: (structure) => {
         effects.destroyed(structure.cell.x, structure.cell.z);
+        effects.rubble(structure.cell.x, structure.cell.z, structure.kind !== 'site' && (structure.def.id !== 'wall' || structure.level > 0));
+        terrain.addScorch(structure.cell.x, structure.cell.z, 0.9, 0.6);
+        game.haptics.pulse(CONFIG.haptics.leak);
         game.floatAt(structure.cell.x, 1.2, structure.cell.z, structure.kind === 'site' ? 'Chantier détruit !' : structure.def.id === 'wall' ? 'Brèche !' : 'Détruit !', 'danger');
         removeView(structure);
         game.audio.explosion(false);
         game.rig.shake(0.15);
       },
       onSiegeHit: (enemy, structure) => {
-        effects.siegeHit(structure.cell.x, CONFIG.world.tileTop + 0.5, structure.cell.z);
+        const y = CONFIG.world.tileTop + 0.45;
+        const from = enemy.view?.root?.position;
+        if (from) effects.laserZap(from.x, from.y, from.z, structure.cell.x, y, structure.cell.z);
+        effects.siegeHit(structure.cell.x, y, structure.cell.z);
+        terrain.addScorch(structure.cell.x + (Math.random() - 0.5) * 0.6, structure.cell.z + (Math.random() - 0.5) * 0.6, 0.35, 0.2);
         views.hitStructure(structure);
         game.audio.siege();
       },
@@ -318,8 +353,10 @@ export class RealmMode {
       onWorkerRemoved: (worker) => views.removeWorker(worker),
       onHarvest: (worker, cell) => views.nodeChanged(cell),
       onDeliver: (worker, resource, added, amount) => {
-        if (added > 0) game.floatAt(worker.x, 0.95, worker.z, `+${added} ${RESOURCE_INFO[resource].icon}`, 'res');
-        else if (amount > 0) game.floatAt(worker.x, 0.95, worker.z, 'Stock plein', 'danger');
+        if (added > 0) {
+          game.floatAt(worker.x, 0.95, worker.z, `+${added}`, 'res');
+          this.flyToHud(worker.x, 0.8, worker.z, resource, added);
+        } else if (amount > 0) game.floatAt(worker.x, 0.95, worker.z, 'Stock plein', 'danger');
         game.audio.deliver();
       },
       onNodeDepleted: (cell) => {
@@ -342,15 +379,16 @@ export class RealmMode {
         const count = wave.spawns.length;
         this.ui.showBanner(`🌙 Nuit ${night}`, `${count} ovnis · ${portals} portail${portals > 1 ? 's' : ''}${newPortal ? ' (nouveau !)' : ''}${bonus ? ` · +${bonus} or` : ''}`, 'danger');
         game.audio.nightfall();
+        game.rig.punch(0.05);
+        game.haptics.pulse(CONFIG.haptics.night);
+        if (newPortal) game.rig.shake(0.4);
         game.audio.setIntensity(1);
-        this.advanceTutorial(2);
         this.persist();
       },
       onDawn: (day, info) => {
-        if (info.fallen) {
-          this.ui.showBanner(`☀️ Jour ${day}`, 'Le château tient encore, à moitié réparé', 'danger');
-        } else {
-          this.ui.showBanner(`☀️ Jour ${day}`, `Nuit ${info.night} repoussée · +${info.gold} or${info.gems ? ` · +${info.gems} gemmes` : ''}`);
+        this.warned = [];
+        this.openReport(day, info);
+        if (!info.fallen) {
           this.save.gems += info.gems;
           this.save.stats.realmNights = (this.save.stats.realmNights ?? 0) + 1;
           this.save.realm.bestNight = Math.max(this.save.realm.bestNight, info.night);
@@ -359,12 +397,11 @@ export class RealmMode {
         }
         game.audio.dawn();
         game.audio.setIntensity(0);
-        game.flyCoinsFrom(this.sim.level.base.x, 1.5, this.sim.level.base.z, 6);
         this.portalsBefore = this.sim.activePortals().length;
         this.persist();
       },
       onCastleFallen: (loss) => {
-        setTimeout(() => this.ui.showBanner('Le château est tombé !', `Les pillards emportent ${costText(loss)}`, 'danger'), 50);
+        this.lastLoss = loss;
         game.audio.defeat();
         game.rig.shake(1);
         game.haptics.pulse(CONFIG.haptics.leak);
@@ -389,17 +426,135 @@ export class RealmMode {
     };
   }
 
-  advanceTutorial(step) {
-    if (this.tutorialStep !== step) return;
-    this.tutorialStep++;
-    if (this.tutorialStep < TUTORIAL.length) {
-      this.ui.coach(TUTORIAL[this.tutorialStep]);
+  // ------------------------------------------------------------ dawn report
+
+  openReport(day, info) {
+    const game = this.game;
+    const sim = this.sim;
+    const report = info.report;
+    const leaked = report.leaks * REALM.leakDamage;
+    const stars = info.fallen ? 0 : Math.max(1, 3 - (report.leaks > 0 ? 1 : 0) - (report.lost > 0 || report.leaks > 4 ? 1 : 0));
+    const stats = [
+      { label: 'Ovnis détruits', value: report.kills, tone: 'good' },
+      { label: 'Or gagné', value: Math.max(0, report.gold), prefix: '+', tone: 'gold' },
+      { label: 'Dégâts au château', value: leaked, prefix: leaked ? '−' : '', tone: leaked ? 'bad' : '' },
+      { label: 'Bâtiments perdus', value: report.lost, tone: report.lost ? 'bad' : '' },
+    ];
+    if (info.gems) stats.push({ label: 'Gemmes', value: info.gems, prefix: '+', suffix: ' 💎', tone: 'gold' });
+    const notes = [];
+    if (info.fallen && this.lastLoss) notes.push(`Les pillards ont emporté ${costText(this.lastLoss)}.`);
+    const quote = sim.repairQuote();
+    if (quote.damaged.length) notes.push('Les maçons ont réparé la moitié des dégâts.');
+    if (sim.activePortals().length > this.portalsBefore) notes.push('⚠️ Un nouveau portail s’ouvrira cette nuit.');
+    const best = report.best;
+    this.lastLoss = null;
+    game.deselect();
+    game.armSpell(null);
+    game.mode = 'report';
+    this.ui.setPlayingUi(false);
+    this.ui.showNightReport({
+      kicker: `Aube du jour ${day}`,
+      title: info.fallen ? 'Le château est tombé…' : stars === 3 ? `Nuit ${info.night} : sans faute !` : `Nuit ${info.night} repoussée !`,
+      danger: info.fallen,
+      stars,
+      stats,
+      best: best && { name: `${best.name} niv. ${best.level + 1}`, damage: best.damage, image: this.ui.thumbnails.towers[best.type][best.level] },
+      note: notes.join(' '),
+      repair: quote.damaged.length ? { cost: quote.cost, affordable: sim.canAfford(quote.cost) } : null,
+    }, (r) => sim.amountOf(r));
+    game.haptics.pulse(info.fallen ? CONFIG.haptics.leak : CONFIG.haptics.victory);
+    if (!info.fallen) setTimeout(() => game.audio.victory(), 350);
+  }
+
+  closeReport() {
+    const game = this.game;
+    if (game.mode !== 'report') return;
+    game.mode = 'playing';
+    this.ui.showScreen(null);
+    this.ui.setPlayingUi(true);
+    game.audio.click();
+    const base = this.sim.level.base;
+    game.flyCoinsFrom(base.x, 1.5, base.z, 6);
+    this.persist();
+  }
+
+  repairFromReport() {
+    if (!this.sim.repairAll()) {
+      this.game.audio.denied();
       return;
     }
-    this.tutorialStep = -1;
+    this.ui.$('btn-report-repair').hidden = true;
+    this.persist();
+  }
+
+  // ------------------------------------------------------------ objectives
+
+  objectiveProgress() {
+    return objectiveAt(this.objectiveIndex).progress(this.sim, this.flags);
+  }
+
+  /** The first objectives teach the basics: their hint stays in the coach bubble. */
+  coachObjective() {
+    const tutorial = !this.save.realm.tutorialDone;
+    if (tutorial && this.objectiveIndex >= TUTORIAL_OBJECTIVES) {
+      this.save.realm.tutorialDone = true;
+      writeSave(this.save);
+    }
+    this.ui.coach(tutorial && this.objectiveIndex < TUTORIAL_OBJECTIVES ? objectiveAt(this.objectiveIndex).hint : null);
+  }
+
+  showObjectiveHint() {
+    const objective = objectiveAt(this.objectiveIndex);
+    this.ui.coach(objective.hint);
+    this.game.audio.click();
+    this.game.haptics.pulse(CONFIG.haptics.tap);
+    clearTimeout(this.hintTimer);
+    this.hintTimer = setTimeout(() => this.coachObjective(), HINT_TIME);
+  }
+
+  updateObjective() {
+    const objective = objectiveAt(this.objectiveIndex);
+    const reward = `Récompense : ${rewardText(objective.reward)}`;
+    if (this.objectiveDoneAt) {
+      if (this.sim.time - this.objectiveDoneAt < OBJECTIVE_CHEER) return;
+      this.objectiveDoneAt = 0;
+      this.objectiveIndex++;
+      this.coachObjective();
+      this.persist();
+      return;
+    }
+    const count = this.objectiveProgress();
+    if (count >= objective.goal) {
+      this.completeObjective(objective);
+      this.ui.setObjective({ text: objective.text, count, goal: objective.goal, reward, done: true });
+      return;
+    }
+    this.ui.setObjective({ text: objective.text, count, goal: objective.goal, reward, done: false });
+  }
+
+  completeObjective(objective) {
+    const game = this.game;
+    const sim = this.sim;
+    this.objectiveDoneAt = sim.time || 0.001;
+    const rect = this.ui.$('objective').getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const [resource, amount] of Object.entries(objective.reward)) {
+      if (resource === 'gems') {
+        this.save.gems += amount;
+        writeSave(this.save);
+      } else if (resource === 'gold') {
+        sim.addGold(amount);
+        this.ui.flyCoins(x, y, 6);
+      } else {
+        sim.stock[resource] += amount;
+        this.ui.flyResource(x, y, resource, amount, RESOURCE_INFO[resource].icon, (i) => game.audio.collect(i));
+      }
+    }
+    game.audio.upgrade();
+    game.haptics.pulse(CONFIG.haptics.complete);
+    clearTimeout(this.hintTimer);
     this.ui.coach(null);
-    this.save.realm.tutorialDone = true;
-    writeSave(this.save);
   }
 
   // ------------------------------------------------------------ input
@@ -452,7 +607,7 @@ export class RealmMode {
     game.floatAt(cell.x, 1.4, cell.z, `👷 → ${info.icon}`, 'res');
     game.audio.click();
     game.haptics.pulse(CONFIG.haptics.tap);
-    this.advanceTutorial(0);
+    this.flags.sent = true;
     setTimeout(() => {
       if (!game.selection) game.effects.hideCursor();
     }, 700);
@@ -488,7 +643,7 @@ export class RealmMode {
     const game = this.game;
     const rect = game.view.canvas.getBoundingClientRect();
     const point = game.rig.toScreen(new THREE.Vector3(cell.x, 0.3, cell.z), rect);
-    const limit = rect.top + rect.height * 0.42;
+    const limit = rect.top + rect.height * 0.5;
     if (point.y > limit) game.rig.pan(0, -(point.y - limit));
   }
 
@@ -500,7 +655,7 @@ export class RealmMode {
     game.effects.hideRange();
     this.sheetKey = '';
     this.ui.openRealmBuild(this.buildItems(), null, (r) => this.sim.amountOf(r));
-    game.audio.click();
+    game.audio.whoosh();
     game.haptics.pulse(CONFIG.haptics.tap);
   }
 
@@ -565,8 +720,9 @@ export class RealmMode {
       this.ui.denyRealmCard(id);
       return;
     }
-    this.lastSite = site;
-    this.ui.showUndo(id === 'wall' ? 'Palissade en chantier' : `${site.def.name} en chantier`, UNDO_WINDOW);
+    if (this.stroke) this.stroke.push(site);
+    else this.undoSites = [site];
+    if (!this.stroke) this.ui.showUndo(id === 'wall' ? 'Palissade en chantier' : `${site.def.name} en chantier`, UNDO_WINDOW);
     if (id === 'wall') {
       // Wall mode: the sheet steps aside and every tap on free grass extends the wall.
       const first = !game.selection?.repeat;
@@ -575,13 +731,63 @@ export class RealmMode {
       game.effects.hideRange();
       if (first) {
         this.ui.closeSheets();
-        this.ui.showModeHint('🧱 Touche des cases pour le mur', 'OK');
+        this.ui.showModeHint('🧱 Touche ou glisse pour tracer', 'OK');
       }
       this.persist();
       return;
     }
     game.deselect();
     this.persist();
+  }
+
+  // ------------------------------------------------------------ painting walls
+
+  /** A one-finger drag in wall mode lays walls along the finger instead of panning. */
+  dragStart(x, y) {
+    const selection = this.game.selection;
+    if (selection?.kind !== 'build' || (!selection.repeat && selection.pending !== 'wall')) return false;
+    this.paintCell = null;
+    this.painted = 0;
+    this.stroke = [];
+    return true;
+  }
+
+  dragMove(x, y) {
+    const game = this.game;
+    const sim = this.sim;
+    const rect = game.view.canvas.getBoundingClientRect();
+    const hit = game.rig.groundAt(x, y, rect);
+    const cell = hit ? sim.level.cellAtWorld(hit.x, hit.z) : null;
+    if (!cell || cell === this.paintCell) return;
+    // Fill the cells between two samples when the finger moves fast.
+    const from = this.paintCell ?? cell;
+    const steps = Math.max(Math.abs(cell.col - from.col), Math.abs(cell.row - from.row));
+    for (let i = 1; i <= Math.max(1, steps); i++) {
+      const t = steps ? i / steps : 1;
+      const c = sim.level.cellAt(Math.round(from.col + (cell.col - from.col) * t), Math.round(from.row + (cell.row - from.row) * t));
+      if (!c || !sim.canPlace(c)) continue;
+      if (!sim.canAfford(sim.buildCost('wall'))) {
+        if (!this.paintPoor) {
+          this.paintPoor = true;
+          game.floatAt(c.x, 1, c.z, 'Pas assez de bois', 'danger');
+          game.audio.denied();
+        }
+        break;
+      }
+      this.buildAt(c, 'wall');
+      this.painted++;
+    }
+    this.paintCell = cell;
+  }
+
+  dragEnd() {
+    this.paintCell = null;
+    this.paintPoor = false;
+    const stroke = this.stroke ?? [];
+    this.stroke = null;
+    if (!stroke.length) return;
+    this.undoSites = stroke;
+    this.ui.showUndo(stroke.length > 1 ? `${stroke.length} palissades en chantier` : 'Palissade en chantier', UNDO_WINDOW);
   }
 
   // ------------------------------------------------------------ info sheet
@@ -623,7 +829,7 @@ export class RealmMode {
   }
 
   undoWindowOpen(site) {
-    return site === this.lastSite && this.sim.time - site.startedAt <= UNDO_WINDOW;
+    return this.undoSites.includes(site) && this.sim.time - site.startedAt <= UNDO_WINDOW + 1;
   }
 
   refreshInfo(force = false) {
@@ -808,11 +1014,11 @@ export class RealmMode {
 
   /** "Annuler" toast: takes back the last site, fully refunded. */
   undoLast() {
-    const site = this.lastSite;
+    const sites = this.undoSites.filter((site) => this.sim.sites.includes(site) && this.undoWindowOpen(site));
     this.ui.hideUndo();
-    if (!site || !this.sim.sites.includes(site) || !this.undoWindowOpen(site)) return;
-    this.sim.cancelSite(site, 1);
-    this.lastSite = null;
+    this.undoSites = [];
+    if (!sites.length) return;
+    for (const site of sites) this.sim.cancelSite(site, 1);
     if (this.game.selection?.kind === 'build' && this.game.selection.repeat && !this.sim.sites.some((x) => x.typeId === 'wall')) this.game.deselect();
     this.game.haptics.pulse(CONFIG.haptics.tap);
   }
@@ -958,6 +1164,15 @@ export class RealmMode {
     return Math.max(0, Math.min(1, 1 - sim.phaseTimer / length));
   }
 
+  /** Icons of a delivery fly from the map into the HUD counter (when on screen). */
+  flyToHud(x, y, z, resource, amount) {
+    const game = this.game;
+    const rect = game.view.canvas.getBoundingClientRect();
+    const point = game.rig.toScreen(game.tmp.set(x, y, z), rect);
+    if (!point.visible || point.x < rect.left || point.x > rect.right || point.y < rect.top || point.y > rect.bottom) return;
+    this.ui.flyResource(point.x, point.y, resource, amount, RESOURCE_INFO[resource].icon, (i) => game.audio.collect(i));
+  }
+
   nearCamera(x, z, radius) {
     const target = this.game.rig.target;
     return Math.hypot(x - target.x, z - target.z) < radius;
@@ -992,7 +1207,7 @@ export class RealmMode {
     if (nightAmbient !== this.ambientNight) {
       this.ambientNight = nightAmbient;
       const half = this.sim.level.width / 2 + 1.5;
-      game.world.ambient.configure(nightAmbient ? THEMES.night.ambient : THEMES.meadow.ambient, half, half);
+      game.world.ambient.configure(nightAmbient ? THEMES.night.ambient : 'leaves', half, half);
     }
   }
 
@@ -1001,7 +1216,17 @@ export class RealmMode {
     const sim = this.sim;
     this.applyCycle(false, realDt);
     game.realmViews.update(dt, time, game.view.camera, this.cycleT);
-    game.world.terrain.showGrid(game.selection?.kind === 'build');
+    game.audio.ambience(realDt, this.cycleT);
+    this.updateMist();
+    this.checkWarnings();
+    const selection = game.selection;
+    const building = selection?.kind === 'build';
+    game.world.terrain.showGrid(building);
+    game.realmViews.showPath(building || (sim.phase === PHASE.DAY && sim.phaseTimer < WARNINGS[0]));
+    if (building && selection.pending && selection.cell) {
+      const cost = sim.buildCost(selection.pending);
+      game.realmViews.setGhost(selection.pending, selection.cell, sim.canAfford(cost));
+    } else game.realmViews.setGhost(null);
 
     // Swings of the axe and pick: chips and sounds near the camera.
     for (const worker of sim.workers) {
@@ -1035,6 +1260,8 @@ export class RealmMode {
     }
 
     if (game.mode !== 'playing') return;
+    this.hud.update(realDt);
+    this.updateObjective();
     this.ui.setStats(Math.ceil(sim.lives), sim.gold, null, null);
     this.ui.setResources(sim.stock, sim.storageCap());
     this.ui.setDay(`${sim.day} ${sim.phase === PHASE.NIGHT ? '🌙' : '☀️'}`);
@@ -1052,6 +1279,32 @@ export class RealmMode {
     if (kind === 'build') this.refreshBuild();
     else if (kind === 'structure') this.refreshInfo();
     else if (kind === 'workers') this.refreshWorkers();
+  }
+
+  /** Mist hangs over the fields at dawn and burns off during the first minute. */
+  updateMist() {
+    const sim = this.sim;
+    let amount = 0;
+    if (sim.phase === PHASE.DAY && sim.day > 1) {
+      const elapsed = REALM.dayLength - sim.phaseTimer;
+      amount = 1 - Math.min(1, Math.max(0, elapsed / MIST_TIME));
+      amount = amount * amount * (3 - 2 * amount);
+    }
+    this.game.realmViews.setMist(amount);
+  }
+
+  /** Bell and banner 30 s and 10 s before nightfall. */
+  checkWarnings() {
+    const sim = this.sim;
+    if (sim.phase !== PHASE.DAY) return;
+    for (const seconds of WARNINGS) {
+      if (sim.phaseTimer > seconds || this.warned.includes(seconds)) continue;
+      this.warned.push(seconds);
+      const urgent = seconds <= 10;
+      this.ui.showBanner(urgent ? '⚠️ La nuit tombe !' : '🌆 Le soir approche', urgent ? `Plus que ${seconds} s : aux remparts !` : `${seconds} s avant la nuit`, urgent ? 'danger' : '');
+      this.game.audio.warning(urgent);
+      this.game.haptics.pulse(CONFIG.haptics.warning);
+    }
   }
 
   waveButtonState() {

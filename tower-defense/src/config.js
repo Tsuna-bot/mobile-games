@@ -71,5 +71,8 @@ export const CONFIG = {
     build: 18,
     leak: [40, 30, 60],
     victory: [30, 40, 30, 40, 80],
+    complete: [16, 70, 16],
+    warning: [25, 90, 25],
+    night: [40, 120, 40, 120, 60],
   },
 };

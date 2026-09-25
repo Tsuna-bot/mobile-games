@@ -341,6 +341,9 @@ export class Game {
     this.input.onPan = (dx, dy) => {
       if (this.mode === MODE.PLAYING || this.mode === MODE.ENDED) this.rig.pan(dx, dy);
     };
+    this.input.onDragStart = (x, y) => this.mode === MODE.PLAYING && Boolean(this.realm?.dragStart(x, y));
+    this.input.onDragMove = (x, y) => this.realm?.dragMove(x, y);
+    this.input.onDragEnd = () => this.realm?.dragEnd();
     this.input.onZoom = (factor) => {
       if (this.mode === MODE.PLAYING || this.mode === MODE.ENDED) this.rig.zoomBy(factor);
     };
@@ -836,7 +839,7 @@ export class Game {
   }
 
   toggleSpeed() {
-    this.speed = this.speed === 1 ? 2 : 1;
+    this.speed = this.speed >= 3 ? 1 : this.speed + 1;
     this.loop.timeScale = this.speed;
     this.ui.setSpeed(this.speed);
     this.audio.click();

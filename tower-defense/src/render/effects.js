@@ -19,6 +19,9 @@ const COLORS = {
   stone: new THREE.Color(0xa6a2b8),
   crystal: new THREE.Color(0xd08cff),
   flame: new THREE.Color(0xff7a2a),
+  leaf: new THREE.Color(0x6aa83a),
+  autumn: new THREE.Color(0xe08a2e),
+  laser: new THREE.Color(0x7dff5a),
 };
 
 export { COLORS as EFFECT_COLORS };
@@ -238,17 +241,81 @@ export class Effects {
     this.sparks.burst(x, CONFIG.world.tileTop + 0.3, z, this.count(10), 2, COLORS.acid, 0.12, 0.6, { upward: 0.8, gravity: 2, brightness: 1.2 });
   }
 
-  /** Chips flying off a tree, rock or crystal being gathered. */
+  /** Chips flying off a tree, rock or crystal being gathered (and a leaf or two from trees). */
   chips(x, z, resource) {
+    const top = CONFIG.world.tileTop;
     const color = COLORS[resource] ?? COLORS.dust;
-    this.puffs.burst(x, CONFIG.world.tileTop + 0.4, z, this.count(6), 1.6, color, 0.09, 0.5, { upward: 0.8, gravity: 5, drag: 1, endSize: 0.05 });
+    this.puffs.burst(x, top + 0.4, z, this.count(6), 1.6, color, 0.09, 0.5, { upward: 0.8, gravity: 5, drag: 1, endSize: 0.05 });
+    if (resource === 'wood' && Math.random() < 0.7) this.leaves(x, top + 1.1, z, 2);
+    if (resource === 'crystal') this.sparks.burst(x, top + 0.5, z, this.count(4), 1.4, COLORS.crystal, 0.08, 0.4, { upward: 0.7, gravity: 3, brightness: 1.8 });
   }
 
-  /** A tree falls or a rock crumbles. */
+  /** Leaves fluttering down. */
+  leaves(x, y, z, count) {
+    for (let i = 0; i < this.count(count); i++) {
+      const color = Math.random() < 0.3 ? COLORS.autumn : COLORS.leaf;
+      this.puffs.emit(x + (Math.random() - 0.5) * 0.5, y + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.8, 0.2, (Math.random() - 0.5) * 0.8, color, 0.09, 1.6 + Math.random(), { endSize: 0.07, drag: 1.8, gravity: 0.35 });
+    }
+  }
+
+  /** Rocks burst into chunks, crystals shatter into glittering shards. */
   depleted(x, z, resource) {
+    const top = CONFIG.world.tileTop;
+    if (resource === 'crystal') {
+      this.sparks.burst(x, top + 0.5, z, this.count(28), 4, COLORS.crystal, 0.16, 0.9, { upward: 0.8, gravity: 6, drag: 0.8, brightness: 1.8, endSize: 0.03 });
+      this.sparks.burst(x, top + 0.6, z, this.count(16), 1.4, COLORS.spark, 0.1, 1.3, { upward: 0.9, gravity: -0.4, drag: 1.5, brightness: 2 });
+      this.flash(x, top + 0.5, z, 1.8);
+      this.ring(x, z, 1.1, 0.5, COLORS.crystal);
+      return;
+    }
+    if (resource === 'stone') {
+      this.puffs.burst(x, top + 0.35, z, this.count(16), 3.2, COLORS.stone, 0.2, 0.9, { upward: 0.75, gravity: 8, drag: 0.5, endSize: 0.14 });
+      this.puffs.burst(x, top + 0.15, z, this.count(12), 1.6, COLORS.dust, 0.45, 1.1, { upward: 0.35, drag: 3, endSize: 1.1 });
+      this.ring(x, z, 1, 0.45, COLORS.dust);
+      return;
+    }
     const color = COLORS[resource] ?? COLORS.dust;
-    this.puffs.burst(x, CONFIG.world.tileTop + 0.3, z, this.count(14), 2.2, color, 0.16, 0.8, { upward: 0.6, gravity: 4, drag: 1, endSize: 0.06 });
-    this.puffs.burst(x, CONFIG.world.tileTop + 0.2, z, this.count(8), 1.2, COLORS.dust, 0.35, 0.9, { upward: 0.4, drag: 3, endSize: 0.8 });
+    this.puffs.burst(x, top + 0.3, z, this.count(14), 2.2, color, 0.16, 0.8, { upward: 0.6, gravity: 4, drag: 1, endSize: 0.06 });
+    this.puffs.burst(x, top + 0.2, z, this.count(8), 1.2, COLORS.dust, 0.35, 0.9, { upward: 0.4, drag: 3, endSize: 0.8 });
+  }
+
+  /** A felled tree hits the ground: dust rolls out along the trunk, leaves scatter. */
+  treeLanded(x, z, dirX, dirZ) {
+    const top = CONFIG.world.tileTop;
+    for (let i = 0; i < this.count(16); i++) {
+      const d = 0.3 + Math.random() * 1.3;
+      const side = (Math.random() - 0.5) * 0.4;
+      this.puffs.emit(x + dirX * d - dirZ * side, top + 0.1, z + dirZ * d + dirX * side, -dirZ * side * 3 + (Math.random() - 0.5), 0.5 + Math.random() * 0.4, dirX * side * 3 + (Math.random() - 0.5), COLORS.dust, 0.35, 1, { endSize: 0.9, drag: 2.5 });
+    }
+    this.leaves(x + dirX * 1.1, top + 0.5, z + dirZ * 1.1, 8);
+    this.puffs.burst(x + dirX * 1.2, top + 0.2, z + dirZ * 1.2, this.count(8), 2.5, COLORS.wood, 0.1, 0.7, { upward: 0.8, gravity: 6, drag: 1, endSize: 0.06 });
+  }
+
+  /** A UFO's laser bolt at a wall or building. */
+  laserZap(fx, fy, fz, tx, ty, tz) {
+    const n = this.count(10);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      this.sparks.emit(fx + (tx - fx) * t, fy + (ty - fy) * t, fz + (tz - fz) * t, 0, 0, 0, COLORS.laser, 0.13, 0.1 + t * 0.06, { endSize: 0.03, drag: 0, brightness: 2.2 });
+    }
+    this.flash(tx, ty, tz, 0.7);
+    this.sparks.burst(tx, ty, tz, this.count(5), 2.4, COLORS.laser, 0.08, 0.3, { gravity: 5, brightness: 1.8 });
+  }
+
+  /** A portal tears open. */
+  portalOpen(x, z) {
+    const top = CONFIG.world.tileTop;
+    this.sparks.burst(x, top + 0.4, z, this.count(50), 5, COLORS.alien, 0.22, 1.1, { upward: 0.8, gravity: 2, brightness: 1.8 });
+    this.puffs.burst(x, top + 0.2, z, this.count(20), 2.5, COLORS.smoke, 0.6, 1.4, { upward: 0.5, drag: 2.5, endSize: 1.6 });
+    this.flash(x, top + 0.8, z, 4);
+    this.ring(x, z, 2.6, 0.9, COLORS.alien);
+    this.ring(x, z, 1.4, 0.6, COLORS.spark);
+  }
+
+  /** Stone and planks flying out of a destroyed wall or building. */
+  rubble(x, z, stone) {
+    const top = CONFIG.world.tileTop;
+    this.puffs.burst(x, top + 0.5, z, this.count(14), 3.4, stone ? COLORS.stone : COLORS.wood, 0.16, 1, { upward: 0.8, gravity: 8, drag: 0.4, endSize: 0.12 });
   }
 
   /** Walls and buildings under attack. */

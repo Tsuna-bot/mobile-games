@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 
-const MODES = { pollen: 0, snow: 1, fireflies: 2, motes: 3 };
+const MODES = { pollen: 0, snow: 1, fireflies: 2, motes: 3, leaves: 4 };
 const SETTINGS = {
   pollen: { count: 90, color: 0xfff3b0, size: 0.07, additive: false, opacity: 0.8 },
   snow: { count: 260, color: 0xffffff, size: 0.075, additive: false, opacity: 0.95 },
   fireflies: { count: 70, color: 0xd8ff7a, size: 0.12, additive: true, opacity: 1 },
   motes: { count: 110, color: 0x9fe8ff, size: 0.09, additive: true, opacity: 0.9 },
+  // Leaves drifting down from the woods, with pollen motes (Kingdom by day).
+  leaves: { count: 200, color: 0x86b84a, color2: 0xe39a3a, size: 0.13, additive: false, opacity: 0.95 },
 };
 const MAX = 260;
 const HEIGHT = 4;
@@ -18,8 +20,12 @@ uniform float uSize;
 uniform float uScale;
 uniform float uCount;
 varying float vAlpha;
+varying float vMix;
+varying float vAngle;
 void main() {
   vec3 p = position;
+  vMix = 0.0;
+  vAngle = 0.0;
   float t = uTime + aSeed * 50.0;
   vAlpha = step(aSeed * ${MAX.toFixed(1)}, uCount);
   if (uMode < 0.5) {
@@ -34,6 +40,14 @@ void main() {
     p += vec3(sin(t * 0.6), sin(t * 0.9) * 0.4, cos(t * 0.5)) * 0.7;
     p.y = 0.35 + abs(p.y) * 0.35;
     vAlpha *= 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * 3.0), 3.0);
+  } else if (uMode > 3.5) {
+    // Leaves: slow fall, swaying side to side and spinning.
+    p.y = ${HEIGHT.toFixed(1)} - mod(uTime * 0.28 + aSeed * ${HEIGHT.toFixed(1)} * 5.0, ${HEIGHT.toFixed(1)});
+    p.x += sin(t * 1.3) * 0.45 + uTime * 0.05;
+    p.z += cos(t * 0.9) * 0.3;
+    vMix = step(0.72, fract(aSeed * 37.0));
+    vAngle = t * 2.2;
+    vAlpha *= smoothstep(0.0, 0.4, p.y) * smoothstep(${HEIGHT.toFixed(1)}, ${(HEIGHT - 0.6).toFixed(1)}, p.y);
   } else {
     p.y = mod(position.y + uTime * 0.3, ${HEIGHT.toFixed(1)});
     p.x += sin(t * 0.7) * 0.2;
@@ -46,13 +60,25 @@ void main() {
 
 const FRAGMENT = /* glsl */ `
 uniform vec3 uColor;
+uniform vec3 uColor2;
 uniform float uOpacity;
+uniform float uMode;
 varying float vAlpha;
+varying float vMix;
+varying float vAngle;
 void main() {
-  float d = length(gl_PointCoord - 0.5);
+  vec2 q = gl_PointCoord - 0.5;
+  float d = length(q);
+  if (uMode > 3.5) {
+    // A leaf: a thin ellipse that turns as it falls.
+    float c = cos(vAngle);
+    float s = sin(vAngle);
+    q = vec2(c * q.x - s * q.y, s * q.x + c * q.y);
+    d = length(q * vec2(1.0, 2.4 + 1.2 * abs(sin(vAngle * 0.7))));
+  }
   float a = (1.0 - smoothstep(0.2, 0.5, d)) * vAlpha * uOpacity;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(uColor, a);
+  gl_FragColor = vec4(mix(uColor, uColor2, vMix), a);
   #include <colorspace_fragment>
 }`;
 
@@ -77,6 +103,7 @@ export class AmbientParticles {
         uScale: { value: 500 },
         uCount: { value: MAX },
         uColor: { value: new THREE.Color() },
+        uColor2: { value: new THREE.Color() },
         uOpacity: { value: 1 },
       },
     });
@@ -94,6 +121,7 @@ export class AmbientParticles {
     u.uMode.value = MODES[mode] ?? 0;
     u.uSize.value = this.settings.size;
     u.uColor.value.set(this.settings.color);
+    u.uColor2.value.set(this.settings.color2 ?? this.settings.color);
     u.uOpacity.value = this.settings.opacity;
     this.material.blending = this.settings.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
     this.material.needsUpdate = true;

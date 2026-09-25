@@ -2,7 +2,7 @@
 
 Tower defense 3D pour mobile (Three.js). Des ovnis suivent la route jusqu'à ton château : construis des tours sur l'herbe, améliore-les et choisis leurs cibles pour tenir jusqu'à la dernière vague.
 
-Modèles 3D de Kenney, licence CC0 : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit), [Survival Kit](https://kenney.nl/assets/survival-kit) et [Mini Characters](https://kenney.nl/assets/mini-characters) (licences dans `assets/models/`).
+Modèles 3D de Kenney, licence CC0 : [Tower Defense Kit](https://kenney.nl/assets/tower-defense-kit), [Survival Kit](https://kenney.nl/assets/survival-kit), [Mini Characters](https://kenney.nl/assets/mini-characters), [Castle Kit](https://kenney.nl/assets/castle-kit), [Fantasy Town Kit](https://kenney.nl/assets/fantasy-town-kit) et [Nature Kit](https://kenney.nl/assets/nature-kit) (licences dans `assets/models/`).
 
 ## Le Royaume (monde ouvert)
 
@@ -18,11 +18,20 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
   - Le **Démolisseur** (dès la nuit 3) est spécialisé dans la démolition.
   - Chaque nuit est plus dure que la précédente.
 - **Construire** (toucher une case libre) :
-  - palissades, qu'on peut transformer en murailles de pierre ; après la première, chaque case touchée prolonge le mur ;
+  - un aperçu translucide montre le bâtiment avant de confirmer, et la grille n'apparaît qu'à ce moment-là ;
+  - chaque construction est un **chantier** : un ouvrier vient avec son marteau et le bâtiment sort de terre dans son échafaudage ; les améliorations aussi (une tour continue de tirer pendant les travaux) ;
+  - « Annuler » pendant 5 s rembourse tout ; ensuite, annuler un chantier rend 80 % ;
+  - palissades de pieux, qui se raccordent entre elles et deviennent des remparts de pierre ; en mode mur, on les trace en glissant le doigt ;
   - tours ;
   - maisons (plus d'ouvriers) ;
   - entrepôts (stockage et point de dépôt) ;
   - l'Académie.
+- **Le château** a 3 niveaux (Fort, Château, Citadelle) : plus de vie, de stockage et d'ouvriers. Sa fiche propose aussi « Réparer » pour tout remettre en état.
+- **Objectifs** : un objectif à la fois, avec une récompense ; les premiers servent de tutoriel.
+- **Rapport à l'aube** : étoiles, ovnis détruits, or gagné, dégâts subis, meilleure tour, réparation en un geste.
+- **Repères** : mini-carte (toucher pour y aller), bouton de retour au château, chemin des ovnis en flèches (en construction et le soir), flèches au bord de l'écran vers les ovnis hors champ, cloche 30 s puis 10 s avant la nuit, vitesse x1/x2/x3.
+- **Ambiance** : le soleil traverse le ciel (lever et coucher dorés), brume du matin, feuilles qui tombent, oiseaux, fumée des cheminées, fenêtres et torches allumées la nuit, lucioles, chemins de terre là où passent les ouvriers, traces de brûlure après les combats, arbres qui basculent, rochers qui éclatent, cristaux qui se brisent, lasers des Démolisseurs.
+- **Retours** : ressources qui volent jusqu'aux compteurs, compteurs qui défilent, petits sons (marteau, chute d'arbre, oiseaux le jour, grillons la nuit), à-coups de caméra sur les grands moments et vibrations. Sur iPhone (iOS 18 et plus), les vibrations passent par l'interrupteur système, seul moyen pour une page web.
 - **Académie** : un arbre de recherches payé en or et en cristal.
   - Débloque les 11 autres tours et les 5 autres sorts.
   - Améliore la récolte, les dégâts, la portée, les murs, le château et la puissance ou la recharge des sorts.
@@ -138,7 +147,8 @@ tower-defense/
     ├── render/                 # Tout le visuel Three.js
     │   ├── assets.js           # Chargement GLB, matériau unique partagé
     │   ├── world.js            # Île, mer, herbe, nuages, ciel, jour/nuit, lumières
-    │   ├── realmViews.js       # Royaume : ressources instanciées, bâtiments, murs, ouvriers animés
+    │   ├── realmViews.js       # Royaume : château, bâtiments, murs raccordés, chantiers, ouvriers, lumières, brume
+    │   ├── realmTerrain.js     # Royaume : sol sans grille (usure, brûlures), collines et forêts autour
     │   ├── ambient.js          # Particules d'ambiance animées sur le GPU
     │   ├── spellViews.js       # Météore, éclairs, traces au sol
     │   ├── towerViews.js       # Tours empilées, visée, recul, animations
@@ -153,7 +163,8 @@ tower-defense/
     ├── ui/                     # DOM et vibrations
     └── game/
         ├── game.js             # Orchestrateur : états, événements, actions
-        └── realmMode.js        # Contrôleur du Royaume (panneaux, recherche, sauvegarde)
+        ├── realmMode.js        # Contrôleur du Royaume (panneaux, chantiers, objectifs, rapport, sauvegarde)
+        └── realmHud.js         # Mini-carte, retour au château, flèches vers les ovnis hors champ
 ```
 
 La simulation ne connaît ni Three.js ni le DOM : elle tourne à pas fixe (60 Hz) et prévient le rendu, l'UI et l'audio par des événements. On peut donc la tester seule :

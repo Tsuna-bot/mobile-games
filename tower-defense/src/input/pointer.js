@@ -2,7 +2,8 @@ import { CONFIG } from '../config.js';
 
 /**
  * Turns raw pointer events on the canvas into gestures:
- * tap (select), one-finger drag (pan), two-finger pinch (zoom + pan), wheel (zoom).
+ * tap (select), one-finger drag (pan, or "paint" when `onDragStart` claims it),
+ * two-finger pinch (zoom + pan), wheel (zoom).
  */
 export class PointerInput {
   constructor(element) {
@@ -11,6 +12,9 @@ export class PointerInput {
     this.onTap = null;
     this.onPan = null;
     this.onZoom = null;
+    this.onDragStart = null;
+    this.onDragMove = null;
+    this.onDragEnd = null;
     this.gesture = null;
 
     this.handleDown = (event) => {
@@ -19,6 +23,8 @@ export class PointerInput {
       if (this.pointers.size === 1) {
         this.gesture = { startX: event.clientX, startY: event.clientY, startTime: performance.now(), moved: false, pinch: false };
       } else if (this.gesture) {
+        if (this.gesture.paint) this.onDragEnd?.();
+        this.gesture.paint = false;
         this.gesture.pinch = true;
         this.gesture.moved = true;
         this.gesture.pinchDistance = this.pinchDistance();
@@ -47,6 +53,15 @@ export class PointerInput {
         const total = Math.hypot(event.clientX - this.gesture.startX, event.clientY - this.gesture.startY);
         if (total < CONFIG.input.tapMaxMove) return;
         this.gesture.moved = true;
+        // A one-finger drag may paint (walls) instead of panning.
+        if (this.pointers.size === 1 && this.onDragStart?.(this.gesture.startX, this.gesture.startY)) {
+          this.gesture.paint = true;
+          this.onDragMove?.(this.gesture.startX, this.gesture.startY);
+        }
+      }
+      if (this.gesture.paint) {
+        this.onDragMove?.(event.clientX, event.clientY);
+        return;
       }
       this.onPan?.(dx, dy);
     };
@@ -61,6 +76,7 @@ export class PointerInput {
         return;
       }
       this.gesture = null;
+      if (gesture?.paint) this.onDragEnd?.();
       if (!gesture || gesture.moved || event.type === 'pointercancel') return;
       if ((performance.now() - gesture.startTime) / 1000 <= CONFIG.input.tapMaxTime) {
         this.onTap?.(event.clientX, event.clientY);

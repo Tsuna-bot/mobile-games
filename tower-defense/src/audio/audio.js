@@ -13,7 +13,7 @@ const EIGHTH = 60 / TEMPO / 2;
 const LOOKAHEAD = 0.15;
 
 // Minimum seconds between two plays of the same sound, so rapid fire stays pleasant.
-const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, flame: 0.12, laser: 0.35, poison: 0.1, mortar: 0.15, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05, chop: 0.12, deliver: 0.08, siege: 0.15, hammer: 0.09, thud: 0.12 };
+const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, flame: 0.12, laser: 0.35, poison: 0.1, mortar: 0.15, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05, chop: 0.12, deliver: 0.08, siege: 0.15, hammer: 0.09, thud: 0.12, collect: 0.05, whoosh: 0.1 };
 
 /**
  * Procedural audio (Web Audio API, no sound files). Created on the first user
@@ -416,6 +416,64 @@ export class AudioEngine {
     this.tone({ type: 'sawtooth', freq: midi(45), start: t, duration: 1.4, gain: 0.07, attack: 0.25 });
     this.tone({ type: 'sawtooth', freq: midi(52), start: t + 0.5, duration: 1.3, gain: 0.06, attack: 0.25 });
     this.tone({ type: 'sine', freq: midi(33), start: t, duration: 1.8, gain: 0.25, attack: 0.2 });
+  }
+
+  /**
+   * Nature around the kingdom, called every frame: birdsong by day, crickets and
+   * the odd owl at night (`night` 0..1).
+   */
+  ambience(dt, night) {
+    if (!this.ready || !this.soundOn) return;
+    this.ambienceTimer = (this.ambienceTimer ?? 1) - dt;
+    if (this.ambienceTimer > 0) return;
+    const t = this.ctx.currentTime + 0.02;
+    if (night > 0.6) {
+      this.ambienceTimer = 0.8 + Math.random() * 1.8;
+      if (Math.random() < 0.06) {
+        // Owl: two soft hoots.
+        [0, 0.45].forEach((d) => this.tone({ type: 'sine', freq: 420, freqEnd: 360, start: t + d, duration: 0.35, gain: 0.018, attack: 0.06 }));
+        return;
+      }
+      const pitch = 4200 + Math.random() * 600;
+      const pulses = 3 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < pulses; i++) this.tone({ type: 'sine', freq: pitch, start: t + i * 0.055, duration: 0.035, gain: 0.006, attack: 0.004 });
+    } else if (night < 0.4) {
+      this.ambienceTimer = 1.6 + Math.random() * 3.5;
+      // A bird: a few quick whistles.
+      const base = 2400 + Math.random() * 1600;
+      const notes = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < notes; i++) {
+        const f = base * (0.85 + Math.random() * 0.35);
+        this.tone({ type: 'sine', freq: f, freqEnd: f * (Math.random() < 0.5 ? 1.25 : 0.8), start: t + i * 0.11, duration: 0.08, gain: 0.012, attack: 0.008 });
+      }
+    } else {
+      this.ambienceTimer = 1;
+    }
+  }
+
+  /** Warning bell before nightfall (`urgent`: the last seconds). */
+  warning(urgent = false) {
+    const t = this.gate('warning');
+    if (t === null) return;
+    const strikes = urgent ? 3 : 2;
+    for (let i = 0; i < strikes; i++) {
+      this.tone({ type: 'triangle', freq: midi(urgent ? 76 : 72), start: t + i * 0.32, duration: 0.9, gain: 0.09, attack: 0.003 });
+      this.tone({ type: 'sine', freq: midi(urgent ? 88 : 84) * 1.01, start: t + i * 0.32, duration: 0.6, gain: 0.03, attack: 0.003 });
+    }
+  }
+
+  /** Something appears on screen (sheet opens, site placed): a soft whoosh. */
+  whoosh() {
+    const t = this.gate('whoosh');
+    if (t === null) return;
+    this.noise({ start: t, duration: 0.18, gain: 0.05, filter: 'bandpass', freq: 600, freqEnd: 2400, q: 1.2 });
+  }
+
+  /** Resources land in the stock: a little tick per item. */
+  collect(index = 0) {
+    const t = this.gate('collect');
+    if (t === null) return;
+    this.tone({ type: 'sine', freq: midi(79 + (index % 4) * 2), start: t, duration: 0.07, gain: 0.035, attack: 0.002 });
   }
 
   /** Bright chime at dawn. */

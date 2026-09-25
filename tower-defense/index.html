@@ -64,7 +64,22 @@
         <span class="res" data-res="stone" title="Pierre"><i aria-hidden="true">🪨</i><b>0</b><small>/250</small></span>
         <span class="res" data-res="crystal" title="Cristal"><i aria-hidden="true">💎</i><b>0</b><small>/250</small></span>
       </div>
+      <div class="hud__row" id="hud-row" hidden>
+        <button id="objective" class="objective" type="button">
+          <span class="objective__icon" aria-hidden="true">🎯</span>
+          <span class="objective__body"><b id="objective-text">Objectif</b><small id="objective-reward"></small></span>
+          <span class="objective__count" id="objective-count"></span>
+          <span class="objective__bar" aria-hidden="true"><i id="objective-fill"></i></span>
+        </button>
+        <div class="minimap" id="minimap-wrap">
+          <canvas id="minimap" width="168" height="168" aria-label="Carte du royaume : touche pour y aller"></canvas>
+          <button id="btn-recenter" class="minimap__recenter" type="button" aria-label="Revenir au château" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V10l2-1.5V5h2.5v2L12 4.5 15.5 7V5H18v3.5L20 10v11h-6v-5h-4v5z"/></svg>
+          </button>
+        </div>
+      </div>
     </header>
+    <div id="arrows" class="arrows" aria-hidden="true"></div>
 
     <footer id="dock" class="dock">
       <div class="realm-bar" id="realm-bar" hidden>
@@ -278,6 +293,24 @@
       <div class="shop" id="research"></div>
       <div class="panel">
         <button id="btn-research-back" class="btn btn--primary" type="button">Retour au royaume</button>
+      </div>
+    </section>
+
+    <section id="screen-report" class="screen screen--report" aria-labelledby="report-title">
+      <div class="report">
+        <p class="report__kicker" id="report-kicker">Aube</p>
+        <h2 class="report__title" id="report-title">Nuit repoussée !</h2>
+        <div class="report__stars" id="report-stars" aria-hidden="true"></div>
+        <dl class="report__stats" id="report-stats"></dl>
+        <div class="report__best" id="report-best">
+          <img id="report-best-image" alt="" width="56" height="56">
+          <div><small>Meilleure tour</small><b id="report-best-name"></b><span id="report-best-damage"></span></div>
+        </div>
+        <p class="report__note" id="report-note"></p>
+        <div class="report__actions">
+          <button id="btn-report-repair" class="btn btn--ghost" type="button">Réparer</button>
+          <button id="btn-report-ok" class="btn btn--primary" type="button">Au travail !</button>
+        </div>
       </div>
     </section>
 

@@ -5,6 +5,8 @@ import { damp } from '../core/math.js';
 import { makeNoise, seededRandom } from '../core/random.js';
 import { CHARACTER_MODELS } from './assets.js';
 import { buildTowerModel, weaponBaseY } from './towerViews.js';
+import { TOWERS as TOWERS_BY_ID } from '../data/towers.js';
+import { BUILDINGS as BUILDINGS_BY_ID } from '../data/realm.js';
 
 const TOP = CONFIG.world.tileTop;
 const NODE_MODELS = {
@@ -26,6 +28,7 @@ const WALL_HEIGHT = 0.8;
 const CASTLE_SPAN = 1.12;
 const TREE_FALL_TIME = 0.9;
 const BIRDS = 12;
+const MIST_PATCHES = 14;
 
 const DIR = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 // Rotation of the Castle Kit corner piece (open to south + west at 0) for each pair of neighbors.
@@ -276,6 +279,25 @@ export function buildCastleModel(assets, level, flagMaterial) {
   return root;
 }
 
+// Enemy route preview: chevrons flowing from the portals to the castle.
+const PATH_MAX = 400;
+const PATH_VERTEX = /* glsl */ `
+attribute float aStep;
+uniform float uTime;
+varying float vAlpha;
+void main() {
+  float wave = fract(aStep * 0.12 - uTime * 0.9);
+  vAlpha = 0.5 + 0.5 * smoothstep(0.55, 1.0, wave);
+  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+}`;
+const PATH_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+uniform float uOpacity;
+varying float vAlpha;
+void main() {
+  gl_FragColor = vec4(uColor, vAlpha * uOpacity);
+}`;
+
 const GLOW_VERTEX = /* glsl */ `
 attribute float aSeed;
 uniform float uTime;
@@ -329,6 +351,10 @@ export class RealmViews {
     this.wallsDirty = false;
     this.glowsDirty = false;
     this.dummy = new THREE.Object3D();
+    this.tmpVector = new THREE.Vector3();
+    this.tmpEuler = new THREE.Euler();
+    this.portalsShown = -1;
+    this.portalPop = [];
     this.cameraQuaternion = new THREE.Quaternion();
     this.pickGeometry = new THREE.BoxGeometry(0.9, 1, 0.9);
     this.pickGeometry.translate(0, 0.5, 0);
@@ -403,6 +429,161 @@ export class RealmViews {
     this.root.add(this.birds);
     this.wearTimer = 0;
     this.smokeTimer = 0;
+
+    // Morning mist: soft patches low over the fields (see setMist).
+    this.mistTexture = (() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      for (const [x, y, r] of [[64, 64, 60], [44, 58, 34], [86, 70, 38], [60, 84, 30]]) {
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+        gradient.addColorStop(0, 'rgba(255,255,255,0.55)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 128, 128);
+      }
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    })();
+    this.mistMaterial = new THREE.MeshBasicMaterial({ map: this.mistTexture, color: 0xf2f6ff, transparent: true, opacity: 0, depthWrite: false, fog: true });
+    this.mistGroup = new THREE.Group();
+    this.mistGroup.visible = false;
+    this.mistPatches = Array.from({ length: MIST_PATCHES }, (_, i) => {
+      const mesh = new THREE.Mesh(this.discGeometry, this.mistMaterial);
+      mesh.position.set((Math.random() - 0.5) * 30, TOP + 0.3 + (i % 4) * 0.08, (Math.random() - 0.5) * 30);
+      mesh.scale.setScalar(5 + Math.random() * 5);
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+      mesh.renderOrder = 5;
+      this.mistGroup.add(mesh);
+      return { mesh, speed: 0.12 + Math.random() * 0.15 };
+    });
+    this.root.add(this.mistGroup);
+    this.mist = 0;
+
+    // Enemy route preview.
+    const chevron = new THREE.Shape();
+    chevron.moveTo(-0.2, -0.16);
+    chevron.lineTo(0, 0.06);
+    chevron.lineTo(0.2, -0.16);
+    chevron.lineTo(0.2, -0.02);
+    chevron.lineTo(0, 0.2);
+    chevron.lineTo(-0.2, -0.02);
+    chevron.closePath();
+    this.chevronGeometry = new THREE.ShapeGeometry(chevron);
+    // Tip toward +z (rotation.y then aims it along the route); seen from above, so both sides.
+    this.chevronGeometry.rotateX(Math.PI / 2);
+    this.pathSteps = new THREE.InstancedBufferAttribute(new Float32Array(PATH_MAX), 1);
+    this.chevronGeometry.setAttribute('aStep', this.pathSteps);
+    this.pathMaterial = new THREE.ShaderMaterial({
+      vertexShader: PATH_VERTEX,
+      fragmentShader: PATH_FRAGMENT,
+      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uColor: { value: new THREE.Color(0xff3b2f) } },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.pathMesh = new THREE.InstancedMesh(this.chevronGeometry, this.pathMaterial, PATH_MAX);
+    this.pathMesh.count = 0;
+    this.pathMesh.frustumCulled = false;
+    this.pathMesh.renderOrder = 6;
+    this.pathMesh.visible = false;
+    this.root.add(this.pathMesh);
+    this.pathWanted = false;
+    this.pathTimer = 0;
+
+    // Translucent preview of what is about to be built.
+    this.ghostMaterials = {
+      ok: new THREE.MeshStandardMaterial({ color: 0xb8f0ff, emissive: 0x3a9cff, emissiveIntensity: 0.55, transparent: true, opacity: 0.55, depthWrite: false }),
+      poor: new THREE.MeshStandardMaterial({ color: 0xffb0a8, emissive: 0xff3a3a, emissiveIntensity: 0.5, transparent: true, opacity: 0.5, depthWrite: false }),
+    };
+    this.ghost = null;
+    this.ghostKey = '';
+  }
+
+  /** Shows the enemy route (build mode, evening). */
+  showPath(on) {
+    this.pathWanted = on;
+  }
+
+  rebuildPath() {
+    const sim = this.sim;
+    const d = this.dummy;
+    let n = 0;
+    for (const portal of sim.activePortals()) {
+      let cell = portal;
+      for (let step = 0; step < 120 && cell && !cell.castle && n < PATH_MAX; step++) {
+        const next = sim.nextStep(cell);
+        if (!next) break;
+        d.position.set((cell.x + next.x) / 2, TOP + 0.04, (cell.z + next.z) / 2);
+        d.rotation.set(0, Math.atan2(next.x - cell.x, next.z - cell.z), 0);
+        d.scale.setScalar(1.35);
+        d.updateMatrix();
+        this.pathMesh.setMatrixAt(n, d.matrix);
+        this.pathSteps.setX(n, step);
+        n++;
+        cell = next;
+      }
+    }
+    this.pathMesh.count = n;
+    this.pathMesh.instanceMatrix.needsUpdate = true;
+    this.pathSteps.needsUpdate = true;
+  }
+
+  updatePath(dt, time) {
+    const u = this.pathMaterial.uniforms;
+    u.uTime.value = time;
+    u.uOpacity.value = damp(u.uOpacity.value, this.pathWanted ? 1 : 0, 6, dt);
+    this.pathMesh.visible = u.uOpacity.value > 0.01;
+    if (!this.pathMesh.visible || !this.sim) return;
+    this.pathTimer -= dt;
+    if (this.pathTimer <= 0) {
+      this.pathTimer = 0.35;
+      this.rebuildPath();
+    }
+  }
+
+  /** Preview of `typeId` on `cell` (null to hide); red when unaffordable. */
+  setGhost(typeId, cell, affordable) {
+    const key = typeId && cell ? `${typeId}|${cell.index}|${affordable}` : '';
+    if (key === this.ghostKey) return;
+    this.ghostKey = key;
+    if (this.ghost) {
+      this.ghost.removeFromParent();
+      this.ghost = null;
+    }
+    if (!key) return;
+    let model;
+    if (TOWERS_BY_ID[typeId]) model = buildTowerModel(this.assets, TOWERS_BY_ID[typeId], 0).root;
+    else if (typeId === 'wall') model = buildWallModel(this.assets, 0, this.wallNeighbors(cell));
+    else model = buildBuildingModel(this.assets, BUILDINGS_BY_ID[typeId], 0);
+    const material = affordable ? this.ghostMaterials.ok : this.ghostMaterials.poor;
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = material;
+      o.castShadow = false;
+      o.renderOrder = 7;
+    });
+    const group = new THREE.Group();
+    group.add(model);
+    group.position.set(cell.x, TOP, cell.z);
+    group.userData.born = performance.now();
+    this.ghost = group;
+    this.root.add(group);
+  }
+
+  updateGhost(time) {
+    const ghost = this.ghost;
+    if (!ghost) return;
+    const age = Math.min(1, (performance.now() - ghost.userData.born) / 250);
+    const pop = age < 1 ? 0.6 + 0.4 * age + Math.sin(age * Math.PI) * 0.12 : 1;
+    ghost.scale.setScalar(pop);
+    ghost.children[0].position.y = 0.06 + Math.sin(time * 3) * 0.04;
+  }
+
+  /** Mist over the fields, 0 (none) to 1 (thick). */
+  setMist(amount) {
+    this.mist = amount;
   }
 
   // ------------------------------------------------------------ build
@@ -606,6 +787,8 @@ export class RealmViews {
     for (const material of [this.assets.materials.castle, this.assets.materials.survival]) {
       if (material) group.add(new THREE.InstancedMesh(this.pickGeometry, material, 1));
     }
+    for (const material of Object.values(this.ghostMaterials)) group.add(new THREE.Mesh(this.pickGeometry, material));
+    group.add(new THREE.InstancedMesh(this.chevronGeometry, this.pathMaterial, 1));
     group.traverse((o) => {
       o.frustumCulled = false;
       o.castShadow = true;
@@ -1039,7 +1222,11 @@ export class RealmViews {
         fall.entry.target = 0;
         this.animating.add(fall.entry);
         this.falling.splice(i, 1);
-        this.onTreeLanded?.(fall.entry.cell);
+        // Direction the crown fell toward (for the dust trail).
+        const e = fall.entry;
+        const tip = this.tmpVector.set(0, 1, 0).applyEuler(this.tmpEuler.set(Math.cos(e.tiltAxis) * e.tilt, e.rotation, Math.sin(e.tiltAxis) * e.tilt));
+        const length = Math.hypot(tip.x, tip.z) || 1;
+        this.onTreeLanded?.(e.cell, tip.x / length, tip.z / length);
       } else {
         this.writeNode(fall.entry);
       }
@@ -1047,9 +1234,24 @@ export class RealmViews {
 
     const sim = this.sim;
     if (sim) {
+      // Portals: a new one tears open with a burst and grows in.
       const open = sim.activePortals().length;
-      (this.world.portals ?? []).forEach((portal, i) => {
+      const portals = this.world.portals ?? [];
+      if (this.portalsShown >= 0 && open > this.portalsShown) {
+        for (let i = this.portalsShown; i < open && i < portals.length; i++) {
+          this.portalPop[i] = 1;
+          this.effects?.portalOpen(portals[i].position.x, portals[i].position.z);
+          this.world.terrain?.addScorch(portals[i].position.x, portals[i].position.z, 1.6, 0.8);
+        }
+      }
+      this.portalsShown = open;
+      portals.forEach((portal, i) => {
         portal.visible = i < open;
+        const pop = this.portalPop[i] ?? 0;
+        if (pop <= 0) return;
+        this.portalPop[i] = Math.max(0, pop - dt * 0.9);
+        const t = 1 - this.portalPop[i];
+        portal.scale.setScalar(Math.min(1, t * 1.6) * (1 + Math.sin(Math.min(1, t * 1.6) * Math.PI) * 0.25));
       });
       // Worn paths where workers walk.
       this.wearTimer -= dt;
@@ -1087,6 +1289,24 @@ export class RealmViews {
     this.updateWorkers(dt, time);
     this.updateBirds(dt, time, night, camera);
     this.updateSmoke(dt, camera);
+    this.updateMist(dt);
+    this.updatePath(dt, time);
+    this.updateGhost(time);
+  }
+
+  updateMist(dt) {
+    const opacity = this.mist * 0.75;
+    this.mistMaterial.opacity = damp(this.mistMaterial.opacity, opacity, 1.5, dt);
+    this.mistGroup.visible = this.mistMaterial.opacity > 0.01;
+    if (!this.mistGroup.visible || !this.sim) return;
+    const half = this.sim.level.width / 2 + 3;
+    for (const patch of this.mistPatches) {
+      patch.mesh.position.x += patch.speed * dt;
+      if (patch.mesh.position.x > half) {
+        patch.mesh.position.x = -half;
+        patch.mesh.position.z = (Math.random() - 0.5) * half * 2;
+      }
+    }
   }
 
   updateCastle(dt, time, sim) {
@@ -1218,6 +1438,11 @@ export class RealmViews {
     }
     this.workers.clear();
     this.castleView = null;
+    this.portalsShown = -1;
+    this.portalPop = [];
+    this.setGhost(null);
+    this.pathMesh.count = 0;
+    this.pathWanted = false;
     this.glowGeometry.setDrawRange(0, 0);
     this.sim = null;
   }
@@ -1239,5 +1464,11 @@ export class RealmViews {
     this.glowGeometry.dispose();
     this.birdGeometry.dispose();
     this.birds.dispose();
+    this.mistMaterial.dispose();
+    this.mistTexture.dispose();
+    this.chevronGeometry.dispose();
+    this.pathMaterial.dispose();
+    this.pathMesh.dispose();
+    for (const material of Object.values(this.ghostMaterials)) material.dispose();
   }
 }
