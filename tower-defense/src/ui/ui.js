@@ -17,6 +17,11 @@ const MAP_COLORS = {
   dusk: { '.': '#6fb85a', T: '#3c6b3a', R: '#8e7a98', C: '#c07cf0', H: '#5a9a4a', '#': '#ff9e6b', S: '#8a6cff', B: '#ff5d5d' },
   crystal: { '.': '#5ad0a0', T: '#2f8a6a', R: '#8e8aa8', C: '#d08cff', H: '#49b088', '#': '#c9a0ff', S: '#8a6cff', B: '#ff5d5d' },
   night: { '.': '#3f7a6a', T: '#244a44', R: '#5a5a78', C: '#9f7cff', H: '#35685a', '#': '#6d7fbf', S: '#b58cff', B: '#ff7d7d' },
+  autumn: { '.': '#e0a040', T: '#b8561a', R: '#8e8aa8', C: '#b47cf0', H: '#c8862a', '#': '#9a5a2a', S: '#8a6cff', B: '#ff5d5d' },
+  desert: { '.': '#f0d08a', T: '#8aa84a', R: '#b89a7a', C: '#b47cf0', H: '#e0b870', '#': '#c07a3a', S: '#8a6cff', B: '#ff5d5d' },
+  swamp: { '.': '#6a7a3a', T: '#3a4a2a', R: '#6a6a60', C: '#b47cf0', H: '#5a6a34', '#': '#5a4a2a', S: '#b58cff', B: '#ff5d5d' },
+  volcano: { '.': '#4a3a38', T: '#2a2222', R: '#6a5a58', C: '#ff7a3a', H: '#3a2e2c', '#': '#ff6a1a', S: '#b58cff', B: '#ffd070' },
+  storm: { '.': '#3f8a78', T: '#1f4a44', R: '#5a6a80', C: '#9f7cff', H: '#35685a', '#': '#8aa0c8', S: '#b58cff', B: '#ff7d7d' },
 };
 
 function starSvg(on) {
@@ -41,6 +46,7 @@ export class UI {
       achievements: $('screen-achievements'),
       research: $('screen-research'),
       report: $('screen-report'),
+      bestiary: $('screen-bestiary'),
     };
     this.hud = $('hud');
     this.dock = $('dock');
@@ -152,7 +158,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -576,6 +582,10 @@ export class UI {
     const group = this.$('btn-hero').parentElement;
     group.hidden = !h;
     if (!h) return;
+    if (!this.heroPortraitSet && this.thumbnails?.hero) {
+      this.$('hero-portrait').src = this.thumbnails.hero;
+      this.heroPortraitSet = true;
+    }
     const key = `${h.level}|${Math.round(h.hpShare * 40)}|${h.down}|${Math.ceil(h.respawn)}|${Math.round(h.powerCharge * 60)}|${h.selected}|${h.enabled}`;
     if (key === this.shown.hero) return;
     this.shown.hero = key;
@@ -812,6 +822,26 @@ export class UI {
     this.resTarget = {};
     this.resHold = {};
     this.shown.wave = '';
+  }
+
+  setDailyCard(title, detail, tag, done) {
+    this.$('daily-title').textContent = title;
+    this.$('daily-detail').textContent = detail;
+    this.$('daily-tag').textContent = tag;
+    this.$('btn-daily').classList.toggle('is-done', done);
+  }
+
+  /** @param items [{ id, known, name, blurb, image, kills, stats: [[label, value]] }] */
+  renderBestiary(items) {
+    const known = items.filter((i) => i.known).length;
+    this.$('bestiary-count').textContent = `${known}/${items.length} ovnis rencontrés`;
+    this.$('bestiary').innerHTML = items
+      .map((i) => i.known
+        ? `<div class="beast"><img src="${i.image}" alt=""><div><b>${i.name}</b><span>${i.blurb}</span>
+            <dl>${i.stats.map(([l, v]) => `<div><dt>${l}</dt><dd>${v}</dd></div>`).join('')}</dl></div>
+            <em>${number.format(i.kills)}<small>abattus</small></em></div>`
+        : `<div class="beast is-unknown"><img src="${i.image}" alt=""><div><b>???</b><span>Pas encore rencontré.</span></div></div>`)
+      .join('');
   }
 
   setRealmCard(detail, fresh) {

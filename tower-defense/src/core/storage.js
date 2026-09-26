@@ -1,5 +1,6 @@
 import { ACHIEVEMENTS, EMPTY_STATS } from '../data/achievements.js';
 import { persist } from './cloud.js';
+import { ENEMIES } from '../data/enemies.js';
 import { PERKS } from '../data/perks.js';
 import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
 import { STARTER_TOWERS, TOWERS } from '../data/towers.js';
@@ -21,6 +22,10 @@ function defaults() {
     stats: { ...EMPTY_STATS },
     tutorialDone: false,
     realm: { bestNight: 0, tutorialDone: false, played: false },
+    // Daily challenge: last day won and the streak of consecutive days.
+    daily: { day: 0, streak: 0 },
+    // Bestiary: UFO types met and killed.
+    bestiary: {},
     settings: { sound: true, music: true, haptics: true, quality: 'auto' },
   };
 }
@@ -66,6 +71,13 @@ export function loadSave() {
     if (isCount(Number(data.realm?.bestNight), 1e6)) save.realm.bestNight = Number(data.realm.bestNight);
     if (typeof data.realm?.tutorialDone === 'boolean') save.realm.tutorialDone = data.realm.tutorialDone;
     if (typeof data.realm?.played === 'boolean') save.realm.played = data.realm.played;
+    if (isCount(Number(data.daily?.day), 1e7)) save.daily.day = Number(data.daily.day);
+    if (isCount(Number(data.daily?.streak), 1e5)) save.daily.streak = Number(data.daily.streak);
+    for (const [type, kills] of Object.entries(data.bestiary ?? {})) {
+      if (ENEMIES[type] && isCount(Number(kills), 1e9)) save.bestiary[type] = Number(kills);
+    }
+    // Saves from before the bestiary: the classic UFOs have been met already.
+    if (!data.bestiary && save.stats.kills > 0) for (const type of ['scout', 'runner', 'tank', 'boss']) save.bestiary[type] = 0;
     const settings = data.settings ?? {};
     for (const key of ['sound', 'music', 'haptics']) {
       if (typeof settings[key] === 'boolean') save.settings[key] = settings[key];

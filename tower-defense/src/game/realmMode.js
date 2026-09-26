@@ -245,6 +245,7 @@ export class RealmMode {
         base.onImpact(projectile);
       },
       onEnemySpawn: (enemy) => {
+        game.noteEnemy(enemy);
         game.enemyViews.acquire(enemy);
         if (enemy.fromPortal) effects.spawnBeam(enemy.x, enemy.z);
       },

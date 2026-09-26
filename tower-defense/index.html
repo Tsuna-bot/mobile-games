@@ -262,13 +262,19 @@
         <div class="menu-actions">
           <button id="btn-perks" class="btn btn--gold btn--small" type="button">Améliorations <span class="badge" id="perks-badge" hidden>!</span></button>
           <button id="btn-shop" class="btn btn--gem btn--small" type="button">Boutique <span class="badge" id="shop-badge" hidden>!</span></button>
-          <button id="btn-achievements" class="btn btn--small" type="button">Succès <span class="badge badge--soft" id="achievements-count">0/0</span></button>
+          <button id="btn-bestiary" class="btn btn--small" type="button">Bestiaire</button>
+        <button id="btn-achievements" class="btn btn--small" type="button">Succès <span class="badge badge--soft" id="achievements-count">0/0</span></button>
         </div>
       </div>
       <button id="btn-realm" class="realm-card" type="button">
         <span class="realm-card__icon" aria-hidden="true">🏰</span>
         <span><b>Royaume</b><span id="realm-detail">Monde ouvert : récolte, construis, survis aux nuits</span></span>
         <span class="realm-card__tag">Nouveau</span>
+      </button>
+      <button id="btn-daily" class="realm-card realm-card--daily" type="button">
+        <span class="realm-card__icon" aria-hidden="true">🎯</span>
+        <span><b id="daily-title">Défi du jour</b><span id="daily-detail">Une carte, deux règles spéciales</span></span>
+        <span class="realm-card__tag" id="daily-tag">+15 💎</span>
       </button>
       <button id="btn-resume-run" class="resume-card" type="button" hidden>
         <span class="resume-card__icon" aria-hidden="true">▶</span>
@@ -320,6 +326,15 @@
       <div class="achievements" id="achievements"></div>
       <div class="panel">
         <button id="btn-achievements-back" class="btn btn--primary" type="button">Retour</button>
+      </div>
+    </section>
+
+    <section id="screen-bestiary" class="screen" aria-labelledby="bestiary-title">
+      <h2 id="bestiary-title" class="screen__title screen__title--small">Bestiaire</h2>
+      <p class="bestiary-count" id="bestiary-count"></p>
+      <div class="bestiary" id="bestiary"></div>
+      <div class="panel">
+        <button id="btn-bestiary-back" class="btn btn--primary" type="button">Retour</button>
       </div>
     </section>
 

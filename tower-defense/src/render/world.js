@@ -37,10 +37,16 @@ float cloudNoise(vec2 p) {
  * Patches a standard material with drifting cloud shadows and, optionally,
  * wind sway for foliage (vertices above `swayFrom` bend with the wind).
  */
-export function patchMaterial(material, uniforms, { sway = false } = {}) {
+export function patchMaterial(material, uniforms, { sway = false, recolor = false } = {}) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.time;
     shader.uniforms.uCloudShadow = uniforms.cloudShadow;
+    if (recolor) {
+      shader.uniforms.uRecolor = uniforms.recolor;
+      shader.uniforms.uRecolorGround = uniforms.recolorGround;
+      shader.uniforms.uRecolorPath = uniforms.recolorPath;
+      shader.uniforms.uRecolorPathMix = uniforms.recolorPathMix;
+    }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec2 vCloudUv;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -56,12 +62,19 @@ export function patchMaterial(material, uniforms, { sway = false } = {}) {
         transformed.z += gust * 0.02 * swayAmount;` : ''}
         vCloudUv = cloudWorld.xz * 0.16 + vec2(uTime * 0.035, uTime * 0.02);`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uCloudShadow;\nvarying vec2 vCloudUv;\n${NOISE_GLSL}`)
+      .replace('#include <common>', `#include <common>\nuniform float uCloudShadow;\nvarying vec2 vCloudUv;\n${recolor ? 'uniform float uRecolor;\nuniform vec3 uRecolorGround;\nuniform vec3 uRecolorPath;\nuniform float uRecolorPathMix;' : ''}\n${NOISE_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+        ${recolor ? `
+        // Level palette: the kit's greens (grass, leaves) and orange road take the theme's colors.
+        float recolorLum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+        float greenMask = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 6.0, 0.0, 1.0);
+        float earthMask = clamp((diffuseColor.r - diffuseColor.g) * 4.0, 0.0, 1.0) * clamp((diffuseColor.g - diffuseColor.b) * 5.0, 0.0, 1.0);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uRecolorGround * recolorLum * 2.4, greenMask * uRecolor);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uRecolorPath * recolorLum * 2.4, earthMask * uRecolorPathMix);` : ''}
         float cloudMask = smoothstep(0.52, 0.72, cloudNoise(vCloudUv) * 0.65 + cloudNoise(vCloudUv * 2.3) * 0.35);
         diffuseColor.rgb *= 1.0 - uCloudShadow * cloudMask;`);
   };
-  material.customProgramCacheKey = () => (sway ? 'bastion-foliage' : 'bastion-terrain');
+  material.customProgramCacheKey = () => `bastion-${sway ? 'foliage' : 'terrain'}${recolor ? '-recolor' : ''}`;
   material.needsUpdate = true;
 }
 
@@ -275,8 +288,17 @@ export class World {
     // Kenney models are closed meshes: casting shadows from back faces removes self-shadow acne.
     assets.material.shadowSide = THREE.BackSide;
     patchMaterial(assets.material, this.uniforms);
+    // Level tiles and trees can be recolored per theme (autumn, desert, lava…).
+    Object.assign(this.uniforms, {
+      recolor: { value: 0 },
+      recolorGround: { value: new THREE.Color() },
+      recolorPath: { value: new THREE.Color() },
+      recolorPathMix: { value: 0 },
+    });
     this.foliageMaterial = assets.material.clone();
-    patchMaterial(this.foliageMaterial, this.uniforms, { sway: true });
+    patchMaterial(this.foliageMaterial, this.uniforms, { sway: true, recolor: true });
+    this.tileMaterial = assets.material.clone();
+    patchMaterial(this.tileMaterial, this.uniforms, { recolor: true });
     // Survival Kit props (Kingdom mode): same cloud shadows, trees sway too.
     // Kingdom kits share the same cloud shadows; nature props sway gently.
     for (const palette of ['castle', 'town']) {
@@ -380,6 +402,15 @@ export class World {
     this.scene.environmentIntensity = 0.55;
     this.hemisphere.intensity = theme.hemisphereIntensity * 0.6;
     this.uniforms.cloudShadow.value = theme.stars ? 0.1 : 0.2;
+    const recolor = theme.recolor;
+    this.uniforms.recolor.value = recolor ? 1 : 0;
+    if (recolor) {
+      this.uniforms.recolorGround.value.set(recolor.ground);
+      this.uniforms.recolorPath.value.set(recolor.path ?? 0xffffff);
+    }
+    this.uniforms.recolorPathMix.value = recolor?.pathMix ?? 0;
+    this.lightningTimer = theme.lightning ? 4 : Infinity;
+    this.lightning = 0;
 
     // Terrain tiles, grouped per model into InstancedMeshes.
     const placements = new Map();
@@ -484,7 +515,7 @@ export class World {
     const dummy = new THREE.Object3D();
     for (const [model, list] of placements) {
       const baseName = model.replace('snow-', '');
-      const material = FOLIAGE.has(baseName) ? this.foliageMaterial : this.assets.material;
+      const material = FOLIAGE.has(baseName) ? this.foliageMaterial : this.tileMaterial;
       const mesh = new THREE.InstancedMesh(this.assets.geometry(model), material, list.length);
       list.forEach((p, i) => {
         dummy.position.set(p.x, p.y, p.z);
@@ -590,6 +621,7 @@ export class World {
 
     this.ambient.configure(theme.ambient, halfW + 1.5, halfH + 1.5);
     this.fitShadows(level, theme);
+    this.baseHemisphere = this.hemisphere.intensity;
   }
 
   fitShadows(level, theme) {
@@ -713,6 +745,19 @@ export class World {
     }
     const castleLight = this.cycle ? this.cycle.castleLight : this.theme?.castleLight;
     if (castleLight) this.castleLight.intensity = castleLight * (0.9 + Math.sin(this.time * 7) * 0.05 + Math.sin(this.time * 13) * 0.05);
+    // Storm levels: lightning now and then (a double flash of the sky light, then thunder).
+    this.lightningTimer -= dt;
+    if (this.lightningTimer <= 0) {
+      this.lightningTimer = 6 + Math.random() * 9;
+      this.lightning = 1;
+      this.onLightning?.();
+    }
+    if (this.lightning > 0) {
+      this.lightning = Math.max(0, this.lightning - dt * 2.2);
+      const flicker = this.lightning > 0.75 || (this.lightning > 0.45 && this.lightning < 0.6) ? 1 : 0;
+      this.hemisphere.intensity = (this.baseHemisphere ?? 1) * (1 + flicker * 2.5);
+      if (this.lightning === 0) this.hemisphere.intensity = this.baseHemisphere ?? this.hemisphere.intensity;
+    }
   }
 
   clear() {
@@ -734,6 +779,7 @@ export class World {
     this.sky.geometry.dispose();
     this.sky.material.dispose();
     this.foliageMaterial.dispose();
+    this.tileMaterial.dispose();
     this.survivalFoliage?.dispose();
     this.grassGeometry.dispose();
     this.grassMaterial.dispose();

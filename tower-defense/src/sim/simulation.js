@@ -7,6 +7,7 @@ import { DEFAULT_MODIFIERS } from '../data/perks.js';
 import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
 import { BRANCHES, TOWERS, applyBranch, branchCost, stackHeight } from '../data/towers.js';
 import { makeWave } from '../data/waves.js';
+import { HERO } from '../data/hero.js';
 import { castHeroPower, createHero, heroOnKill, moveHero, restoreHero, serializeHero, updateHero } from './hero.js';
 import { Level } from './level.js';
 
@@ -139,7 +140,13 @@ export class Simulation {
    * @param options.heroic   harder variant: tougher enemies, only 5 lives
    * @param options.modifiers permanent upgrades (see perks.js)
    */
-  constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS, spells = STARTER_SPELLS, hero = true } = {}) {
+  /**
+   * @param options.rules daily challenge rules: speed, armor, startGold, noSpells, towers,
+   *                      shieldAll, lives, swarm, reward, heroLevel (see data/daily.js)
+   */
+  constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS, spells = STARTER_SPELLS, hero = true, rules = {} } = {}) {
+    this.rules = rules;
+    if (rules.noSpells) spells = [];
     this.def = levelDef;
     this.levelIndex = levelIndex;
     this.level = this.createLevel(levelDef, levelIndex);
@@ -149,8 +156,8 @@ export class Simulation {
     this.waveCount = this.endless ? Infinity : levelDef.waves;
     this.waves = [];
     this.listener = listener;
-    this.gold = levelDef.startGold + modifiers.startGold;
-    this.startLives = heroic ? HEROIC_LIVES : CONFIG.economy.startLives + modifiers.lives;
+    this.gold = Math.round((levelDef.startGold + modifiers.startGold) * (rules.startGold ?? 1));
+    this.startLives = rules.lives ?? (heroic ? HEROIC_LIVES : CONFIG.economy.startLives + modifiers.lives);
     this.lives = this.startLives;
     this.state = SIM_STATE.READY;
     this.time = 0;
@@ -180,7 +187,7 @@ export class Simulation {
     this.hero = null;
     if (hero) {
       const home = this.heroHome();
-      this.hero = createHero(home.x, home.z);
+      this.hero = createHero(home.x, home.z, rules.heroLevel ?? 1, rules.heroLevel ? HERO.levels[rules.heroLevel - 1] : 0);
     }
   }
 
@@ -219,7 +226,7 @@ export class Simulation {
   }
 
   wave(index) {
-    if (!this.waves[index]) this.waves[index] = makeWave(this.def, this.levelIndex, index + 1, { heroic: this.heroic });
+    if (!this.waves[index]) this.waves[index] = makeWave(this.def, this.levelIndex, index + 1, { heroic: this.heroic, swarm: this.rules.swarm });
     return this.waves[index];
   }
 
@@ -258,6 +265,11 @@ export class Simulation {
     return true;
   }
 
+  /** Daily challenges can restrict the towers. */
+  towerAllowed(typeId) {
+    return !this.rules.towers || this.rules.towers.includes(typeId);
+  }
+
   towerAt(cell) {
     return this.towerByCell.get(cell.index) ?? null;
   }
@@ -268,7 +280,7 @@ export class Simulation {
 
   build(typeId, cell) {
     const def = TOWERS[typeId];
-    if (!def || !this.canBuild(cell) || this.gold < def.cost) return null;
+    if (!def || !this.canBuild(cell) || this.gold < def.cost || !this.towerAllowed(typeId)) return null;
     this.gold -= def.cost;
     const tower = new Tower(this.nextTowerId++, def, cell, this.modifiers);
     this.towers.push(tower);
@@ -519,8 +531,8 @@ export class Simulation {
     enemy.hpMultiplier = hpMultiplier;
     enemy.maxHp = Math.round(def.hp * hpMultiplier);
     enemy.hp = enemy.maxHp;
-    enemy.armor = def.armor;
-    enemy.speed = def.speed * (0.94 + Math.random() * 0.12) * (this.heroic ? 1.1 : 1);
+    enemy.armor = def.armor + (this.rules.armor ?? 0);
+    enemy.speed = def.speed * (0.94 + Math.random() * 0.12) * (this.heroic ? 1.1 : 1) * (this.rules.speed ?? 1);
     enemy.distance = distance;
     enemy.slowFactor = 1;
     enemy.slowTimer = 0;
@@ -529,7 +541,7 @@ export class Simulation {
     enemy.burnTimer = 0;
     enemy.poisonTimer = 0;
     enemy.dotTower = null;
-    enemy.maxShield = Math.round((def.shield ?? 0) * hpMultiplier);
+    enemy.maxShield = Math.round(((def.shield ?? 0) + (this.rules.shieldAll ? def.hp * this.rules.shieldAll : 0)) * hpMultiplier);
     enemy.shield = enemy.maxShield;
     enemy.shieldDelay = 0;
     enemy.healTimer = def.healEvery ?? 0;
@@ -586,7 +598,7 @@ export class Simulation {
         if (enemy.shieldDelay > 0) enemy.shieldDelay -= dt;
         else if (enemy.shield < enemy.maxShield) {
           const was = enemy.shield;
-          enemy.shield = Math.min(enemy.maxShield, enemy.shield + def.shieldRegen * enemy.hpMultiplier * dt);
+          enemy.shield = Math.min(enemy.maxShield, enemy.shield + (def.shieldRegen ?? 20) * enemy.hpMultiplier * dt);
           if (was <= 0 && enemy.shield > 0) this.listener.onShieldUp?.(enemy);
         }
       }
@@ -653,7 +665,7 @@ export class Simulation {
   damage(enemy, amount, tower, pierce = false, silent = false) {
     if (!enemy.active) return;
     if (enemy.maxShield > 0) {
-      enemy.shieldDelay = enemy.def.shieldDelay;
+      enemy.shieldDelay = enemy.def.shieldDelay ?? 2.5;
       if (enemy.shield > 0) {
         // The bubble takes the hit first (armor does not apply to it).
         const absorbed = Math.min(enemy.shield, amount);
@@ -692,7 +704,7 @@ export class Simulation {
     const def = enemy.def;
     let bounty = 0;
     for (const t of this.towers) bounty += t.stats.bounty ?? 0;
-    this.gold += def.reward + bounty;
+    this.gold += Math.round(def.reward * (this.rules.reward ?? 1)) + bounty;
     this.stats.kills++;
     if (def.id === 'boss') this.stats.bossKills++;
     this.stats.goldEarned += def.reward;

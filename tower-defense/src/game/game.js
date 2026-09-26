@@ -15,6 +15,8 @@ import { ProjectileViews } from '../render/projectileViews.js';
 import { RealmViews } from '../render/realmViews.js';
 import { HeroView } from '../render/heroView.js';
 import { HERO, HERO_MAX_LEVEL, heroStats } from '../data/hero.js';
+import { DAILY_GEMS, dailyChallenge } from '../data/daily.js';
+import { ENEMIES } from '../data/enemies.js';
 import { heroNextXp } from '../sim/hero.js';
 import { SpellViews } from '../render/spellViews.js';
 import { TowerViews } from '../render/towerViews.js';
@@ -55,6 +57,9 @@ export class Game {
     this.spellViews = new SpellViews(scene, assets, this.effects, view.camera);
     this.realmViews = new RealmViews(scene, assets, this.world, this.effects);
     this.heroView = new HeroView(scene, assets);
+    this.world.onLightning = () => {
+      if (this.mode === MODE.PLAYING || this.mode === MODE.MENU) this.audio.thunder();
+    };
     this.rig = new CameraRig(view.camera);
     this.input = new PointerInput(view.canvas);
     this.monitor = new FrameRateMonitor();
@@ -131,6 +136,7 @@ export class Game {
         if (!this.sim.enemies.some((e) => e.active) && this.sim.spawners.length === 0) this.audio.setIntensity(0);
       },
       onEnemySpawn: (enemy) => {
+        this.noteEnemy(enemy);
         this.enemyViews.acquire(enemy);
         if (enemy.distance === 0) this.effects.spawnBeam(enemy.x, enemy.z);
       },
@@ -145,6 +151,7 @@ export class Game {
         this.audio.shieldBreak?.();
       },
       onEnemyKilled: (enemy) => {
+        this.save.bestiary[enemy.def.id] = (this.save.bestiary[enemy.def.id] ?? 0) + 1;
         const big = enemy.def.id === 'boss';
         this.enemyViews.positionOf(enemy, this.tmp);
         const { x, y, z } = this.tmp;
@@ -378,6 +385,9 @@ export class Game {
     ui.on('btn-shop', () => this.showShop());
     ui.on('btn-shop-back', () => this.showMenu());
     ui.on('btn-achievements', () => this.showAchievements());
+    ui.on('btn-daily', () => this.startDaily());
+    ui.on('btn-bestiary', () => this.showBestiary());
+    ui.on('btn-bestiary-back', () => this.showMenu());
     ui.on('btn-achievements-back', () => this.showMenu());
     ui.on('btn-resume-run', () => this.resumeRun());
     ui.on('shopTab', () => this.renderShop());
@@ -531,6 +541,15 @@ export class Game {
     this.refreshWallet();
     const run = loadRun();
     const runDef = run && ALL_LEVELS.find((def) => def.id === run.levelId);
+    const daily = dailyChallenge();
+    const dailyDone = this.save.daily.day === daily.day;
+    const streak = this.save.daily.day >= daily.day - 1 ? this.save.daily.streak : 0;
+    this.ui.setDailyCard(
+      streak > 1 ? `Défi du jour · série ${streak}` : 'Défi du jour',
+      `${daily.def.mapName} · ${daily.rules.map((r) => r.name).join(' + ')}`,
+      dailyDone ? '✓ Réussi' : `+${DAILY_GEMS} 💎`,
+      dailyDone,
+    );
     const realmCard = this.realmMode.menuDetail();
     this.ui.setRealmCard(realmCard.detail, realmCard.fresh);
     this.ui.setResume(runDef ? `${runDef.name}${run.heroic ? ' · Héroïque' : ''} · vague ${Math.max(1, run.snapshot.nextWave)} · ${run.snapshot.lives} vies` : null);
@@ -580,7 +599,7 @@ export class Game {
     this.clearEntities();
     this.current = target;
     const { def, index, heroic } = target;
-    const options = { heroic, modifiers: buildModifiers(this.save.perks), spells: this.save.owned.spells };
+    const options = { heroic, modifiers: buildModifiers(this.save.perks), spells: this.save.owned.spells, rules: target.daily?.options ?? {} };
     if (snapshot) {
       // Rebuild the saved run silently, then attach the listener and create the views.
       this.sim = new Simulation(def, index, {}, options);
@@ -612,6 +631,7 @@ export class Game {
     this.ui.setPlayingUi(true);
     const detail = def.endless ? 'Vagues infinies' : `${def.waves} vagues · ${heroic ? 'Héroïque : 5 vies, ennemis renforcés' : def.subtitle}`;
     if (snapshot) this.ui.showBanner('Partie reprise', `${def.name} · vague ${Math.max(1, this.sim.nextWave)}`);
+    else if (target.daily) this.ui.showBanner(`🎯 ${def.mapName}`, target.daily.rules.map((r) => r.text).join(' '), 'danger');
     else this.ui.showBanner(heroic ? `👑 ${def.name}` : def.name, detail, heroic ? 'danger' : '');
     this.audio.setIntensity(0);
     this.audio.duck(false);
@@ -678,7 +698,28 @@ export class Game {
     this.wasCleared = (this.save.levels[def.id]?.stars ?? 0) > 0;
     this.hadCrown = this.save.levels[def.id]?.crown ?? false;
 
-    if (def.endless) {
+    if (this.current.daily) {
+      // Daily challenge: gems for the first win of the day, and a streak of days.
+      const day = this.current.daily.day;
+      this.wasCleared = true;
+      this.hadCrown = true;
+      this.dailyGems = 0;
+      if (victory && this.save.daily.day !== day) {
+        this.save.daily.streak = this.save.daily.day === day - 1 ? this.save.daily.streak + 1 : 1;
+        this.save.daily.day = day;
+        this.save.gems += DAILY_GEMS;
+        this.dailyGems = DAILY_GEMS;
+      }
+      if (victory) {
+        this.audio.victory();
+        this.haptics.pulse(CONFIG.haptics.victory);
+        this.ui.showBanner('Défi réussi !', this.dailyGems ? `+${this.dailyGems} gemmes · série de ${this.save.daily.streak} jour${this.save.daily.streak > 1 ? 's' : ''}` : 'Déjà réussi aujourd’hui');
+      } else {
+        this.audio.defeat();
+        this.haptics.pulse(CONFIG.haptics.leak);
+        this.ui.showBanner('Défi raté', 'Réessaie : la carte reste la même jusqu’à minuit', 'danger');
+      }
+    } else if (def.endless) {
       const reached = Math.max(0, this.sim.nextWave - 1);
       const record = reached > this.save.survival.bestWave;
       this.save.survival.bestWave = Math.max(this.save.survival.bestWave, reached);
@@ -698,7 +739,7 @@ export class Game {
       this.ui.showBanner('Le château est tombé', '', 'danger');
     }
     this.newStars = earnedStars(this.save) - before;
-    clearRun();
+    if (!this.current.daily) clearRun();
     this.commitRun(victory);
     writeSave(this.save);
   }
@@ -733,7 +774,7 @@ export class Game {
       wavesCleared: sim.stats.wavesCleared,
     }) : 0;
     this.save.gems += reward;
-    this.gemsEarned = reward + this.checkAchievements();
+    this.gemsEarned = reward + (this.current.daily ? this.dailyGems ?? 0 : 0) + this.checkAchievements();
     writeSave(this.save);
   }
 
@@ -764,7 +805,7 @@ export class Game {
       return;
     }
     const sim = this.sim;
-    if (!sim || sim.over || !this.current || (this.mode !== MODE.PLAYING && this.mode !== MODE.PAUSED)) return;
+    if (!sim || sim.over || !this.current || this.current.daily || (this.mode !== MODE.PLAYING && this.mode !== MODE.PAUSED)) return;
     writeRun({
       levelId: this.current.def.id,
       heroic: this.current.heroic,
@@ -835,6 +876,38 @@ export class Game {
     this.refreshWallet();
   }
 
+  /** Bestiary: the first time a UFO type shows up, it is announced and recorded. */
+  noteEnemy(enemy) {
+    const type = enemy.def.id;
+    if (this.save.bestiary[type] !== undefined) return;
+    this.save.bestiary[type] = 0;
+    const basic = ['scout', 'runner', 'tank', 'mini'].includes(type);
+    if (!basic && this.mode === MODE.PLAYING) this.ui.showBanner(`Nouvel ovni : ${enemy.def.name}`, enemy.def.blurb);
+    writeSave(this.save);
+  }
+
+  startDaily() {
+    const challenge = dailyChallenge();
+    this.startLevel({ def: challenge.def, index: challenge.levelIndex, heroic: false, daily: challenge });
+  }
+
+  showBestiary() {
+    this.mode = MODE.PERKS;
+    const seen = this.save.bestiary;
+    const items = Object.values(ENEMIES).map((def) => ({
+      id: def.id,
+      known: seen[def.id] !== undefined,
+      name: def.name,
+      blurb: def.blurb ?? '',
+      image: this.ui.thumbnails.enemies[def.id],
+      kills: seen[def.id] ?? 0,
+      stats: [['Vie', def.hp], ['Vitesse', def.speed.toFixed(1).replace('.', ',')], ['Armure', def.armor], ...(def.shield ? [['Bouclier', def.shield]] : [])],
+    }));
+    this.ui.renderBestiary(items);
+    this.ui.showScreen('bestiary');
+    this.audio.click();
+  }
+
   showAchievements() {
     this.mode = MODE.PERKS;
     this.ui.renderAchievements(ACHIEVEMENTS.map((a) => ({ ...a, done: Boolean(this.save.achievements[a.id]) })));
@@ -871,9 +944,9 @@ export class Game {
     this.ui.showEnd({
       victory,
       title: victory && heroic ? 'Couronne !' : undefined,
-      levelName: heroic ? `${def.name} · Héroïque` : def.name,
-      stars: sim.stars,
-      hasNext: !heroic && index < LEVELS.length - 1,
+      levelName: this.current.daily ? `Défi du jour · ${def.mapName}` : heroic ? `${def.name} · Héroïque` : def.name,
+      stars: this.current.daily ? 0 : sim.stars,
+      hasNext: !heroic && !this.current.daily && index < LEVELS.length - 1,
       reward,
       stats: [
         ['Vagues', `${victory ? sim.waveCount : Math.max(0, sim.nextWave - 1)}/${sim.waveCount}`],
@@ -972,7 +1045,7 @@ export class Game {
     this.effects.showCursor(cell.x, cell.z);
     this.effects.hideRange();
     this.sheetGold = this.sim.gold;
-    this.ui.openBuildSheet(this.sim.gold, null, this.save.owned.towers);
+    this.ui.openBuildSheet(this.sim.gold, null, this.save.owned.towers.filter((id) => this.sim.towerAllowed(id)));
     this.audio.click();
     this.haptics.pulse(CONFIG.haptics.tap);
   }

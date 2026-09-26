@@ -99,7 +99,9 @@ export function play(levelDef, levelIndex, { bot = true, perks = false, spells =
 
 const label = `${usePerks ? 'with mid perks' : 'no perks'}, ${useSpells ? 'spells' : 'no spells'}`;
 console.log(`— ${runs} runs per level (${label})`);
+const from = Number(args.find((a) => a.startsWith('--from='))?.slice(7) ?? 1) - 1;
 LEVELS.forEach((level, i) => {
+  if (i < from) return;
   const results = Array.from({ length: runs }, () => play(level, i, { perks: usePerks, spells: useSpells }));
   const wins = results.filter((r) => r.won).length;
   const lives = results.map((r) => r.lives).join(',');

@@ -468,6 +468,14 @@ export class AudioEngine {
     this.tone({ type: 'sine', freq: 110, freqEnd: 45, start: t + 0.25, duration: 0.35, gain: 0.35, attack: 0.003 });
   }
 
+  /** Distant thunder after a lightning flash (storm level). */
+  thunder() {
+    if (!this.ready || !this.soundOn) return;
+    const t = this.ctx.currentTime + 0.35 + Math.random() * 0.5;
+    this.noise({ start: t, duration: 1.8, gain: 0.22, filter: 'lowpass', freq: 380, freqEnd: 90 });
+    this.noise({ start: t, duration: 0.25, gain: 0.12, filter: 'lowpass', freq: 1200 });
+  }
+
   /** A UFO shield bubble pops. */
   shieldBreak() {
     const t = this.gate('shieldBreak');

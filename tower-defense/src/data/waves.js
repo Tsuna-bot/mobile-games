@@ -6,10 +6,12 @@ import { ENEMIES } from './enemies.js';
  * and a mothership every fifth wave and on the final wave. Works for any `w`,
  * which is what endless mode relies on.
  */
-export function makeWave(level, levelIndex, w, { heroic = false } = {}) {
+export function makeWave(level, levelIndex, w, { heroic = false, swarm = 1 } = {}) {
   const spawns = [];
+  // A swarm (daily rule) brings more, weaker UFOs.
   const add = (type, count, interval, delay) => {
-    for (let i = 0; i < count; i++) spawns.push({ time: delay + i * interval, type });
+    const n = type === 'boss' ? count : Math.round(count * swarm);
+    for (let i = 0; i < n; i++) spawns.push({ time: delay + (i * interval) / swarm, type });
   };
   const last = !level.endless && w === level.waves;
   const tier = Math.min(levelIndex, 4);
@@ -34,7 +36,7 @@ export function makeWave(level, levelIndex, w, { heroic = false } = {}) {
   let growth = 1 + 0.15 * (w - 1) + 0.012 * (w - 1) ** 2;
   // Endless mode keeps accelerating so every run ends eventually.
   if (level.endless && w > 12) growth *= 1 + (w - 12) * 0.07;
-  const hpMultiplier = level.hpScale * growth * (heroic ? 1.3 : 1);
+  const hpMultiplier = (level.hpScale * growth * (heroic ? 1.3 : 1)) / Math.sqrt(swarm) / (swarm > 1 ? 1.15 : 1);
   const reward = spawns.reduce((sum, s) => sum + ENEMIES[s.type].reward, 0);
   return { number: w, spawns, hpMultiplier, reward };
 }

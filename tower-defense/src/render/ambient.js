@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const MODES = { pollen: 0, snow: 1, fireflies: 2, motes: 3, leaves: 4 };
+const MODES = { pollen: 0, snow: 1, fireflies: 2, motes: 3, leaves: 4, embers: 5, rain: 6 };
 const SETTINGS = {
   pollen: { count: 90, color: 0xfff3b0, size: 0.07, additive: false, opacity: 0.8 },
   snow: { count: 260, color: 0xffffff, size: 0.075, additive: false, opacity: 0.95 },
@@ -8,6 +8,12 @@ const SETTINGS = {
   motes: { count: 110, color: 0x9fe8ff, size: 0.09, additive: true, opacity: 0.9 },
   // Leaves drifting down from the woods, with pollen motes (Kingdom by day).
   leaves: { count: 200, color: 0x86b84a, color2: 0xe39a3a, size: 0.13, additive: false, opacity: 0.95 },
+  // Level moods reusing a shader (`shader`) with their own colors.
+  autumnLeaves: { shader: 'leaves', count: 170, color: 0xe0802a, color2: 0xb8401a, size: 0.13, additive: false, opacity: 0.95 },
+  sand: { shader: 'pollen', count: 220, color: 0xf2dca8, size: 0.05, additive: false, opacity: 0.7 },
+  swampFlies: { shader: 'fireflies', count: 110, color: 0xc8ff6a, size: 0.1, additive: true, opacity: 1 },
+  embers: { count: 150, color: 0xff7a2a, size: 0.09, additive: true, opacity: 1 },
+  rain: { count: 260, color: 0xb8ccff, size: 0.16, additive: false, opacity: 0.55 },
 };
 const MAX = 260;
 const HEIGHT = 4;
@@ -40,6 +46,18 @@ void main() {
     p += vec3(sin(t * 0.6), sin(t * 0.9) * 0.4, cos(t * 0.5)) * 0.7;
     p.y = 0.35 + abs(p.y) * 0.35;
     vAlpha *= 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * 3.0), 3.0);
+  } else if (uMode > 5.5) {
+    // Rain: fast straight fall, drawn as a thin streak.
+    p.y = ${HEIGHT.toFixed(1)} - mod(uTime * 7.0 + aSeed * ${HEIGHT.toFixed(1)} * 9.0, ${HEIGHT.toFixed(1)});
+    p.x += p.y * 0.12;
+    vMix = 0.0;
+    vAngle = -1.0;
+  } else if (uMode > 4.5) {
+    // Embers: rise from the ground, drifting and flickering.
+    p.y = mod(position.y + uTime * 0.45 + aSeed * 3.0, ${HEIGHT.toFixed(1)});
+    p.x += sin(t * 0.9) * 0.35;
+    p.z += cos(t * 0.7) * 0.25;
+    vAlpha *= (1.0 - p.y / ${HEIGHT.toFixed(1)}) * (0.5 + 0.5 * sin(t * 7.0));
   } else if (uMode > 3.5) {
     // Leaves: slow fall, swaying side to side and spinning.
     p.y = ${HEIGHT.toFixed(1)} - mod(uTime * 0.28 + aSeed * ${HEIGHT.toFixed(1)} * 5.0, ${HEIGHT.toFixed(1)});
@@ -69,7 +87,9 @@ varying float vAngle;
 void main() {
   vec2 q = gl_PointCoord - 0.5;
   float d = length(q);
-  if (uMode > 3.5) {
+  if (uMode > 5.5) {
+    d = length(q * vec2(5.0, 0.55));
+  } else if (uMode > 3.5 && uMode < 4.5) {
     // A leaf: a thin ellipse that turns as it falls.
     float c = cos(vAngle);
     float s = sin(vAngle);
@@ -118,7 +138,7 @@ export class AmbientParticles {
   configure(mode, halfW, halfH) {
     this.settings = SETTINGS[mode] ?? SETTINGS.pollen;
     const u = this.material.uniforms;
-    u.uMode.value = MODES[mode] ?? 0;
+    u.uMode.value = MODES[this.settings.shader ?? mode] ?? 0;
     u.uSize.value = this.settings.size;
     u.uColor.value.set(this.settings.color);
     u.uColor2.value.set(this.settings.color2 ?? this.settings.color);
