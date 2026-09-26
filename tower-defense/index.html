@@ -112,6 +112,17 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="14" r="7"/><circle cx="6" cy="5" r="2.2"/><circle cx="13" cy="3.5" r="1.8"/><circle cx="19" cy="6" r="2"/></svg>
           <span class="spell__cooldown"></span><span class="spell__time"></span>
         </button>
+        <span class="hero-group">
+          <button class="spell spell--hero" id="btn-hero-power" type="button" aria-label="Frappe tournoyante du chevalier">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l2.6 6.4 6.9.6-5.2 4.5 1.6 6.8L12 16.2l-5.9 3.6 1.6-6.8-5.2-4.5 6.9-.6z"/></svg>
+            <span class="spell__cooldown"></span><span class="spell__time"></span>
+          </button>
+          <button class="hero-btn" id="btn-hero" type="button" aria-label="Chevalier : sélectionner">
+            <img id="hero-portrait" alt="" width="52" height="52">
+            <b id="hero-level">1</b>
+            <i class="hero-btn__hp"><i id="hero-hp"></i></i>
+          </button>
+        </span>
       </div>
       <button id="btn-wave" class="wave-btn" type="button">
         <span class="wave-btn__progress" id="wave-progress"></span>
@@ -145,9 +156,33 @@
       </div>
       <dl class="tower-stats" id="tower-stats"></dl>
       <div class="segmented" id="tower-targeting" role="group" aria-label="Cible prioritaire"></div>
+      <div class="branches" id="tower-branches" hidden></div>
       <div class="sheet__actions">
         <button id="btn-sell" class="btn btn--ghost" type="button">Vendre</button>
         <button id="btn-upgrade" class="btn btn--gold" type="button">Améliorer</button>
+      </div>
+    </section>
+
+    <section id="sheet-hero" class="sheet" aria-labelledby="hero-name">
+      <div class="sheet__head">
+        <div class="tower-id">
+          <img id="hero-image" alt="" width="64" height="64">
+          <div>
+            <h2 id="hero-name">Chevalier</h2>
+            <div class="pips" id="hero-pips" aria-label="Niveau"></div>
+          </div>
+        </div>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <div class="work" id="hero-xp">
+        <div class="work__bar"><i id="hero-xp-fill"></i></div>
+        <span id="hero-xp-text"></span>
+      </div>
+      <dl class="tower-stats" id="hero-stats"></dl>
+      <p class="sheet__hint" id="hero-hint">Touche la carte pour l’envoyer : il frappe les ovnis à sa portée.</p>
+      <div class="sheet__actions">
+        <button id="btn-hero-home" class="btn btn--ghost" type="button">Au château</button>
+        <button id="btn-hero-power-sheet" class="btn btn--gold" type="button">Frappe tournoyante</button>
       </div>
     </section>
 
@@ -181,6 +216,7 @@
       </div>
       <dl class="tower-stats" id="realm-info-stats"></dl>
       <div class="segmented" id="realm-info-targeting" role="group" aria-label="Cible prioritaire"></div>
+      <div class="branches" id="realm-branches" hidden></div>
       <div class="sheet__actions">
         <button id="btn-demolish" class="btn btn--ghost" type="button">Démolir</button>
         <button id="btn-realm-extra" class="btn btn--ghost" type="button" hidden>Tout réparer</button>

@@ -13,7 +13,7 @@ const EIGHTH = 60 / TEMPO / 2;
 const LOOKAHEAD = 0.15;
 
 // Minimum seconds between two plays of the same sound, so rapid fire stays pleasant.
-const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, flame: 0.12, laser: 0.35, poison: 0.1, mortar: 0.15, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05, chop: 0.12, deliver: 0.08, siege: 0.15, hammer: 0.09, thud: 0.12, collect: 0.05, whoosh: 0.1 };
+const THROTTLE = { tesla: 0.08, sniper: 0.1, turret: 0.07, ballista: 0.06, cannon: 0.08, catapult: 0.1, frost: 0.1, flame: 0.12, laser: 0.35, poison: 0.1, mortar: 0.15, explosion: 0.06, death: 0.05, coin: 0.05, hit: 0.05, chop: 0.12, deliver: 0.08, siege: 0.15, hammer: 0.09, thud: 0.12, collect: 0.05, whoosh: 0.1, shieldBreak: 0.08, heroHit: 0.08, heroPower: 0.5 };
 
 /**
  * Procedural audio (Web Audio API, no sound files). Created on the first user
@@ -449,6 +449,31 @@ export class AudioEngine {
     } else {
       this.ambienceTimer = 1;
     }
+  }
+
+  /** The knight's hammer hits a UFO. */
+  heroHit() {
+    const t = this.gate('heroHit');
+    if (t === null) return;
+    const pitch = 0.9 + Math.random() * 0.2;
+    this.tone({ type: 'square', freq: 520 * pitch, freqEnd: 180, start: t, duration: 0.09, gain: 0.05, attack: 0.001 });
+    this.noise({ start: t, duration: 0.07, gain: 0.08, filter: 'bandpass', freq: 1800, q: 1.5 });
+  }
+
+  /** The knight's spinning strike. */
+  heroPower() {
+    const t = this.gate('heroPower');
+    if (t === null) return;
+    this.noise({ start: t, duration: 0.45, gain: 0.14, filter: 'bandpass', freq: 400, freqEnd: 2400, q: 1 });
+    this.tone({ type: 'sine', freq: 110, freqEnd: 45, start: t + 0.25, duration: 0.35, gain: 0.35, attack: 0.003 });
+  }
+
+  /** A UFO shield bubble pops. */
+  shieldBreak() {
+    const t = this.gate('shieldBreak');
+    if (t === null) return;
+    this.tone({ type: 'sine', freq: 1800, freqEnd: 500, start: t, duration: 0.18, gain: 0.05, attack: 0.002 });
+    this.noise({ start: t, duration: 0.12, gain: 0.05, filter: 'highpass', freq: 4000 });
   }
 
   /** Warning bell before nightfall (`urgent`: the last seconds). */

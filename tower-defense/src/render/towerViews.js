@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
-import { PIECE_HEIGHT, stackHeight } from '../data/towers.js';
+import { BRANCHES, PIECE_HEIGHT, stackHeight } from '../data/towers.js';
 import { damp } from '../core/math.js';
 
 // Child node names in the Kenney weapon models that animate when firing.
@@ -148,6 +148,23 @@ export class TowerViews {
       view.aura.renderOrder = 2;
       view.group.add(view.aura);
     }
+    // A specialized tower: bigger weapon and an aura in the colour of its path.
+    const branch = view.tower.branch;
+    if (branch && view.aura) {
+      const index = (BRANCHES[view.tower.def.id] ?? []).indexOf(branch);
+      view.aura.material = this.branchAura(index);
+      view.aura.scale.setScalar(1.15);
+      view.weapon.scale.multiplyScalar(1.15);
+    }
+  }
+
+  branchAura(index) {
+    this.branchAuras ??= [0x5ee8ff, 0xff6ad5].map((color) => {
+      const material = this.auraMaterial.clone();
+      material.color = new THREE.Color(color).multiplyScalar(1.4);
+      return material;
+    });
+    return this.branchAuras[Math.max(0, index) % 2];
   }
 
   upgrade(tower) {

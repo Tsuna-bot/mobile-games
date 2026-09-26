@@ -9,7 +9,7 @@ const HIT_FLASH = new THREE.Color(0xffffff);
 const FROST_TINT = new THREE.Color(0x3aa8ff);
 const FREEZE_TINT = new THREE.Color(0x9fe6ff);
 const BLACK = new THREE.Color(0x000000);
-const GLOW_COLORS = { scout: 0x7dff6a, runner: 0x5ee8ff, tank: 0xffa347, boss: 0xff5cf0 };
+const GLOW_COLORS = { scout: 0x7dff6a, runner: 0x5ee8ff, tank: 0xffa347, boss: 0xff5cf0, siege: 0xff6a3a, shield: 0x7fc8ff, splitter: 0xd08cff, mini: 0xe0a8ff, healer: 0x7dff9a };
 
 function createRadialTexture(inner, outer) {
   const size = 64;
@@ -63,6 +63,17 @@ export class EnemyViews {
       flatShading: true,
       depthWrite: false,
     });
+    // Shield bubble around shielded UFOs (fades as it takes hits).
+    this.bubbleGeometry = new THREE.SphereGeometry(0.5, 20, 14);
+    this.bubbleMaterial = new THREE.MeshStandardMaterial({
+      color: 0x9fd8ff,
+      emissive: 0x3a9cff,
+      emissiveIntensity: 0.8,
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.1,
+      depthWrite: false,
+    });
   }
 
   glowMaterial(type) {
@@ -84,6 +95,7 @@ export class EnemyViews {
     const root = new THREE.Group();
     const model = this.assets.clone(def.model);
     const material = this.assets.material.clone();
+    if (def.tint) material.color.set(def.tint);
     model.traverse((object) => {
       if (!object.isMesh) return;
       object.material = material;
@@ -111,6 +123,15 @@ export class EnemyViews {
     ice.renderOrder = 3;
     root.add(ice);
 
+    let bubble = null;
+    if (def.shield) {
+      bubble = new THREE.Mesh(this.bubbleGeometry, this.bubbleMaterial.clone());
+      bubble.scale.set(scale * 1.9, scale * 1.3, scale * 1.9);
+      bubble.position.y = 0.25 * scale;
+      bubble.renderOrder = 4;
+      root.add(bubble);
+    }
+
     const bar = new THREE.Group();
     const width = BAR_WIDTH * (def.id === 'boss' ? 1.5 : 1);
     const back = new THREE.Mesh(this.barGeometry, this.barBackMaterial);
@@ -130,7 +151,17 @@ export class EnemyViews {
     bar.position.y = 0.68 * scale + 0.3;
     root.add(bar);
 
-    return { type, root, model, material, bar, fill, fillMaterial, barWidth: width, shadow, glow, ice, flash: 0, spawn: 0, spin: Math.random() * Math.PI * 2, px: 0, pz: 0 };
+    // Blue strip above the health bar while the shield holds.
+    let shieldFill = null;
+    if (def.shield) {
+      shieldFill = new THREE.Mesh(this.barGeometry, new THREE.MeshBasicMaterial({ color: 0x6ad0ff, depthWrite: false, depthTest: false, toneMapped: false, fog: false }));
+      shieldFill.scale.set(width, BAR_HEIGHT * 0.45, 1);
+      shieldFill.position.set(-width / 2, BAR_HEIGHT * 0.85, 0);
+      shieldFill.renderOrder = 23;
+      bar.add(shieldFill);
+    }
+
+    return { type, root, model, material, bar, fill, fillMaterial, barWidth: width, shadow, glow, ice, bubble, shieldFill, pulse: 0, flash: 0, spawn: 0, spin: Math.random() * Math.PI * 2, px: 0, pz: 0 };
   }
 
   acquire(enemy) {
@@ -162,6 +193,11 @@ export class EnemyViews {
 
   hit(enemy) {
     if (enemy.view) enemy.view.flash = 1;
+  }
+
+  /** Healer pulse: the saucer swells briefly. */
+  pulse(enemy) {
+    if (enemy.view) enemy.view.pulse = 1;
   }
 
   /** Current rendered position of an enemy (for effects anchored to it). */
@@ -206,6 +242,19 @@ export class EnemyViews {
       else emissive.copy(BLACK);
       if (view.flash > 0) emissive.lerp(HIT_FLASH, view.flash * 0.8);
 
+      if (view.bubble) {
+        const share = enemy.maxShield > 0 ? enemy.shield / enemy.maxShield : 0;
+        view.bubble.visible = share > 0.01;
+        view.bubble.material.opacity = 0.12 + 0.28 * share + view.flash * 0.25;
+        view.bubble.rotation.y = time * 0.8;
+        view.shieldFill.scale.x = Math.max(0.001, view.barWidth * share);
+        view.shieldFill.visible = share > 0.01;
+      }
+      if (view.pulse > 0) {
+        view.pulse = Math.max(0, view.pulse - dt * 3);
+        view.model.scale.setScalar(enemy.def.scale * CONFIG.world.enemyScale * (1 + Math.sin(view.pulse * Math.PI) * 0.18));
+      }
+
       const fraction = Math.max(0, enemy.hp / enemy.maxHp);
       view.fill.scale.x = Math.max(0.001, view.barWidth * fraction);
       // Green → yellow → red, saturated so it reads on every background.
@@ -224,6 +273,8 @@ export class EnemyViews {
       for (const view of pool) {
         view.material.dispose();
         view.fillMaterial.dispose();
+        view.bubble?.material.dispose();
+        view.shieldFill?.material.dispose();
       }
     }
     this.pools.clear();
@@ -237,5 +288,7 @@ export class EnemyViews {
     for (const material of Object.values(this.glowMaterials)) material.dispose();
     this.iceGeometry.dispose();
     this.iceMaterial.dispose();
+    this.bubbleGeometry.dispose();
+    this.bubbleMaterial.dispose();
   }
 }

@@ -302,6 +302,28 @@ export class Effects {
     this.sparks.burst(tx, ty, tz, this.count(5), 2.4, COLORS.laser, 0.08, 0.3, { gravity: 5, brightness: 1.8 });
   }
 
+  /** The knight's spinning strike: shockwave, dust and golden sparks. */
+  heroPower(x, z, radius) {
+    const top = CONFIG.world.tileTop;
+    this.ring(x, z, radius, 0.5, COLORS.gold);
+    this.ring(x, z, radius * 0.6, 0.35, COLORS.spark);
+    this.puffs.burst(x, top + 0.1, z, this.count(20), radius * 2.4, COLORS.dust, 0.35, 0.8, { upward: 0.25, drag: 3, endSize: 0.9 });
+    this.sparks.burst(x, top + 0.6, z, this.count(26), radius * 2.2, COLORS.gold, 0.14, 0.6, { upward: 0.3, drag: 2, brightness: 1.6 });
+    this.flash(x, top + 0.7, z, 2);
+  }
+
+  /** Healer pulse: a green ring and sparkles rising from the UFOs it mends. */
+  healPulse(x, z, radius, targets) {
+    this.ring(x, z, radius, 0.6, COLORS.heal);
+    for (const t of targets) this.sparks.burst(t.x, CONFIG.world.enemyHover + 0.2, t.z, this.count(4), 1, COLORS.heal, 0.12, 0.6, { upward: 0.95, gravity: -1, brightness: 1.5 });
+  }
+
+  /** A shield bubble pops. */
+  shieldBreak(x, y, z) {
+    this.sparks.burst(x, y, z, this.count(18), 3, COLORS.frost, 0.14, 0.45, { gravity: 3, brightness: 1.8 });
+    this.flash(x, y, z, 1.1);
+  }
+
   /** A portal tears open. */
   portalOpen(x, z) {
     const top = CONFIG.world.tileTop;

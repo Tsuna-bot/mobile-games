@@ -283,3 +283,77 @@ export function investedGold(def, level) {
   for (let i = 1; i <= level; i++) total += def.levels[i].upgrade;
   return total;
 }
+
+/**
+ * Specializations: once a tower reaches its last level, it can take one of two paths.
+ * `mul` multiplies level stats, `add` adds to them, `set` overrides them.
+ * New stats: `stun` (s, on hit), `freezeChance`/`freezeTime` (frost), `execute`
+ * (finishes UFOs under this share of HP, bosses excepted), `bounty` (extra gold per
+ * kill anywhere), `igniteDps`/`igniteTime` (shells set the area on fire), `corrode`
+ * (armor removed by acid).
+ */
+export const BRANCHES = {
+  ballista: [
+    { id: 'rapid', name: 'Tir rapide', blurb: 'Tire presque deux fois plus vite.', mul: { rate: 0.55 } },
+    { id: 'piercing', name: 'Carreaux perçants', blurb: 'Dégâts ×1,8, perce l’armure, portée +0,5.', mul: { damage: 1.8 }, add: { range: 0.5 }, set: { armorPierce: true } },
+  ],
+  cannon: [
+    { id: 'shrapnel', name: 'Fragmentation', blurb: 'Explosions 50 % plus larges.', mul: { splash: 1.5, damage: 1.1 } },
+    { id: 'heavy', name: 'Canon lourd', blurb: 'Dégâts ×2 et portée +0,4, un peu plus lent.', mul: { damage: 2, rate: 1.2 }, add: { range: 0.4 } },
+  ],
+  turret: [
+    { id: 'minigun', name: 'Minigun', blurb: 'Cadence de tir ×1,7.', mul: { rate: 0.6 } },
+    { id: 'ap', name: 'Balles perforantes', blurb: 'Dégâts ×1,4 et perce l’armure.', mul: { damage: 1.4 }, set: { armorPierce: true } },
+  ],
+  catapult: [
+    { id: 'hail', name: 'Pluie de pierres', blurb: 'Tire beaucoup plus souvent.', mul: { rate: 0.62 } },
+    { id: 'boulder', name: 'Rocher géant', blurb: 'Dégâts ×1,8, zone plus large, assomme 0,8 s.', mul: { damage: 1.8, splash: 1.25 }, set: { stun: 0.8 } },
+  ],
+  frost: [
+    { id: 'blizzard', name: 'Blizzard', blurb: 'Portée ×1,35 et ralentit encore plus.', mul: { range: 1.35 }, add: { slow: 0.1 } },
+    { id: 'deepfreeze', name: 'Gel profond', blurb: '20 % de chances de geler net 1,2 s.', set: { freezeChance: 0.2, freezeTime: 1.2 } },
+  ],
+  tesla: [
+    { id: 'storm', name: 'Orage', blurb: '3 rebonds de plus.', add: { chains: 3 } },
+    { id: 'overload', name: 'Surtension', blurb: 'Dégâts ×1,7 et assomme 0,3 s.', mul: { damage: 1.7 }, set: { stun: 0.3 } },
+  ],
+  sniper: [
+    { id: 'marksman', name: 'Tireur d’élite', blurb: 'Portée ×1,3 et dégâts ×1,5.', mul: { range: 1.3, damage: 1.5 } },
+    { id: 'executioner', name: 'Exécuteur', blurb: 'Achève les ovnis sous 25 % de vie (sauf boss).', set: { execute: 0.25 } },
+  ],
+  goldmine: [
+    { id: 'bank', name: 'Banque', blurb: 'Rapporte 70 % d’or en plus.', mul: { income: 1.7 } },
+    { id: 'bounty', name: 'Chasseur de primes', blurb: '+2 or pour chaque ovni abattu.', set: { bounty: 2 } },
+  ],
+  flame: [
+    { id: 'napalm', name: 'Napalm', blurb: 'Brûlure ×1,8 qui dure plus longtemps.', mul: { burn: 1.8 }, add: { burnTime: 1.5 } },
+    { id: 'wide', name: 'Souffle large', blurb: 'Zone ×1,6 et portée +0,4.', mul: { splash: 1.6 }, add: { range: 0.4 } },
+  ],
+  mortar: [
+    { id: 'incendiary', name: 'Obus incendiaires', blurb: 'La zone touchée brûle 3 s.', set: { igniteDps: 22, igniteTime: 3 } },
+    { id: 'barrage', name: 'Barrage', blurb: 'Tire 65 % plus souvent.', mul: { rate: 0.6 } },
+  ],
+  laser: [
+    { id: 'overcharge', name: 'Surcharge', blurb: 'Chauffe jusqu’à ×1,6 plus fort.', mul: { maxRamp: 1.6 } },
+    { id: 'focus', name: 'Lentille', blurb: 'Dégâts ×1,4 et portée +0,5.', mul: { damage: 1.4 }, add: { range: 0.5 } },
+  ],
+  poison: [
+    { id: 'toxin', name: 'Toxine', blurb: 'Poison ×1,8 qui dure 2 s de plus.', mul: { poison: 1.8 }, add: { poisonTime: 2 } },
+    { id: 'corrosion', name: 'Corrosion', blurb: 'L’acide ronge l’armure (−4 par nuage).', set: { corrode: 4 } },
+  ],
+};
+
+/** Gold price of a specialization in the campaign. */
+export function branchCost(def) {
+  return Math.round(def.levels[def.levels.length - 1].upgrade * 1.25);
+}
+
+/** Level stats with a specialization applied. */
+export function applyBranch(stats, branch) {
+  if (!branch) return stats;
+  const out = { ...stats };
+  for (const [key, value] of Object.entries(branch.mul ?? {})) if (out[key] !== undefined) out[key] *= value;
+  for (const [key, value] of Object.entries(branch.add ?? {})) out[key] = (out[key] ?? 0) + value;
+  Object.assign(out, branch.set ?? {});
+  return out;
+}

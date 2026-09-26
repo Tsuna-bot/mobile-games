@@ -9,10 +9,13 @@ import { SPELLS, SPELL_ORDER } from '../data/spells.js';
 import { TOWERS, TOWER_ORDER } from '../data/towers.js';
 import { PointerInput } from '../input/pointer.js';
 import { CameraRig } from '../render/cameraRig.js';
-import { Effects } from '../render/effects.js';
+import { EFFECT_COLORS, Effects } from '../render/effects.js';
 import { EnemyViews } from '../render/enemyViews.js';
 import { ProjectileViews } from '../render/projectileViews.js';
 import { RealmViews } from '../render/realmViews.js';
+import { HeroView } from '../render/heroView.js';
+import { HERO, HERO_MAX_LEVEL, heroStats } from '../data/hero.js';
+import { heroNextXp } from '../sim/hero.js';
 import { SpellViews } from '../render/spellViews.js';
 import { TowerViews } from '../render/towerViews.js';
 import { FrameRateMonitor, detectInitialQuality, lowerQuality } from '../render/view.js';
@@ -51,6 +54,7 @@ export class Game {
     this.projectileViews = new ProjectileViews(scene, assets, this.effects);
     this.spellViews = new SpellViews(scene, assets, this.effects, view.camera);
     this.realmViews = new RealmViews(scene, assets, this.world, this.effects);
+    this.heroView = new HeroView(scene, assets);
     this.rig = new CameraRig(view.camera);
     this.input = new PointerInput(view.canvas);
     this.monitor = new FrameRateMonitor();
@@ -131,6 +135,15 @@ export class Game {
         if (enemy.distance === 0) this.effects.spawnBeam(enemy.x, enemy.z);
       },
       onEnemyHit: (enemy) => this.enemyViews.hit(enemy),
+      onEnemyHeal: (enemy, healed) => {
+        this.enemyViews.pulse(enemy);
+        this.effects.healPulse(enemy.x, enemy.z, enemy.def.healRadius, healed);
+      },
+      onShieldBreak: (enemy) => {
+        const p = this.enemyViews.positionOf(enemy, this.tmp);
+        this.effects.shieldBreak(p.x, p.y + 0.2, p.z);
+        this.audio.shieldBreak?.();
+      },
       onEnemyKilled: (enemy) => {
         const big = enemy.def.id === 'boss';
         this.enemyViews.positionOf(enemy, this.tmp);
@@ -163,6 +176,44 @@ export class Game {
         this.effects.build(tower.x, tower.z, this.snowy);
         this.audio.build();
         this.haptics.pulse(CONFIG.haptics.build);
+      },
+      onHeroAttack: (hero, target) => {
+        this.heroView.attack();
+        this.effects.sparksAt(target.x, CONFIG.world.enemyHover, target.z);
+        this.audio.heroHit();
+      },
+      onHeroPower: (hero) => {
+        this.heroView.power();
+        this.effects.heroPower(hero.x, hero.z, HERO.power.radius);
+        this.rig.shake(0.45);
+        this.rig.punch?.(0.04);
+        this.audio.heroPower();
+        this.haptics.pulse(CONFIG.haptics.build);
+      },
+      onHeroDown: (hero) => {
+        this.heroView.fall();
+        this.ui.showBanner('Le chevalier est tombé', `De retour au château dans ${HERO.respawn} s`, 'danger');
+        this.audio.leak();
+        this.haptics.pulse(CONFIG.haptics.leak);
+      },
+      onHeroRevive: (hero) => {
+        this.heroView.revive();
+        this.effects.heal(hero.x, hero.z);
+      },
+      onHeroLevel: (hero) => {
+        this.floatAt(hero.x, 1.9, hero.z, `Chevalier niv. ${hero.level} !`, 'res');
+        this.effects.upgrade(hero.x, hero.z);
+        this.audio.upgrade();
+        this.haptics.pulse(CONFIG.haptics.complete);
+      },
+      onTowerSpecialized: (tower) => {
+        this.towerViews.upgrade(tower);
+        this.effects.upgrade(tower.x, tower.z);
+        this.effects.siteDone(tower.x, tower.z, false);
+        this.floatAt(tower.x, 1.8, tower.z, `★ ${tower.branch.name}`, 'res');
+        this.audio.upgrade();
+        this.rig.punch?.(0.04);
+        this.haptics.pulse(CONFIG.haptics.complete);
       },
       onTowerUpgraded: (tower) => {
         this.towerViews.upgrade(tower);
@@ -314,6 +365,14 @@ export class Game {
     ui.on('btn-speed', () => this.toggleSpeed());
     ui.on('btn-wave', () => this.callWave());
     ui.on('btn-upgrade', () => this.upgradeSelected());
+    ui.on('branch', (id) => this.specializeSelected(id));
+    ui.on('btn-hero', () => this.toggleHero());
+    ui.on('btn-hero-power', () => this.heroPower());
+    ui.on('btn-hero-power-sheet', () => this.heroPower());
+    ui.on('btn-hero-home', () => {
+      const home = this.sim?.heroHome();
+      if (home) this.sendHero(home.x, home.z);
+    });
     ui.on('btn-sell', () => this.sellSelected());
     ui.on('btn-perks', () => this.showPerks());
     ui.on('btn-shop', () => this.showShop());
@@ -537,6 +596,7 @@ export class Game {
     this.view.setGrade(this.world.theme.grade);
     for (const tower of this.sim.towers) this.towerViews.add(tower);
     for (const enemy of this.sim.enemies) if (enemy.active) this.enemyViews.acquire(enemy);
+    this.heroView.attach(this.sim.hero);
     this.ui.setSpellCount(Object.keys(this.sim.spells).length);
     this.view.renderer.toneMappingExposure = this.world.exposure;
     this.frame(this.sim.level);
@@ -578,6 +638,7 @@ export class Game {
     this.towerViews.clear();
     this.spellViews.clear();
     this.effects.clear();
+    this.heroView.detach();
     this.input.reset();
   }
 
@@ -880,6 +941,15 @@ export class Game {
       }
       return;
     }
+    // The knight: tap him to select him, then tap the map to send him there.
+    if (this.sim.hero && this.heroView.pick(this.rig.raycaster)) {
+      this.toggleHero(true);
+      return;
+    }
+    if (this.selection?.kind === 'hero') {
+      if (hit) this.sendHero(hit.x, hit.z);
+      return;
+    }
     if (this.realm) {
       this.realm.handleTap(hit);
       return;
@@ -958,6 +1028,22 @@ export class Game {
     this.ui.refreshTowerSheet(selection.tower, this.sim.gold, false);
   }
 
+  specializeSelected(branchId) {
+    if (this.realm) {
+      this.realm.specializeSelected(branchId);
+      return;
+    }
+    const selection = this.selection;
+    if (selection?.kind !== 'tower') return;
+    if (!this.sim.specialize(selection.tower, branchId)) {
+      this.audio.denied();
+      return;
+    }
+    const tower = selection.tower;
+    if (tower.stats.range > 0) this.effects.showRange(tower.x, tower.z, tower.stats.range);
+    this.ui.refreshTowerSheet(tower, this.sim.gold, false);
+  }
+
   sellSelected() {
     const selection = this.selection;
     if (selection?.kind !== 'tower') return;
@@ -983,8 +1069,80 @@ export class Game {
     this.audio.click();
   }
 
+  // ------------------------------------------------------------ knight
+
+  toggleHero(forceOpen = false) {
+    const hero = this.sim?.hero;
+    if (!hero || this.mode !== MODE.PLAYING) return;
+    if (!forceOpen && this.selection?.kind === 'hero') {
+      this.deselect();
+      return;
+    }
+    this.deselect();
+    this.armSpell(null);
+    this.selection = { kind: 'hero' };
+    this.heroView.setSelected(true);
+    this.heroSheetKey = '';
+    this.refreshHeroSheet();
+    // Bring him into view if he is off screen.
+    const rect = this.view.canvas.getBoundingClientRect();
+    const p = this.rig.toScreen(this.tmp.set(hero.x, 0.5, hero.z), rect);
+    if (!p.visible || p.x < rect.left || p.x > rect.right || p.y < rect.top + 120 || p.y > rect.bottom - 260) {
+      this.rig.goal.set(hero.x, 0, hero.z);
+      this.rig.clampGoal();
+    }
+    this.audio.click();
+    this.haptics.pulse(CONFIG.haptics.tap);
+  }
+
+  sendHero(x, z) {
+    if (!this.sim?.moveHero(x, z)) {
+      this.audio.denied();
+      return;
+    }
+    const hero = this.sim.hero;
+    this.effects.ring(hero.goalX, hero.goalZ, 0.55, 0.45, EFFECT_COLORS.gold);
+    this.audio.click();
+    this.haptics.pulse(CONFIG.haptics.tap);
+  }
+
+  heroPower() {
+    if (!this.sim?.castHeroPower()) {
+      this.audio.denied();
+      return;
+    }
+    this.heroSheetKey = '';
+  }
+
+  refreshHeroSheet() {
+    const hero = this.sim?.hero;
+    if (!hero || this.selection?.kind !== 'hero') return;
+    const down = hero.respawn > 0;
+    const next = heroNextXp(hero);
+    const stats = heroStats(hero.level, this.sim.threat);
+    const power = HERO.power;
+    const key = `${hero.level}|${hero.xp}|${Math.ceil(hero.hp)}|${Math.ceil(hero.respawn)}|${Math.ceil(hero.powerCooldown)}|${hero.kills}`;
+    if (key === this.heroSheetKey) return;
+    this.heroSheetKey = key;
+    const previous = HERO.levels[hero.level - 1];
+    this.ui.openHero({
+      image: this.ui.thumbnails.hero,
+      level: hero.level,
+      levels: HERO_MAX_LEVEL,
+      xp: next === null ? { fraction: 1, text: `Niveau max · ${hero.kills} ovnis` } : { fraction: (hero.xp - previous) / (next - previous), text: `XP ${hero.xp}/${next} · ${hero.kills} ovnis` },
+      stats: [
+        ['Vie', `${Math.ceil(hero.hp)}/${hero.maxHp}`],
+        ['Dégâts', Math.round(stats.damage)],
+        ['Portée', stats.range.toFixed(1).replace('.', ',')],
+      ],
+      power: { label: !down && hero.powerCooldown > 0 ? `Frappe (${Math.ceil(hero.powerCooldown)} s)` : 'Frappe tournoyante', ready: !down && hero.powerCooldown <= 0 },
+      hint: down ? `Tombé au combat : de retour au château dans ${Math.ceil(hero.respawn)} s.` : 'Touche la carte pour l’envoyer : il frappe les ovnis à sa portée. ' + power.blurb,
+    });
+  }
+
   deselect() {
     if (this.selection?.repeat) this.ui.showSpellHint(null);
+    this.heroView.setSelected(false);
     this.selection = null;
     this.effects.hideRange();
     this.effects.hideCursor();
@@ -1078,8 +1236,23 @@ export class Game {
     this.projectileViews.update(dt);
     this.spellViews.update(dt);
     this.effects.update(dt);
+    this.heroView.update(dt, this.renderTime, this.view.camera);
 
     const sim = this.sim;
+    if (sim?.hero && this.mode === MODE.PLAYING) {
+      const hero = sim.hero;
+      this.ui.setHero({
+        level: hero.level,
+        hpShare: hero.maxHp ? hero.hp / hero.maxHp : 0,
+        down: hero.respawn > 0,
+        respawn: hero.respawn,
+        powerCharge: 1 - Math.max(0, hero.powerCooldown) / HERO.power.cooldown,
+        powerLeft: hero.powerCooldown,
+        selected: this.selection?.kind === 'hero',
+        enabled: true,
+      });
+      if (this.selection?.kind === 'hero') this.refreshHeroSheet();
+    } else if (!sim?.hero) this.ui.setHero(null);
     // Enemies on fire or poisoned give off flames and bubbles.
     if (sim) {
       for (const enemy of sim.enemies) {
@@ -1117,7 +1290,7 @@ export class Game {
       if (this.selection && sim.gold !== this.sheetGold) {
         this.sheetGold = sim.gold;
         if (this.selection.kind === 'build') this.ui.refreshBuildSheet(sim.gold, this.selection.pending);
-        else this.ui.refreshTowerSheet(this.selection.tower, sim.gold, this.selection.confirmSell);
+        else if (this.selection.kind === 'tower') this.ui.refreshTowerSheet(this.selection.tower, sim.gold, this.selection.confirmSell);
       }
       // A castle under half health smokes.
       if (sim.lives < sim.startLives / 2 && this.mode === MODE.PLAYING) {
@@ -1209,6 +1382,7 @@ export class Game {
     this.input.dispose();
     this.clearEntities();
     this.realmViews.dispose();
+    this.heroView.dispose();
     this.enemyViews.dispose();
     this.spellViews.dispose();
     this.effects.dispose();

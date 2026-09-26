@@ -139,6 +139,7 @@ export class RealmMode {
     this.applyCycle(true);
     game.realmViews.build(this.sim);
     for (const tower of this.sim.towers) game.towerViews.add(tower);
+    game.heroView.attach(this.sim.hero);
     game.realmViews.warmUp(game.view.renderer, game.view.camera);
     for (const enemy of this.sim.enemies) if (enemy.active) game.enemyViews.acquire(enemy);
     this.ui.setSpellCount(Object.keys(this.sim.spells).length);
@@ -840,7 +841,7 @@ export class RealmMode {
     const site = s.kind === 'site' ? s : s.upgrading;
     const work = site ? this.workInfo(site) : null;
     const hpNow = s.kind === 'castle' ? sim.lives : s.hp;
-    const key = `${this.stockKey()}|${Math.ceil(hpNow)}|${s.level}|${selection.confirm}|${s.targeting ?? ''}|${work?.text ?? ''}|${site ? this.undoWindowOpen(site) : ''}`;
+    const key = `${this.stockKey()}|${Math.ceil(hpNow)}|${s.level}|${s.branch?.id ?? ''}|${selection.confirm}|${s.targeting ?? ''}|${work?.text ?? ''}|${site ? this.undoWindowOpen(site) : ''}`;
     if (!force && key === this.sheetKey) return;
     this.sheetKey = key;
     const have = (r) => sim.amountOf(r);
@@ -873,7 +874,11 @@ export class RealmMode {
         rows.push(['Éliminés', s.kills]);
       }
       const cost = sim.towerUpgradeCost(s);
+      if (s.branch) rows.push(['Voie', s.branch.name]);
+      const branchCost = s.branchOptions.length ? sim.branchCostOf(s) : null;
+      const branches = s.upgrading ? [] : s.branchOptions.map((b) => ({ id: b.id, name: b.name, blurb: b.blurb, price: this.ui.costHtml(branchCost, have), affordable: affordable(branchCost) }));
       this.ui.openRealmInfo({
+        branches,
         image: this.ui.thumbnails.towers[s.def.id][s.level],
         name: s.def.name,
         level: s.level,
@@ -980,6 +985,19 @@ export class RealmMode {
       return;
     }
     selection.confirm = false;
+    this.refreshInfo(true);
+    this.persist();
+  }
+
+  specializeSelected(branchId) {
+    const selection = this.game.selection;
+    if (selection?.kind !== 'structure' || selection.structure.kind !== 'tower') return;
+    if (!this.sim.specialize(selection.structure, branchId)) {
+      this.game.audio.denied();
+      return;
+    }
+    const s = selection.structure;
+    if (s.stats.range > 0) this.game.effects.showRange(s.cell.x, s.cell.z, s.stats.range);
     this.refreshInfo(true);
     this.persist();
   }

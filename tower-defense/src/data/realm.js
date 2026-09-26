@@ -275,6 +275,9 @@ export function makeNight(n, portalCount) {
   if (n >= 3) add('tank', Math.round(1 + (n - 2) * 0.6), Math.max(1.2, 2.2 - n * 0.04), 8);
   if (n >= 3) add('siege', Math.round(1 + (n - 3) * 0.35), 3, 12);
   if (n % 5 === 0) add('boss', Math.max(1, Math.floor(n / 10) + 1), 7, 14);
+  if (n >= 4) add('shield', Math.round(1 + (n - 4) * 0.5), 1.6, 6);
+  if (n >= 5) add('splitter', Math.round(1 + (n - 5) * 0.4), 2.4, 10);
+  if (n >= 6) add('healer', Math.round(1 + (n - 6) * 0.25), 4, 9);
   if (n >= 7) add('runner', Math.round(n * 0.7), 0.4, 18);
   spawns.sort((a, b) => a.time - b.time);
   const hpMultiplier = 0.85 * (1 + 0.16 * (n - 1) + 0.014 * (n - 1) ** 2);

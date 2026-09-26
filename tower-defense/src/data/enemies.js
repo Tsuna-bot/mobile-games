@@ -1,9 +1,13 @@
 // Enemy catalogue. Speeds in tiles per second, hp before wave scaling.
 // `siege`: damage per second dealt to walls and buildings blocking the way (Kingdom mode).
+// `tint`: color multiplied over the shared Kenney palette (variants reuse the UFO models).
+// `shield`: extra HP that absorbs damage first and recharges after `shieldDelay` s untouched.
+// `heal`: every `healEvery` s, heals UFOs within `healRadius` by this share of their max HP.
 
 export const ENEMIES = {
   scout: {
     id: 'scout',
+    blurb: 'Ovni de base, ni rapide ni solide.',
     name: 'Éclaireur',
     model: 'enemy-ufo-a',
     hp: 70,
@@ -16,6 +20,7 @@ export const ENEMIES = {
   },
   runner: {
     id: 'runner',
+    blurb: 'Fonce : il faut le toucher vite.',
     name: 'Rapide',
     model: 'enemy-ufo-b',
     hp: 45,
@@ -28,6 +33,7 @@ export const ENEMIES = {
   },
   tank: {
     id: 'tank',
+    blurb: 'Blindé : les petits dégâts glissent dessus.',
     name: 'Blindé',
     model: 'enemy-ufo-c',
     hp: 210,
@@ -40,6 +46,7 @@ export const ENEMIES = {
   },
   boss: {
     id: 'boss',
+    blurb: 'Énorme et blindé, libère des ovnis en mourant.',
     name: 'Vaisseau-mère',
     model: 'enemy-ufo-d',
     hp: 950,
@@ -54,6 +61,7 @@ export const ENEMIES = {
   },
   siege: {
     id: 'siege',
+    blurb: 'Casse les murs et les bâtiments (Royaume).',
     name: 'Démolisseur',
     model: 'enemy-ufo-c-weapon',
     hp: 300,
@@ -65,5 +73,69 @@ export const ENEMIES = {
     siege: 55,
     // Only appears at night in the Kingdom, where it smashes walls.
     realmOnly: true,
+  },
+  shield: {
+    id: 'shield',
+    name: 'Bouclier',
+    blurb: 'Une bulle absorbe les dégâts, puis se recharge si on le laisse tranquille.',
+    model: 'enemy-ufo-a',
+    tint: 0x8fc8ff,
+    hp: 70,
+    speed: 0.95,
+    armor: 0,
+    shield: 85,
+    shieldRegen: 30,
+    shieldDelay: 2.2,
+    reward: 14,
+    leak: 1,
+    scale: 1.05,
+    siege: 10,
+  },
+  splitter: {
+    id: 'splitter',
+    name: 'Diviseur',
+    blurb: 'En mourant, il se sépare en deux mini-ovnis rapides.',
+    model: 'enemy-ufo-c',
+    tint: 0xd89cff,
+    hp: 170,
+    speed: 0.85,
+    armor: 2,
+    reward: 15,
+    leak: 2,
+    scale: 1.1,
+    siege: 14,
+    spawnsOnDeath: { type: 'mini', count: 2 },
+  },
+  mini: {
+    id: 'mini',
+    name: 'Mini-ovni',
+    blurb: 'Petit et très rapide.',
+    model: 'enemy-ufo-b',
+    tint: 0xe6b8ff,
+    hp: 42,
+    speed: 1.7,
+    armor: 0,
+    reward: 3,
+    leak: 1,
+    scale: 0.62,
+    siege: 4,
+    child: true,
+  },
+  healer: {
+    id: 'healer',
+    name: 'Soigneur',
+    blurb: 'Répare les ovnis autour de lui : à abattre en priorité.',
+    model: 'enemy-ufo-a',
+    tint: 0x9dffb0,
+    hp: 150,
+    speed: 0.8,
+    armor: 1,
+    heal: 0.06,
+    healEvery: 2.2,
+    healRadius: 1.8,
+    reward: 17,
+    leak: 1,
+    scale: 1.1,
+    siege: 8,
   },
 };

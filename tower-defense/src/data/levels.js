@@ -12,7 +12,7 @@ export const LEVELS = [
     theme: 'meadow',
     waves: 10,
     startGold: 220,
-    hpScale: 1.3,
+    hpScale: 1.4,
     map: [
       'TS..T.R',
       '.#.....',
@@ -34,7 +34,7 @@ export const LEVELS = [
     theme: 'snow',
     waves: 12,
     startGold: 240,
-    hpScale: 1.55,
+    hpScale: 1.68,
     map: [
       'T....ST',
       '.#####.',
@@ -57,7 +57,7 @@ export const LEVELS = [
     theme: 'dusk',
     waves: 12,
     startGold: 260,
-    hpScale: 1.18,
+    hpScale: 1.26,
     map: [
       '.T...S.',
       'T....#.',
@@ -80,7 +80,7 @@ export const LEVELS = [
     theme: 'crystal',
     waves: 15,
     startGold: 280,
-    hpScale: 1.8,
+    hpScale: 1.82,
     map: [
       'S..T...R',
       '#.#####.',
@@ -104,7 +104,7 @@ export const LEVELS = [
     theme: 'night',
     waves: 18,
     startGold: 300,
-    hpScale: 1.72,
+    hpScale: 1.55,
     map: [
       'TS..T..R',
       '.#....C.',

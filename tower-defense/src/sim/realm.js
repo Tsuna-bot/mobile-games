@@ -14,7 +14,8 @@ import {
   portalsOpen, realmModifiers, repairCost, scaleCost, towerCost, towerHp, unlockedSpells, unlockedTowers,
 } from '../data/realm.js';
 import { SPELLS } from '../data/spells.js';
-import { TOWERS } from '../data/towers.js';
+import { BRANCHES, TOWERS } from '../data/towers.js';
+import { restoreHero, serializeHero, updateHero } from './hero.js';
 import { SIM_STATE, Simulation, Tower } from './simulation.js';
 
 const SQRT2 = Math.SQRT2;
@@ -439,6 +440,20 @@ export class RealmSim extends Simulation {
     this.sites.push(site);
     this.listener.onSiteStarted?.(site);
     return site;
+  }
+
+  /** Resources for a specialization (towers at their last level). */
+  branchCostOf(tower) {
+    return scaleCost(towerCost(tower.def.id, tower.def.levels.length - 1, this.modifiers.upgradeCost), 1.8);
+  }
+
+  specialize(tower, branchId) {
+    const branch = tower.branchOptions.find((b) => b.id === branchId);
+    if (!branch || tower.upgrading || !this.pay(this.branchCostOf(tower))) return false;
+    tower.branch = branch;
+    tower.refreshStats();
+    this.listener.onTowerSpecialized?.(tower);
+    return true;
   }
 
   towerUpgradeCost(tower) {
@@ -1523,9 +1538,17 @@ export class RealmSim extends Simulation {
     }
     this.updateSpells(dt);
     this.updateEnemies(dt);
+    this.updateAbilities(dt);
     this.updateTowers(dt);
     this.updateProjectiles(dt);
+    updateHero(this, dt);
     this.updateWorkers(dt);
+  }
+
+  /** The knight waits by the castle gate. */
+  heroHome() {
+    const base = this.level.base;
+    return { x: base.x, z: base.z + 1.9 };
   }
 
   // ------------------------------------------------------------ offline gathering
@@ -1572,7 +1595,8 @@ export class RealmSim extends Simulation {
       spells: Object.fromEntries(Object.entries(this.spells).map(([id, s]) => [id, round(s.cooldown)])),
       nodes,
       buildings: this.buildings.map((b) => [b.def.id, b.cell.index, b.level, Math.round(b.hp)]),
-      towers: this.towers.map((t) => [t.def.id, t.cell.index, t.level, Math.round(t.hp), t.targeting, t.kills]),
+      hero: serializeHero(this.hero),
+      towers: this.towers.map((t) => [t.def.id, t.cell.index, t.level, Math.round(t.hp), t.targeting, t.kills, t.branch?.id ?? null]),
       jobs: this.workers.map((w) => w.job),
       castle: this.castle.level,
       sites: this.sites.map((site) => [site.typeId, site.target?.kind === 'castle' ? -1 : site.cell.index, round(site.progress), site.cost, site.target ? 1 : 0]),
@@ -1587,6 +1611,7 @@ export class RealmSim extends Simulation {
 
   restoreRealm(data) {
     if (data?.version !== 1) return;
+    restoreHero(this.hero, data.hero);
     this.day = data.day;
     this.nextWave = data.day;
     this.phase = data.phase === PHASE.NIGHT ? PHASE.NIGHT : PHASE.DAY;
@@ -1619,13 +1644,14 @@ export class RealmSim extends Simulation {
       if (!def || !cell || !this.canPlace(cell)) continue;
       this.addBuilding(def, cell, Math.min(level, def.levels.length - 1), hp);
     }
-    for (const [id, index, level, hp, targeting, kills] of data.towers ?? []) {
+    for (const [id, index, level, hp, targeting, kills, branch] of data.towers ?? []) {
       const def = TOWERS[id];
       const cell = cells[index];
       if (!def || !cell || !this.canPlace(cell)) continue;
       const tower = new Tower(this.nextTowerId++, def, cell, this.modifiers);
       tower.kind = 'tower';
       tower.level = Math.min(level, def.levels.length - 1);
+      tower.branch = (BRANCHES[id] ?? []).find((b) => b.id === branch) ?? null;
       tower.refreshStats();
       tower.maxHp = this.maxHpOf(tower);
       tower.hp = Math.min(tower.maxHp, hp);
@@ -1673,6 +1699,7 @@ export class RealmSim extends Simulation {
           id: this.nextEnemyId++, active: true, def, hp, maxHp, hpMultiplier: maxHp / def.hp, armor: def.armor, speed,
           x, z, cell: cells[index], next: null, attacking: null, siegeTimer: 0, slowFactor: 1, slowTimer: 0,
           freezeTimer: 0, stunTimer: 0, burnTimer: 0, poisonTimer: 0, dotTower: null, wave: this.day, view: null,
+          maxShield: Math.round((def.shield ?? 0) * (maxHp / def.hp)), shield: 0, shieldDelay: 0, healTimer: def.healEvery ?? 0,
         });
       }
       for (const worker of this.workers) worker.state = 'hidden';

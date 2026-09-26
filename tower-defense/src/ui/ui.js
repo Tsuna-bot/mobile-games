@@ -2,7 +2,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { RESOURCE_INFO } from '../data/realm.js';
 import { PERKS } from '../data/perks.js';
 import { SPELLS, SPELL_ORDER } from '../data/spells.js';
-import { TARGETING, TARGETING_LABELS, TOWERS, TOWER_ORDER } from '../data/towers.js';
+import { TARGETING, TARGETING_LABELS, TOWERS, TOWER_ORDER, branchCost } from '../data/towers.js';
 
 const QUALITY_LABELS = { auto: 'Auto', ultra: 'Ultra', high: 'Haute', medium: 'Moyenne', low: 'Basse' };
 const STAR_PATH = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
@@ -139,6 +139,7 @@ export class UI {
     this.realmBuildSheet = $('sheet-realm-build');
     this.realmInfoSheet = $('sheet-realm-info');
     this.workersSheet = $('sheet-workers');
+    this.heroSheet = $('sheet-hero');
     this.realmTab = 'defense';
     this.researchTab = 'Économie';
     this.shownRes = {};
@@ -151,7 +152,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -521,6 +522,11 @@ export class UI {
     }
     for (const button of targeting.children) button.setAttribute('aria-pressed', String(button.dataset.mode === tower.targeting));
 
+    this.renderBranches('tower-branches', tower.branchOptions.map((b) => ({
+      id: b.id, name: b.name, blurb: b.blurb, price: `<span class="gold-inline">${branchCost(def)}</span>`, affordable: gold >= branchCost(def),
+    })));
+    if (tower.branch) this.$('tower-stats').insertAdjacentHTML('beforeend', `<div><dt>Voie</dt><dd>${tower.branch.name}</dd></div>`);
+
     const upgrade = this.$('btn-upgrade');
     if (tower.maxed) {
       upgrade.textContent = 'Niveau max';
@@ -533,6 +539,73 @@ export class UI {
     sell.classList.toggle('btn--danger', confirmSell);
     sell.classList.toggle('btn--ghost', !confirmSell);
     sell.innerHTML = confirmSell ? `Confirmer <span class="gold-inline">+${tower.sellValue}</span>` : `Vendre <span class="gold-inline">+${tower.sellValue}</span>`;
+  }
+
+  /**
+   * The two specializations of a maxed tower, as big choice cards.
+   * @param list [{ id, name, blurb, price (html), affordable }]
+   */
+  renderBranches(containerId, list) {
+    const box = this.$(containerId);
+    box.hidden = !list.length;
+    const key = JSON.stringify(list);
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.replaceChildren();
+    if (!list.length) return;
+    const title = document.createElement('p');
+    title.className = 'branches__title';
+    title.textContent = 'Niveau max : choisis une voie';
+    box.append(title);
+    for (const item of list) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'branch';
+      card.disabled = !item.affordable;
+      card.innerHTML = `<b>${item.name}</b><span>${item.blurb}</span><em>${item.price}</em>`;
+      card.addEventListener('click', () => this.handlers.branch?.(item.id));
+      box.append(card);
+    }
+  }
+
+  /**
+   * Knight buttons in the dock.
+   * @param h { level, hpShare, down, respawn, powerCharge (0..1), powerLeft (s), selected, enabled } or null
+   */
+  setHero(h) {
+    const group = this.$('btn-hero').parentElement;
+    group.hidden = !h;
+    if (!h) return;
+    const key = `${h.level}|${Math.round(h.hpShare * 40)}|${h.down}|${Math.ceil(h.respawn)}|${Math.round(h.powerCharge * 60)}|${h.selected}|${h.enabled}`;
+    if (key === this.shown.hero) return;
+    this.shown.hero = key;
+    const button = this.$('btn-hero');
+    this.$('hero-level').textContent = h.level;
+    this.$('hero-hp').style.width = `${Math.round(h.hpShare * 100)}%`;
+    button.classList.toggle('is-down', h.down);
+    button.classList.toggle('is-selected', h.selected);
+    const power = this.$('btn-hero-power');
+    const ready = h.powerCharge >= 1 && !h.down;
+    power.querySelector('.spell__cooldown').style.setProperty('--remaining', String(1 - h.powerCharge));
+    power.querySelector('.spell__time').textContent = h.down ? String(Math.ceil(h.respawn)) : ready ? '' : String(Math.ceil(h.powerLeft));
+    power.classList.toggle('is-ready', ready && h.enabled);
+    power.disabled = !h.enabled || h.down;
+  }
+
+  /** @param info { image, level, levels, xp: { fraction, text }, stats: [[label, value]], power: { label, ready }, hint } */
+  openHero(info) {
+    if (!this.heroSheet.classList.contains('is-open')) this.closeSheets();
+    this.$('hero-image').src = info.image;
+    this.$('hero-name').textContent = `Chevalier · niv. ${info.level}`;
+    this.$('hero-pips').innerHTML = Array.from({ length: info.levels }, (_, i) => `<i class="${i < info.level ? 'on' : ''}"></i>`).join('');
+    this.$('hero-xp-fill').style.width = `${Math.round(info.xp.fraction * 100)}%`;
+    this.$('hero-xp-text').textContent = info.xp.text;
+    this.$('hero-stats').innerHTML = info.stats.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+    this.$('hero-hint').textContent = info.hint;
+    const power = this.$('btn-hero-power-sheet');
+    power.textContent = info.power.label;
+    power.disabled = !info.power.ready;
+    this.heroSheet.classList.add('is-open');
   }
 
   /** @param charges { id: 0..1 }, remaining { id: seconds }, armed id|null, enabled */
@@ -555,8 +628,11 @@ export class UI {
     }
   }
 
+  /** Spells plus the two knight buttons share the row: shrink when crowded. */
   setSpellCount(count) {
-    this.spellBar.classList.toggle('spells--compact', count > 4);
+    const total = count + 2;
+    this.spellBar.classList.toggle('spells--compact', total > 5);
+    this.spellBar.classList.toggle('spells--tight', total > 7);
   }
 
   showSpellHint(id) {
@@ -668,6 +744,7 @@ export class UI {
     this.realmBuildSheet.classList.remove('is-open');
     this.realmInfoSheet.classList.remove('is-open');
     this.workersSheet.classList.remove('is-open');
+    this.heroSheet.classList.remove('is-open');
   }
 
   // ------------------------------------------------------------ Kingdom
@@ -890,6 +967,7 @@ export class UI {
       }
     }
     for (const button of targeting.children) button.setAttribute('aria-pressed', String(button.dataset.mode === info.targeting));
+    this.renderBranches('realm-branches', info.branches ?? []);
     const work = this.$('realm-info-work');
     work.hidden = !info.work;
     if (info.work) {

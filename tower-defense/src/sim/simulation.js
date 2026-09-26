@@ -5,8 +5,9 @@ import { CONFIG } from '../config.js';
 import { ENEMIES } from '../data/enemies.js';
 import { DEFAULT_MODIFIERS } from '../data/perks.js';
 import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
-import { TOWERS, stackHeight } from '../data/towers.js';
+import { BRANCHES, TOWERS, applyBranch, branchCost, stackHeight } from '../data/towers.js';
 import { makeWave } from '../data/waves.js';
+import { castHeroPower, createHero, heroOnKill, moveHero, restoreHero, serializeHero, updateHero } from './hero.js';
 import { Level } from './level.js';
 
 const MAX_ENEMIES = 260;
@@ -41,6 +42,11 @@ function createEnemy() {
     poisonTimer: 0,
     poisonDps: 0,
     dotTower: null,
+    // Shield bubble (absorbs damage first) and healer pulse.
+    shield: 0,
+    maxShield: 0,
+    shieldDelay: 0,
+    healTimer: 0,
     wave: 0,
     view: null,
   };
@@ -58,6 +64,10 @@ function createProjectile() {
     pierce: false,
     poison: 0,
     poisonTime: 0,
+    stun: 0,
+    igniteDps: 0,
+    igniteTime: 0,
+    corrode: 0,
     speed: 0,
     x: 0, y: 0, z: 0,
     vx: 0, vy: 0, vz: 0,
@@ -88,6 +98,8 @@ export class Tower {
     this.beamTargetId = 0;
     this.beamHeat = 1;
     this.beaming = 0;
+    // Specialization chosen at the last level (see BRANCHES), or null.
+    this.branch = null;
     this.view = null;
     this.refreshStats();
   }
@@ -97,6 +109,12 @@ export class Tower {
     const base = this.def.levels[this.level];
     this.stats = { ...base, range: base.range * this.modifiers.range };
     if (base.damage !== undefined) this.stats.damage = base.damage * this.modifiers.damage;
+    this.stats = applyBranch(this.stats, this.branch);
+  }
+
+  /** Specializations on offer: both paths once the last level is reached, none after choosing. */
+  get branchOptions() {
+    return this.maxed && !this.branch ? BRANCHES[this.def.id] ?? [] : [];
   }
 
   get muzzleY() {
@@ -121,7 +139,7 @@ export class Simulation {
    * @param options.heroic   harder variant: tougher enemies, only 5 lives
    * @param options.modifiers permanent upgrades (see perks.js)
    */
-  constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS, spells = STARTER_SPELLS } = {}) {
+  constructor(levelDef, levelIndex, listener = {}, { heroic = false, modifiers = DEFAULT_MODIFIERS, spells = STARTER_SPELLS, hero = true } = {}) {
     this.def = levelDef;
     this.levelIndex = levelIndex;
     this.level = this.createLevel(levelDef, levelIndex);
@@ -157,6 +175,30 @@ export class Simulation {
       this.spells[id] = { cooldown: spell.initialCooldown * modifiers.spellCooldown, max };
     }
     this.strikes = [];
+    // The knight stands guard in front of the castle.
+    this.heroStrike = false;
+    this.hero = null;
+    if (hero) {
+      const home = this.heroHome();
+      this.hero = createHero(home.x, home.z);
+    }
+  }
+
+  /** Where the knight waits and comes back after falling. */
+  heroHome() {
+    const base = this.level.base;
+    const dx = -base.x;
+    const dz = -base.z;
+    const len = Math.hypot(dx, dz) || 1;
+    return { x: base.x + (dx / len) * 0.9, z: base.z + (dz / len) * 0.9 };
+  }
+
+  moveHero(x, z) {
+    return moveHero(this, x, z);
+  }
+
+  castHeroPower() {
+    return !this.over && castHeroPower(this);
   }
 
   createLevel(levelDef, levelIndex) {
@@ -248,6 +290,19 @@ export class Simulation {
     return true;
   }
 
+  /** Takes specialization `branchId` on a maxed tower. */
+  specialize(tower, branchId) {
+    const branch = tower.branchOptions.find((b) => b.id === branchId);
+    const cost = branchCost(tower.def);
+    if (!branch || this.gold < cost || this.over) return false;
+    this.gold -= cost;
+    tower.spent += cost;
+    tower.branch = branch;
+    tower.refreshStats();
+    this.listener.onTowerSpecialized?.(tower);
+    return true;
+  }
+
   sell(tower) {
     if (this.over) return 0;
     const refund = tower.sellValue;
@@ -283,14 +338,16 @@ export class Simulation {
       spells: Object.fromEntries(Object.entries(this.spells).map(([id, s]) => [id, round(s.cooldown)])),
       strikes: this.strikes.map((s) => ({ ...s })),
       stats: { ...this.stats },
+      hero: serializeHero(this.hero),
       towers: this.towers.map((t) => ({
         type: t.def.id, cell: t.cell.index, level: t.level, spent: t.spent,
-        targeting: t.targeting, kills: t.kills, cooldown: round(t.cooldown),
+        targeting: t.targeting, kills: t.kills, cooldown: round(t.cooldown), branch: t.branch?.id ?? null,
       })),
       enemies: this.enemies.filter((e) => e.active).map((e) => ({
         type: e.def.id, hp: round(e.hp), maxHp: e.maxHp, hpMultiplier: e.hpMultiplier, speed: round(e.speed),
         distance: round(e.distance), slowFactor: e.slowFactor, slowTimer: round(e.slowTimer),
         freezeTimer: round(e.freezeTimer), stunTimer: round(e.stunTimer), wave: e.wave,
+        shield: round(e.shield), maxShield: e.maxShield, healTimer: round(e.healTimer),
       })),
     };
   }
@@ -309,6 +366,7 @@ export class Simulation {
     for (const [id, cooldown] of Object.entries(data.spells)) if (this.spells[id]) this.spells[id].cooldown = cooldown;
     this.strikes = data.strikes.map((s) => ({ ...s }));
     Object.assign(this.stats, data.stats);
+    restoreHero(this.hero, data.hero);
     for (const saved of data.towers) {
       const cell = this.level.cells[saved.cell];
       const def = TOWERS[saved.type];
@@ -319,6 +377,7 @@ export class Simulation {
       tower.targeting = saved.targeting;
       tower.kills = saved.kills;
       tower.cooldown = saved.cooldown;
+      tower.branch = (BRANCHES[def.id] ?? []).find((b) => b.id === saved.branch) ?? null;
       tower.refreshStats();
       this.towers.push(tower);
       this.towerByCell.set(cell.index, tower);
@@ -410,8 +469,10 @@ export class Simulation {
     this.updateSpells(dt);
     this.updateEnemies(dt);
     if (this.over) return;
+    this.updateAbilities(dt);
     this.updateTowers(dt);
     this.updateProjectiles(dt);
+    updateHero(this, dt);
   }
 
   updateSpells(dt) {
@@ -468,6 +529,10 @@ export class Simulation {
     enemy.burnTimer = 0;
     enemy.poisonTimer = 0;
     enemy.dotTower = null;
+    enemy.maxShield = Math.round((def.shield ?? 0) * hpMultiplier);
+    enemy.shield = enemy.maxShield;
+    enemy.shieldDelay = 0;
+    enemy.healTimer = def.healEvery ?? 0;
     enemy.wave = wave;
     this.placeEnemy(enemy, distance);
     this.listener.onEnemySpawn?.(enemy);
@@ -509,6 +574,35 @@ export class Simulation {
       enemy.z = this.sample.z;
       enemy.dirX = this.sample.dirX;
       enemy.dirZ = this.sample.dirZ;
+    }
+  }
+
+  /** Shields recharge when left alone; healers mend the UFOs around them. */
+  updateAbilities(dt) {
+    for (const enemy of this.enemies) {
+      if (!enemy.active) continue;
+      const def = enemy.def;
+      if (enemy.maxShield > 0) {
+        if (enemy.shieldDelay > 0) enemy.shieldDelay -= dt;
+        else if (enemy.shield < enemy.maxShield) {
+          const was = enemy.shield;
+          enemy.shield = Math.min(enemy.maxShield, enemy.shield + def.shieldRegen * enemy.hpMultiplier * dt);
+          if (was <= 0 && enemy.shield > 0) this.listener.onShieldUp?.(enemy);
+        }
+      }
+      if (def.heal && enemy.freezeTimer <= 0 && enemy.stunTimer <= 0) {
+        enemy.healTimer -= dt;
+        if (enemy.healTimer > 0) continue;
+        enemy.healTimer = def.healEvery;
+        const radiusSq = def.healRadius * def.healRadius;
+        const healed = [];
+        for (const other of this.enemies) {
+          if (!other.active || other.hp >= other.maxHp || (other.x - enemy.x) ** 2 + (other.z - enemy.z) ** 2 > radiusSq) continue;
+          other.hp = Math.min(other.maxHp, other.hp + other.maxHp * def.heal);
+          healed.push(other);
+        }
+        this.listener.onEnemyHeal?.(enemy, healed);
+      }
     }
   }
 
@@ -558,8 +652,25 @@ export class Simulation {
 
   damage(enemy, amount, tower, pierce = false, silent = false) {
     if (!enemy.active) return;
+    if (enemy.maxShield > 0) {
+      enemy.shieldDelay = enemy.def.shieldDelay;
+      if (enemy.shield > 0) {
+        // The bubble takes the hit first (armor does not apply to it).
+        const absorbed = Math.min(enemy.shield, amount);
+        enemy.shield -= absorbed;
+        amount -= absorbed;
+        if (enemy.shield <= 0) this.listener.onShieldBreak?.(enemy);
+        if (amount <= 0) {
+          if (!silent) this.listener.onEnemyHit?.(enemy, 0);
+          return;
+        }
+      }
+    }
     const dealt = pierce ? amount : Math.max(amount * CONFIG.combat.minDamageShare, amount - enemy.armor);
     enemy.hp -= dealt;
+    // Executioner crossbow: finishes weakened UFOs outright (not motherships).
+    const execute = tower?.stats.execute;
+    if (execute && enemy.hp > 0 && enemy.def.id !== 'boss' && enemy.hp < enemy.maxHp * execute) enemy.hp = 0;
     if (tower) tower.damageDealt += dealt;
     if (!silent) this.listener.onEnemyHit?.(enemy, dealt);
     if (enemy.hp <= 0) this.kill(enemy, tower);
@@ -579,11 +690,14 @@ export class Simulation {
   kill(enemy, tower) {
     enemy.active = false;
     const def = enemy.def;
-    this.gold += def.reward;
+    let bounty = 0;
+    for (const t of this.towers) bounty += t.stats.bounty ?? 0;
+    this.gold += def.reward + bounty;
     this.stats.kills++;
     if (def.id === 'boss') this.stats.bossKills++;
     this.stats.goldEarned += def.reward;
     if (tower) tower.kills++;
+    heroOnKill(this, enemy, this.heroStrike);
     this.listener.onEnemyKilled?.(enemy);
     const children = def.spawnsOnDeath;
     if (children) {
@@ -658,6 +772,7 @@ export class Simulation {
       }
       enemy.slowFactor = Math.min(enemy.slowFactor, 1 - stats.slow);
       enemy.slowTimer = Math.max(enemy.slowTimer, stats.slowDuration);
+      if (stats.freezeChance && Math.random() < stats.freezeChance) enemy.freezeTimer = Math.max(enemy.freezeTimer, enemy.def.id === 'boss' ? stats.freezeTime / 2 : stats.freezeTime);
       this.damage(enemy, stats.damage, tower);
     }
     return hit;
@@ -683,7 +798,14 @@ export class Simulation {
       current = next;
     }
     this.listener.onChain?.(tower, chain);
-    chain.forEach((enemy, i) => this.damage(enemy, stats.damage * 0.85 ** i, tower));
+    chain.forEach((enemy, i) => {
+      if (stats.stun) this.stunEnemy(enemy, stats.stun);
+      this.damage(enemy, stats.damage * 0.85 ** i, tower);
+    });
+  }
+
+  stunEnemy(enemy, seconds) {
+    enemy.stunTimer = Math.max(enemy.stunTimer, enemy.def.id === 'boss' ? seconds / 2 : seconds);
   }
 
   /** Flame tower: a burst of fire around the target sets every enemy there alight. */
@@ -743,6 +865,10 @@ export class Simulation {
     p.pierce = Boolean(stats.armorPierce);
     p.poison = stats.poison ?? 0;
     p.poisonTime = stats.poisonTime ?? 0;
+    p.stun = stats.stun ?? 0;
+    p.igniteDps = stats.igniteDps ?? 0;
+    p.igniteTime = stats.igniteTime ?? 0;
+    p.corrode = stats.corrode ?? 0;
     p.speed = stats.projectileSpeed ?? 0;
     p.age = 0;
     p.x = p.sx = tower.x;
@@ -819,6 +945,24 @@ export class Simulation {
         enemy.dotTower = p.tower;
       }
       enemy.poisonTimer = Math.max(enemy.poisonTimer, p.poisonTime);
+      if (p.corrode) enemy.armor = Math.max(0, enemy.armor - p.corrode);
+    }
+  }
+
+  /** Special shell effects on the blast area: stun (giant boulder), fire (incendiary shells). */
+  impactEffects(p) {
+    const radius = Math.max(p.splash, 0.6);
+    const radiusSq = radius * radius;
+    for (const enemy of this.enemies) {
+      if (!enemy.active || (enemy.x - p.x) ** 2 + (enemy.z - p.z) ** 2 > radiusSq) continue;
+      if (p.stun) this.stunEnemy(enemy, p.stun);
+      if (p.igniteDps) {
+        if (enemy.burnTimer <= 0 || enemy.burnDps <= p.igniteDps) {
+          enemy.burnDps = p.igniteDps;
+          enemy.dotTower = p.tower;
+        }
+        enemy.burnTimer = Math.max(enemy.burnTimer, p.igniteTime);
+      }
     }
   }
 
@@ -826,6 +970,7 @@ export class Simulation {
     p.active = false;
     this.listener.onImpact?.(p);
     if (p.poison > 0) this.poisonCloud(p);
+    if (p.stun || p.igniteDps) this.impactEffects(p);
     if (p.splash > 0) this.areaDamage(p.x, p.z, p.splash, p.damage, p.tower);
     else if (p.target && p.target.active && p.target.id === p.targetId) this.damage(p.target, p.damage, p.tower, p.pierce);
     p.target = null;

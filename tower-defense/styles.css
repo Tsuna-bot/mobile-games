@@ -832,6 +832,159 @@ button:disabled {
   box-shadow: inset 0 0 0 2px rgba(27, 33, 64, 0.18);
 }
 
+/* The knight: portrait with level and health, and his power next to it. */
+.hero-group {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.spell--hero {
+  --spell-light: #ffe08a;
+  --spell-dark: #b8741a;
+}
+
+.hero-btn {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #3a4478, #1b2140);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.3), 0 0 0 3px var(--gold);
+  pointer-events: auto;
+}
+
+.hero-btn img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.hero-btn b {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.hero-btn__hp {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.hero-btn__hp i {
+  display: block;
+  height: 100%;
+  background: #ffd65c;
+}
+
+.hero-btn.is-down {
+  filter: grayscale(1) brightness(0.6);
+}
+
+.hero-btn.is-selected {
+  box-shadow: 0 0 0 4px #fff, 0 0 22px var(--gold);
+}
+
+.spells--compact .hero-btn {
+  width: 48px;
+  height: 48px;
+}
+
+.spells--tight {
+  gap: 6px;
+}
+
+.spells--tight .spell,
+.spells--tight .hero-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.spells--tight .spell svg {
+  width: 20px;
+  height: 20px;
+}
+
+.spells--tight .hero-group {
+  gap: 6px;
+}
+
+/* Tower specializations: two choice cards at the last level. */
+.branches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.branches[hidden] {
+  display: none;
+}
+
+.branches__title {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.branch {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 201, 60, 0.18), rgba(255, 201, 60, 0.06));
+  box-shadow: inset 0 0 0 2px rgba(255, 201, 60, 0.45);
+  color: var(--cream);
+  text-align: left;
+}
+
+.branch b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 16px;
+}
+
+.branch span {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--muted);
+}
+
+.branch em {
+  margin-top: auto;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.branch:disabled {
+  opacity: 0.55;
+}
+
 /* Undo toast after placing a construction site. */
 .undo {
   position: absolute;

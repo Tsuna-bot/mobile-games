@@ -62,11 +62,19 @@ export function renderThumbnails(renderer, assets) {
   for (const def of Object.values(BUILDINGS)) {
     thumbnails.buildings[def.id] = def.levels.map((_, level) => snap(buildBuildingModel(assets, def, level)));
   }
+  thumbnails.hero = snap(assets.clone('characters/character-male-e'));
   const flagMaterial = assets.materials.castle ?? assets.material;
   thumbnails.castle = CASTLE_LEVELS.map((_, level) => snap(buildCastleModel(assets, level, flagMaterial)));
   for (const def of Object.values(ENEMIES)) {
     const model = assets.clone(def.model);
     model.rotation.y = 0.5;
+    if (def.tint) {
+      const material = assets.material.clone();
+      material.color.set(def.tint);
+      model.traverse((o) => {
+        if (o.isMesh) o.material = material;
+      });
+    }
     thumbnails.enemies[def.id] = snap(model);
   }
 
