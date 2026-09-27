@@ -68,6 +68,10 @@ function decide(sim) {
   }
   if (counts.idle > 0) sim.setJob('wood', 1);
 
+  // Blessings: take the first on offer. Farms: enough food for everyone.
+  if (sim.pendingBlessings.length) sim.chooseBlessing(sim.pendingBlessings[0]);
+  const farms = sim.buildings.filter((b) => b.def.id === 'farm').length + sim.sites.filter((x) => x.typeId === 'farm').length;
+  if (farms < Math.ceil(sim.workers.length / 6) && sim.canAfford(sim.buildCost('farm'))) sim.placeBuilding('farm', freeCellNear(sim, 6));
   const houses = sim.buildings.filter((b) => b.def.id === 'house').length;
   const depots = sim.buildings.filter((b) => b.def.id === 'depot').length;
   if (sim.day >= 2 && !sim.hasAcademy() && sim.canAfford(sim.buildCost('academy'))) sim.placeBuilding('academy', freeCellNear(sim, 5));

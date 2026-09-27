@@ -9,7 +9,7 @@ const HIT_FLASH = new THREE.Color(0xffffff);
 const FROST_TINT = new THREE.Color(0x3aa8ff);
 const FREEZE_TINT = new THREE.Color(0x9fe6ff);
 const BLACK = new THREE.Color(0x000000);
-const GLOW_COLORS = { scout: 0x7dff6a, runner: 0x5ee8ff, tank: 0xffa347, boss: 0xff5cf0, siege: 0xff6a3a, shield: 0x7fc8ff, splitter: 0xd08cff, mini: 0xe0a8ff, healer: 0x7dff9a };
+const GLOW_COLORS = { scout: 0x7dff6a, runner: 0x5ee8ff, tank: 0xffa347, boss: 0xff5cf0, siege: 0xff6a3a, shield: 0x7fc8ff, splitter: 0xd08cff, mini: 0xe0a8ff, healer: 0x7dff9a, mothership: 0xff6ad5 };
 
 function createRadialTexture(inner, outer) {
   const size = 64;
@@ -124,7 +124,7 @@ export class EnemyViews {
     root.add(ice);
 
     let bubble = null;
-    if (def.shield) {
+    if (def.shield || def.phaseShield) {
       bubble = new THREE.Mesh(this.bubbleGeometry, this.bubbleMaterial.clone());
       bubble.scale.set(scale * 1.9, scale * 1.3, scale * 1.9);
       bubble.position.y = 0.25 * scale;
@@ -133,7 +133,7 @@ export class EnemyViews {
     }
 
     const bar = new THREE.Group();
-    const width = BAR_WIDTH * (def.id === 'boss' ? 1.5 : 1);
+    const width = BAR_WIDTH * (def.id === 'boss' || def.boss ? 1.6 : 1);
     const back = new THREE.Mesh(this.barGeometry, this.barBackMaterial);
     back.scale.set(width + 0.08, BAR_HEIGHT + 0.07, 1);
     back.position.x = -(width + 0.08) / 2;
@@ -153,7 +153,7 @@ export class EnemyViews {
 
     // Blue strip above the health bar while the shield holds.
     let shieldFill = null;
-    if (def.shield) {
+    if (def.shield || def.phaseShield) {
       shieldFill = new THREE.Mesh(this.barGeometry, new THREE.MeshBasicMaterial({ color: 0x6ad0ff, depthWrite: false, depthTest: false, toneMapped: false, fog: false }));
       shieldFill.scale.set(width, BAR_HEIGHT * 0.45, 1);
       shieldFill.position.set(-width / 2, BAR_HEIGHT * 0.85, 0);

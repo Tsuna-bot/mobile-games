@@ -22,6 +22,13 @@ export function createHero(x, z, level = 1, xp = 0) {
   return hero;
 }
 
+/** Kingdom blessings can make the knight stronger. */
+function boosted(sim, stats) {
+  const boost = sim.heroBoost ?? 1;
+  if (boost === 1) return stats;
+  return { ...stats, damage: stats.damage * boost, maxHp: Math.round(stats.maxHp * boost) };
+}
+
 export function heroAlive(hero) {
   return hero.respawn <= 0;
 }
@@ -39,8 +46,7 @@ function gainXp(sim, hero, amount) {
     leveled = true;
   }
   if (leveled) {
-    const stats = heroStats(hero.level, sim.threat);
-    hero.maxHp = stats.maxHp;
+    hero.maxHp = Math.round(heroStats(hero.level, sim.threat).maxHp * (sim.heroBoost ?? 1));
     hero.hp = hero.maxHp;
     sim.listener.onHeroLevel?.(hero);
   }
@@ -77,7 +83,7 @@ export function castHeroPower(sim) {
   if (!heroPowerReady(hero)) return false;
   const power = HERO.power;
   hero.powerCooldown = power.cooldown;
-  const stats = heroStats(hero.level, sim.threat);
+  const stats = boosted(sim, heroStats(hero.level, sim.threat));
   const radiusSq = power.radius * power.radius;
   sim.listener.onHeroPower?.(hero);
   for (const enemy of sim.enemies) {
@@ -104,7 +110,7 @@ export function updateHero(sim, dt) {
     }
     return;
   }
-  const stats = heroStats(hero.level, sim.threat);
+  const stats = boosted(sim, heroStats(hero.level, sim.threat));
   if (stats.maxHp !== hero.maxHp) {
     hero.hp *= stats.maxHp / hero.maxHp;
     hero.maxHp = stats.maxHp;

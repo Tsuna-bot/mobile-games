@@ -64,14 +64,18 @@
         <span class="res" data-res="wood" title="Bois"><i aria-hidden="true">🪵</i><b>0</b><small>/250</small></span>
         <span class="res" data-res="stone" title="Pierre"><i aria-hidden="true">🪨</i><b>0</b><small>/250</small></span>
         <span class="res" data-res="crystal" title="Cristal"><i aria-hidden="true">💎</i><b>0</b><small>/250</small></span>
+        <span class="res" data-res="food" title="Nourriture"><i aria-hidden="true">🌾</i><b>0</b><small>/250</small></span>
       </div>
       <div class="hud__row" id="hud-row" hidden>
+        <div class="hud__col">
         <button id="objective" class="objective" type="button">
           <span class="objective__icon" aria-hidden="true">🎯</span>
           <span class="objective__body"><b id="objective-text">Objectif</b><small id="objective-reward"></small></span>
           <span class="objective__count" id="objective-count"></span>
           <span class="objective__bar" aria-hidden="true"><i id="objective-fill"></i></span>
         </button>
+        <button id="event-chip" class="event-chip" type="button" hidden><span id="event-icon">🧳</span><span id="event-name">Marchand</span></button>
+        </div>
         <div class="minimap" id="minimap-wrap">
           <canvas id="minimap" width="168" height="168" aria-label="Carte du royaume : touche pour y aller"></canvas>
           <button id="btn-recenter" class="minimap__recenter" type="button" aria-label="Revenir au château" hidden>
@@ -81,6 +85,10 @@
       </div>
     </header>
     <div id="arrows" class="arrows" aria-hidden="true"></div>
+    <div id="boss-bar" class="boss-bar" hidden>
+      <span class="boss-bar__name" id="boss-name">Vaisseau amiral</span>
+      <span class="boss-bar__track"><i id="boss-fill"></i><i class="boss-bar__shield" id="boss-shield"></i></span>
+    </div>
 
     <footer id="dock" class="dock">
       <div class="realm-bar" id="realm-bar" hidden>
@@ -186,6 +194,15 @@
       </div>
     </section>
 
+    <section id="sheet-trade" class="sheet" aria-labelledby="trade-title">
+      <div class="sheet__head">
+        <h2 id="trade-title">Échanges</h2>
+        <button class="sheet__close" type="button" data-close aria-label="Fermer">✕</button>
+      </div>
+      <div class="trades" id="trades"></div>
+      <p class="sheet__hint" id="trade-hint">Échange tes ressources.</p>
+    </section>
+
     <section id="sheet-realm-build" class="sheet" aria-labelledby="realm-build-title">
       <div class="sheet__head">
         <h2 id="realm-build-title">Construire</h2>
@@ -289,7 +306,7 @@
         <button class="chip" type="button" id="btn-export">Exporter la sauvegarde</button>
         <button class="chip" type="button" id="btn-import">Importer</button>
       </div>
-      <p class="credits">Version 14 · Sauvegarde automatique · Modèles 3D de Kenney (CC0)</p>
+      <p class="credits">Version 15 · Sauvegarde automatique · Modèles 3D de Kenney (CC0)</p>
     </section>
 
     <section id="screen-perks" class="screen" aria-labelledby="perks-title">
@@ -365,6 +382,14 @@
           <button id="btn-report-repair" class="btn btn--ghost" type="button">Réparer</button>
           <button id="btn-report-ok" class="btn btn--primary" type="button">Au travail !</button>
         </div>
+      </div>
+    </section>
+
+    <section id="screen-blessing" class="screen screen--report" aria-labelledby="blessing-title">
+      <div class="blessing-box">
+        <p class="report__kicker">Les dieux du royaume t’écoutent</p>
+        <h2 class="report__title" id="blessing-title">Choisis une bénédiction</h2>
+        <div class="blessings" id="blessings"></div>
       </div>
     </section>
 

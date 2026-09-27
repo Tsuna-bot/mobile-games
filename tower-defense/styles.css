@@ -419,6 +419,187 @@ button:disabled {
   font-size: 13px;
 }
 
+/* Kingdom: objective column with the day's event under it. */
+.hud__col {
+  flex: 1;
+  min-width: 0;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.hud__col .objective {
+  width: 100%;
+}
+
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6a3fd0, #3a2a8a);
+  color: var(--cream);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  animation: objective-new 0.5s var(--spring);
+}
+
+.event-chip[hidden] {
+  display: none;
+}
+
+/* Boss health bar (motherships). */
+.boss-bar {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--safe-top) + 200px);
+  z-index: 3;
+  width: min(calc(100% - 40px), 360px);
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.boss-bar[hidden] {
+  display: none;
+}
+
+.boss-bar__name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: #ffb0d8;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+.boss-bar__track {
+  position: relative;
+  display: block;
+  height: 12px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: rgba(20, 10, 30, 0.8);
+  box-shadow: 0 0 0 2px rgba(255, 176, 216, 0.7);
+  overflow: hidden;
+}
+
+.boss-bar__track i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #ff3a8a, #ff9ad0);
+  transition: width 0.2s linear;
+}
+
+.boss-bar__track .boss-bar__shield {
+  background: rgba(120, 200, 255, 0.85);
+  top: 55%;
+}
+
+/* Trades (market and merchant). */
+.trades {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.trade {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.trade.is-merchant {
+  box-shadow: inset 0 0 0 2px rgba(180, 140, 255, 0.6);
+}
+
+.trade__deal {
+  flex: 1;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.trade .btn {
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+/* Blessing picker at dawn. */
+.blessing-box {
+  width: min(100%, 380px);
+  text-align: center;
+}
+
+.blessing-box .report__kicker {
+  color: var(--gold);
+}
+
+.blessing-box .report__title {
+  color: var(--cream);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.blessings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.blessing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff8ea, #f4e6c8);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), inset 0 -4px 0 rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.screen.is-visible .blessing {
+  animation: report-in 0.5s var(--spring) forwards;
+}
+
+.blessing span:first-child {
+  font-size: 34px;
+}
+
+.blessing b {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 19px;
+}
+
+.blessing small {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(27, 33, 64, 0.7);
+}
+
+.blessing em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 12px;
+  color: #b07a2a;
+}
+
 /* Daily challenge card (menu). */
 .realm-card.realm-card--daily {
   background: linear-gradient(110deg, #c0572a 0%, #8a2f6a 60%, #3a1f5c 100%);
@@ -1554,6 +1735,10 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1.4fr;
   gap: 8px;
+}
+
+.sheet__actions.is-single {
+  grid-template-columns: 1fr;
 }
 
 .sheet__actions .btn {

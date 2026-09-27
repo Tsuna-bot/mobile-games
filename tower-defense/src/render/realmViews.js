@@ -4,6 +4,7 @@ import { CONFIG } from '../config.js';
 import { damp } from '../core/math.js';
 import { makeNoise, seededRandom } from '../core/random.js';
 import { CHARACTER_MODELS } from './assets.js';
+import { EFFECT_COLORS } from './effects.js';
 import { buildTowerModel, weaponBaseY } from './towerViews.js';
 import { TOWERS as TOWERS_BY_ID } from '../data/towers.js';
 import { BUILDINGS as BUILDINGS_BY_ID } from '../data/realm.js';
@@ -13,8 +14,9 @@ const NODE_MODELS = {
   tree: ['survival/tree', 'survival/tree-tall', 'survival/tree-autumn'],
   rock: ['survival/rock-a', 'survival/rock-b', 'survival/rock-c'],
   crystal: ['detail-crystal-large', 'detail-crystal-large', 'detail-crystal'],
+  ruin: ['survival/chest', 'survival/chest', 'survival/chest'],
 };
-const NODE_SCALE = { tree: 1.55, rock: 1.55, crystal: 1.05 };
+const NODE_SCALE = { tree: 1.55, rock: 1.55, crystal: 1.05, ruin: 2.3 };
 const LEFTOVER = { tree: 'survival/tree-trunk', rock: 'survival/rock-flat' };
 const LEFTOVER_SCALE = { tree: 1.6, rock: 1.3 };
 const WORKER_SCALE = 0.78;
@@ -77,6 +79,7 @@ function mergeByMaterial(root) {
     copy.matrix.multiplyMatrices(inverse, mesh.matrixWorld);
     copy.matrix.decompose(copy.position, copy.quaternion, copy.scale);
     out.add(copy);
+    if (mesh.userData.blades) out.userData.blades = copy;
   }
   out.userData.glows = root.userData.glows ?? [];
   out.userData.chimney = root.userData.chimney ?? null;
@@ -174,11 +177,68 @@ function buildAcademy(assets, level, flagMaterial) {
   return root;
 }
 
+/** Farm: a small mill with turning sails and rows of crops (more with each level). */
+function buildFarm(assets, level) {
+  const root = new THREE.Group();
+  const mill = new THREE.Group();
+  mill.scale.setScalar(0.55);
+  mill.position.set(-0.2, 0, -0.18);
+  root.add(mill);
+  part(assets, mill, 'town/wall-wood-door', { rotation: Math.PI * 1.5 });
+  part(assets, mill, 'town/wall-wood', { rotation: 0 });
+  part(assets, mill, 'town/wall-wood', { rotation: Math.PI });
+  part(assets, mill, 'town/wall-wood', { rotation: Math.PI / 2 });
+  part(assets, mill, level > 0 ? 'town/roof-high-point' : 'town/roof-point', { y: 1 });
+  const blades = part(assets, root, 'town/windmill', { x: -0.2, y: 0.95, z: 0.12, scale: 0.32 });
+  blades.rotation.y = Math.PI / 2;
+  // Kept apart from the merged mesh so the sails can turn.
+  blades.traverse((o) => {
+    if (!o.isMesh) return;
+    o.userData.keep = true;
+    o.userData.blades = true;
+  });
+  for (let i = 0; i <= level; i++) part(assets, root, 'town/hedge', { x: 0.05 + i * 0.16, z: 0.1, rotation: 0, scale: [0.7, 0.9, 0.9] });
+  part(assets, root, 'survival/barrel', { x: 0.38, z: -0.32, scale: 1.1 });
+  root.userData.glows = [[-0.2, 0.3, 0.12]];
+  return root;
+}
+
+/** Market: two stalls, a cart and barrels. */
+function buildMarket(assets) {
+  const root = new THREE.Group();
+  part(assets, root, 'town/stall-red', { x: -0.22, z: -0.1, scale: 0.55 });
+  part(assets, root, 'town/stall-green', { x: 0.24, z: -0.18, rotation: -0.3, scale: 0.5 });
+  part(assets, root, 'town/cart', { x: 0.2, z: 0.3, rotation: 1.2, scale: 0.45 });
+  part(assets, root, 'survival/barrel', { x: -0.38, z: 0.34, scale: 1.1 });
+  part(assets, root, 'survival/box', { x: -0.1, z: 0.36, rotation: 0.4, scale: 1.3 });
+  part(assets, root, 'town/lantern', { x: 0.45, z: 0.42, scale: 0.35 });
+  root.userData.glows = [[0.45, 0.45, 0.42], [-0.22, 0.55, 0.15]];
+  return root;
+}
+
+/** Forge: a stone smithy with a smoking chimney and an anvil, bigger at each level. */
+function buildForge(assets, level) {
+  const root = new THREE.Group();
+  part(assets, root, 'castle/tower-base', { x: -0.08, z: -0.1, scale: [0.75, 0.5 + level * 0.12, 0.75] });
+  part(assets, root, 'town/roof-point', { x: -0.08, y: 1.31 * (0.5 + level * 0.12), z: -0.1, scale: 0.78 });
+  part(assets, root, 'town/chimney', { x: -0.3, y: 0.2, z: -0.2, scale: 0.7 });
+  part(assets, root, 'survival/workbench-anvil', { x: 0.28, z: 0.3, rotation: -0.5, scale: 1.4 });
+  part(assets, root, 'survival/barrel', { x: 0.4, z: -0.25, scale: 1 });
+  if (level > 0) part(assets, root, 'survival/resource-stone', { x: -0.35, z: 0.35, scale: 1.3 });
+  if (level > 1) part(assets, root, 'town/banner-red', { x: 0.1, y: 0.05, z: 0.3, rotation: Math.PI * 1.5, scale: 0.6 });
+  root.userData.glows = [[0.05, 0.3, 0.3], [0.28, 0.35, 0.3]];
+  root.userData.chimney = [-0.15, 0.95, -0.2];
+  return root;
+}
+
 /** Model of a Kingdom building level (walls: see `buildWallModel`). */
 export function buildBuildingModel(assets, def, level, flagMaterial = null) {
   if (def.id === 'house') return buildHouse(assets, level);
   if (def.id === 'depot') return buildDepot(assets, level);
   if (def.id === 'academy') return buildAcademy(assets, level, flagMaterial);
+  if (def.id === 'farm') return buildFarm(assets, level);
+  if (def.id === 'market') return buildMarket(assets);
+  if (def.id === 'forge') return buildForge(assets, level);
   const root = new THREE.Group();
   if (def.id === 'wall') root.add(buildWallModel(assets, level, { N: false, E: true, S: false, W: true }));
   return root;
@@ -619,7 +679,7 @@ export class RealmViews {
     }
     const survivalFoliage = this.world.survivalFoliage ?? this.assets.materials.survival;
     for (const [model, list] of groups) {
-      const material = model.startsWith('survival/tree') && model !== 'survival/tree-trunk' ? survivalFoliage : model.startsWith('survival/') ? this.assets.materials.survival : this.assets.material;
+      const material = model.startsWith('survival/tree') && model !== 'survival/tree-trunk' ? survivalFoliage : model.startsWith('survival/') ? this.assets.materials.survival : model.startsWith('castle/') ? this.assets.materials.castle : this.assets.material;
       const mesh = new THREE.InstancedMesh(this.assets.geometry(model), material, list.length);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = !model.includes('rock-flat');
@@ -641,6 +701,7 @@ export class RealmViews {
       }
     }
     for (const slot of this.nodes.values()) this.syncNode(slot, true);
+    this.buildRuins(sim, random);
     this.buildDecor(sim, random);
     this.buildCastle();
     for (const building of sim.buildings) this.addStructure(building);
@@ -649,6 +710,26 @@ export class RealmViews {
     this.rebuildWalls();
     for (const worker of sim.workers) this.addWorker(worker);
     this.glowsDirty = true;
+  }
+
+  /** Old stones around each ruin (the chest on top is the instanced node). */
+  buildRuins(sim, random) {
+    this.ruins = [];
+    for (const cell of sim.level.cells) {
+      if (cell.node?.type !== 'ruin') continue;
+      const group = this.cachedModel('ruin', () => {
+        const root = new THREE.Group();
+        part(this.assets, root, 'castle/wall-half', { x: -0.28, z: -0.22, rotation: 0.3, scale: [0.55, 0.42, 0.3] });
+        part(this.assets, root, 'castle/rocks-small', { x: 0.22, z: 0.18, rotation: 1.1, scale: 0.42 });
+        part(this.assets, root, 'castle/stairs-stone', { x: 0.3, z: -0.28, rotation: 2.2, scale: 0.55 });
+        return root;
+      });
+      group.position.set(cell.x, TOP, cell.z);
+      group.rotation.y = Math.floor(random() * 4) * (Math.PI / 2);
+      this.root.add(group);
+      this.ruins.push({ cell, group });
+    }
+    this.sparkleTimer = 0;
   }
 
   /** Flowers, grass clumps, bushes, mushrooms and pebbles on free cells (hidden under buildings). */
@@ -809,7 +890,10 @@ export class RealmViews {
     if (!this.modelCache.has(key)) this.modelCache.set(key, mergeByMaterial(build()));
     const template = this.modelCache.get(key);
     const copy = template.clone();
-    copy.userData = template.userData;
+    copy.userData = { ...template.userData, blades: null };
+    copy.traverse((o) => {
+      if (o !== copy && o.userData.blades) copy.userData.blades = o;
+    });
     return copy;
   }
 
@@ -1234,19 +1318,24 @@ export class RealmViews {
 
     const sim = this.sim;
     if (sim) {
-      // Portals: a new one tears open with a burst and grows in.
-      const open = sim.activePortals().length;
+      // Portals: one that opens (new, or unsealed) tears open with a burst and grows in.
+      const active = sim.activePortals();
       const portals = this.world.portals ?? [];
-      if (this.portalsShown >= 0 && open > this.portalsShown) {
-        for (let i = this.portalsShown; i < open && i < portals.length; i++) {
-          this.portalPop[i] = 1;
-          this.effects?.portalOpen(portals[i].position.x, portals[i].position.z);
-          this.world.terrain?.addScorch(portals[i].position.x, portals[i].position.z, 1.6, 0.8);
+      const key = active.map((p) => p.portal).join();
+      if (this.portalsShown !== -1 && key !== this.portalsShown) {
+        const before = new Set(String(this.portalsShown).split(','));
+        for (const cell of active) {
+          if (before.has(String(cell.portal))) continue;
+          const portal = portals[cell.portal];
+          if (!portal) continue;
+          this.portalPop[cell.portal] = 1;
+          this.effects?.portalOpen(portal.position.x, portal.position.z);
+          this.world.terrain?.addScorch(portal.position.x, portal.position.z, 1.6, 0.8);
         }
       }
-      this.portalsShown = open;
+      this.portalsShown = key;
       portals.forEach((portal, i) => {
-        portal.visible = i < open;
+        portal.visible = active.some((p) => p.portal === i);
         const pop = this.portalPop[i] ?? 0;
         if (pop <= 0) return;
         this.portalPop[i] = Math.max(0, pop - dt * 0.9);
@@ -1265,6 +1354,7 @@ export class RealmViews {
     for (const view of this.structures.values()) {
       if (view.castle) continue;
       const s = view.structure;
+      view.model?.userData.blades?.rotateX(dt * 1.3);
       if (view.pop > 0) {
         view.pop = Math.max(0, view.pop - dt * 2.2);
         const t = 1 - view.pop;
@@ -1286,6 +1376,12 @@ export class RealmViews {
     }
 
     for (const view of this.sites.values()) this.updateSite(view, dt, time);
+    // Unlooted ruins glint now and then; farm sails turn.
+    this.sparkleTimer -= dt;
+    if (this.sparkleTimer <= 0 && this.effects) {
+      this.sparkleTimer = 1.1;
+      for (const ruin of this.ruins ?? []) if (ruin.cell.node?.amount > 0) this.effects.sparksAt(ruin.cell.x, TOP + 0.45, ruin.cell.z, EFFECT_COLORS.gold);
+    }
     this.updateWorkers(dt, time);
     this.updateBirds(dt, time, night, camera);
     this.updateSmoke(dt, camera);
@@ -1431,6 +1527,8 @@ export class RealmViews {
     this.falling = [];
     for (const view of this.structures.values()) view.group.removeFromParent();
     this.structures.clear();
+    for (const ruin of this.ruins ?? []) ruin.group.removeFromParent();
+    this.ruins = [];
     for (const site of [...this.sites.keys()]) this.removeSite(site);
     for (const view of this.workers.values()) {
       view.mixer.stopAllAction();

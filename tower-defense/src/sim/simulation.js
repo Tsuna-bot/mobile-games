@@ -48,6 +48,9 @@ function createEnemy() {
     maxShield: 0,
     shieldDelay: 0,
     healTimer: 0,
+    // Mothership: drone launches and the half-life shield.
+    summonTimer: 0,
+    phased: false,
     wave: 0,
     view: null,
   };
@@ -545,10 +548,21 @@ export class Simulation {
     enemy.shield = enemy.maxShield;
     enemy.shieldDelay = 0;
     enemy.healTimer = def.healEvery ?? 0;
+    enemy.summonTimer = def.summon?.every ?? 0;
+    enemy.phased = false;
     enemy.wave = wave;
     this.placeEnemy(enemy, distance);
     this.listener.onEnemySpawn?.(enemy);
     return enemy;
+  }
+
+  /** A UFO launched by another one (mothership drones), counted in the same wave. */
+  spawnNear(parent, type, hpShare = 1) {
+    this.waveRemaining[parent.wave] = (this.waveRemaining[parent.wave] ?? 0) + 1;
+    this.pendingSpawnAt = { cell: parent.cell, x: parent.x, z: parent.z };
+    const child = this.spawnEnemy(type, parent.hpMultiplier * hpShare, parent.wave, Math.max(0, parent.distance - 0.2));
+    this.pendingSpawnAt = null;
+    return child;
   }
 
   /** Puts a new enemy at `distance` along the road. */
@@ -600,6 +614,21 @@ export class Simulation {
           const was = enemy.shield;
           enemy.shield = Math.min(enemy.maxShield, enemy.shield + (def.shieldRegen ?? 20) * enemy.hpMultiplier * dt);
           if (was <= 0 && enemy.shield > 0) this.listener.onShieldUp?.(enemy);
+        }
+      }
+      if (def.phaseShield && !enemy.phased && enemy.hp < enemy.maxHp * 0.5) {
+        enemy.phased = true;
+        enemy.maxShield = Math.round(enemy.maxHp * def.phaseShield);
+        enemy.shield = enemy.maxShield;
+        enemy.shieldDelay = 99;
+        this.listener.onBossPhase?.(enemy);
+      }
+      if (def.summon && enemy.freezeTimer <= 0 && enemy.stunTimer <= 0) {
+        enemy.summonTimer -= dt;
+        if (enemy.summonTimer <= 0) {
+          enemy.summonTimer = def.summon.every;
+          for (let i = 0; i < def.summon.count; i++) this.spawnNear(enemy, def.summon.type, 0.55);
+          this.listener.onBossSummon?.(enemy);
         }
       }
       if (def.heal && enemy.freezeTimer <= 0 && enemy.stunTimer <= 0) {

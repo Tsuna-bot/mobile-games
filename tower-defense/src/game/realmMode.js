@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { damp } from '../core/math.js';
 import { clearRealm, loadRealm, writeRealm, writeSave } from '../core/storage.js';
-import { OBJECTIVES, TUTORIAL_OBJECTIVES, objectiveAt } from '../data/objectives.js';
+import { OBJECTIVES, OBJECTIVES_VERSION, TUTORIAL_OBJECTIVES, migrateObjective, objectiveAt } from '../data/objectives.js';
 import { BUILDINGS, CASTLE_LEVELS, REALM, RESEARCH, RESEARCH_GROUPS, RESOURCE_INFO, UNDO_WINDOW } from '../data/realm.js';
+import { BLESSINGS, EVENTS, SEAL } from '../data/realmExtras.js';
 import { SPELLS } from '../data/spells.js';
 import { THEMES } from '../data/themes.js';
 import { TOWERS, TOWER_ORDER } from '../data/towers.js';
@@ -19,6 +20,8 @@ const SWING_EVERY = 0.8;
 const HAMMER_EVERY = 0.55;
 const OBJECTIVE_CHEER = 2.4;
 const HINT_TIME = 6000;
+const METEOR_FIRE = new THREE.Color(0xffb050);
+const METEOR_EMBER = new THREE.Color(0xff6a2a);
 
 function formatTime(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
@@ -96,6 +99,9 @@ export class RealmMode {
     ui.on('job', (resource, delta) => this.changeJob(resource, delta));
     ui.on('researchTab', () => this.renderResearch());
     ui.on('researchBuy', (id) => this.buyResearch(id));
+    ui.on('trade', (index) => this.doTrade(index));
+    ui.on('blessing', (id) => this.chooseBlessing(id));
+    ui.on('event-chip', () => this.showEventInfo());
   }
 
   /** Text of the menu card. */
@@ -173,11 +179,17 @@ export class RealmMode {
     // Objectives: resume, skipping any an older save already fulfils.
     this.flags = { sent: Boolean(data), ...(data?.flags ?? {}) };
     this.objectiveIndex = data?.objective ?? 0;
+    if (data?.objective !== undefined && data.objectiveVersion !== OBJECTIVES_VERSION) this.objectiveIndex = Math.max(0, migrateObjective(data.objective));
+    this.pendingEvent = null;
+    this.bossId = null;
     this.objectiveDoneAt = 0;
     while (this.objectiveIndex < OBJECTIVES.length && data?.objective === undefined && this.objectiveProgress() >= objectiveAt(this.objectiveIndex).goal) this.objectiveIndex++;
     this.coachObjective();
+    this.eventShown = null;
     this.persist();
     game.loop.start();
+    // A blessing still to choose (the game was closed on the dawn screen).
+    if (this.sim.pendingBlessings.length && this.sim.phase === PHASE.DAY) setTimeout(() => this.offerBlessing(), 1400);
   }
 
   stop() {
@@ -186,6 +198,9 @@ export class RealmMode {
     this.active = false;
     this.game.realm = null;
     this.ui.hideUndo();
+    this.ui.setEvent(null);
+    this.eventShown = null;
+    this.ui.setBossBar(null);
     this.game.world.terrain.showGrid(false);
     this.ui.setRealmMode(false);
     this.game.realmViews.clear();
@@ -194,7 +209,7 @@ export class RealmMode {
 
   persist() {
     if (!this.active || !this.sim) return;
-    writeRealm({ ...this.sim.serialize(), savedAt: Date.now(), objective: this.objectiveIndex, flags: this.flags });
+    writeRealm({ ...this.sim.serialize(), savedAt: Date.now(), objective: this.objectiveIndex, objectiveVersion: OBJECTIVES_VERSION, flags: this.flags });
   }
 
   newRealm() {
@@ -425,7 +440,227 @@ export class RealmMode {
         game.audio.quake();
         game.haptics.pulse(CONFIG.haptics.leak);
       },
+      // Mothership: shield at half life, drops mini UFOs.
+      onBossPhase: (enemy) => {
+        effects.ring(enemy.x, enemy.z, 2.2, 0.8, new THREE.Color(0x8fc8ff));
+        effects.sparksBurst(enemy.x, CONFIG.world.tileTop + 1.4, enemy.z, new THREE.Color(0x8fc8ff));
+        this.ui.showBanner(`🛸 ${enemy.def.name}`, 'Il active son bouclier !', 'danger');
+        game.audio.shieldBreak();
+        game.rig.shake(0.3);
+        game.haptics.pulse(CONFIG.haptics.warning);
+      },
+      onBossSummon: (enemy) => {
+        effects.spawnBeam(enemy.x, enemy.z);
+        game.audio.whoosh();
+      },
+      onEvent: (def, detail) => {
+        if (detail?.cells) {
+          // Meteors: a falling star on every crystal that grew back.
+          detail.cells.slice(0, 12).forEach((cell, i) => setTimeout(() => {
+            if (!this.active) return;
+            effects.meteorTrail(cell.x, CONFIG.world.tileTop + 2.5, cell.z, METEOR_FIRE, METEOR_EMBER);
+            effects.bigExplosion(cell.x, cell.z, 0.7);
+            if (i % 3 === 0) game.audio.meteorImpact();
+          }, 300 + i * 160));
+        }
+        this.pendingEvent = { def, detail };
+        // The event of a new day waits for the dawn report and the blessing.
+        queueMicrotask(() => this.flushEvent());
+      },
+      onTreasure: (worker, cell, reward) => {
+        effects.goldShower(cell.x, cell.z);
+        effects.ring(cell.x, cell.z, 1, 0.6, new THREE.Color(0xffd23c));
+        game.audio.goldRain();
+        game.haptics.pulse(CONFIG.haptics.complete);
+        let text = '';
+        if (reward.kind === 'resources') text = Object.entries(reward.stock).map(([r, a]) => `+${a} ${RESOURCE_INFO[r].icon}`).join(' ');
+        else if (reward.kind === 'gold') text = `+${reward.gold} or`;
+        else if (reward.kind === 'gems') {
+          text = `+${reward.gems} 💎`;
+          this.save.gems += reward.gems;
+          writeSave(this.save);
+        } else if (reward.kind === 'relic') text = 'Relique : lames aiguisées !';
+        else text = 'Une bénédiction !';
+        game.floatAt(cell.x, 1.6, cell.z, `🗝️ ${text}`, 'res');
+        this.ui.showBanner('🗝️ Trésor découvert', text);
+        if (reward.kind === 'resources') for (const [r, a] of Object.entries(reward.stock)) this.flyToHud(cell.x, 1, cell.z, r, a);
+        if (reward.kind === 'blessing') setTimeout(() => this.offerBlessing(), 900);
+        this.persist();
+      },
+      onBlessing: (blessing, count) => {
+        const base = this.sim.level.base;
+        effects.heal(base.x, base.z);
+        effects.ring(base.x, base.z, 2.4, 0.9, new THREE.Color(0xffe08a));
+        game.floatAt(base.x, 2.4, base.z, `${blessing.icon} ${blessing.name}${count > 1 ? ` ×${count}` : ''}`, 'res');
+        game.audio.upgrade();
+        game.haptics.pulse(CONFIG.haptics.build);
+        if (blessing.mods.spellCooldown) this.ui.setSpellCount(Object.keys(this.sim.spells).length);
+      },
+      onPortalSealed: (portal) => {
+        effects.iceBurst(portal.x, portal.z, 1.4);
+        effects.ring(portal.x, portal.z, 1.6, 0.8, new THREE.Color(0x7fb6ff));
+        game.floatAt(portal.x, 1.6, portal.z, `🔒 Scellé ${SEAL.nights} nuits`, 'res');
+        game.audio.blizzard();
+        game.rig.shake(0.25);
+        game.haptics.pulse(CONFIG.haptics.complete);
+        this.portalsBefore = this.sim.activePortals().length;
+        game.deselect();
+        this.persist();
+      },
+      onPortalReopened: (portal) => {
+        this.reopened = (this.reopened ?? 0) + 1;
+        effects.portalOpen(portal.x, portal.z);
+      },
+      onTrade: (offer) => {
+        game.audio.coin();
+        game.haptics.pulse(CONFIG.haptics.tap);
+        const base = this.sim.level.base;
+        game.floatAt(base.x, 2, base.z, `+${costText(offer.get)}`, 'res');
+        this.persist();
+      },
     };
+  }
+
+  // ------------------------------------------------------------ blessings, events, market, portals
+
+  /** Three blessings to choose from (after the dawn report, or from a ruin). */
+  offerBlessing() {
+    const game = this.game;
+    const sim = this.sim;
+    if (!this.active || !sim.pendingBlessings.length) return false;
+    if (game.mode !== 'playing' && game.mode !== 'report') return false;
+    game.deselect();
+    game.armSpell(null);
+    game.mode = 'report';
+    this.ui.setPlayingUi(false);
+    this.ui.showBlessings(sim.pendingBlessings.map((id) => {
+      const b = BLESSINGS.find((x) => x.id === id);
+      return { id, icon: b.icon, name: b.name, text: b.text, count: sim.blessings[id] ?? 0, max: b.max };
+    }));
+    game.audio.whoosh();
+    return true;
+  }
+
+  chooseBlessing(id) {
+    const game = this.game;
+    if (!this.sim?.chooseBlessing(id)) return;
+    game.mode = 'playing';
+    this.ui.showScreen(null);
+    this.ui.setPlayingUi(true);
+    this.persist();
+    setTimeout(() => this.flushEvent(), 500);
+  }
+
+  /** Banner of the day's event, once nothing else is on screen. */
+  flushEvent() {
+    const pending = this.pendingEvent;
+    if (!pending || !this.active || this.game.mode !== 'playing') return;
+    this.pendingEvent = null;
+    const { def, detail } = pending;
+    let sub = def.text;
+    if (def.id === 'caravan' && detail) sub = `Arrivée : ${Object.entries(detail).filter(([, a]) => a > 0).map(([r, a]) => `+${a} ${RESOURCE_INFO[r].icon}`).join(' ')}`;
+    if (def.id === 'meteor' && detail) sub = `${detail.cells.length} gisements de cristal rechargés · +${detail.crystal} ${RESOURCE_INFO.crystal.icon}`;
+    if (def.id === 'merchant') sub = 'Touche la pastille 🧳 en haut pour voir ses offres.';
+    this.ui.showBanner(`${def.icon} ${def.name}`, sub);
+    this.game.audio.dawn();
+    this.game.haptics.pulse(CONFIG.haptics.tap);
+  }
+
+  showEventInfo() {
+    const sim = this.sim;
+    if (!sim?.event) return;
+    if (sim.trades().length && (sim.event.id === 'merchant')) {
+      this.openTrades();
+      return;
+    }
+    const def = EVENTS[sim.event.id];
+    this.ui.showBanner(`${def.icon} ${def.name}`, def.text);
+    this.game.audio.click();
+  }
+
+  openTrades() {
+    const game = this.game;
+    const sim = this.sim;
+    if (!sim.trades().length) return;
+    if (game.selection?.kind !== 'trades') {
+      game.deselect();
+      game.selection = { kind: 'trades' };
+      game.audio.whoosh();
+    }
+    this.sheetKey = '';
+    this.refreshTrades(true);
+  }
+
+  refreshTrades(force = false) {
+    const sim = this.sim;
+    const key = `${this.stockKey()}|${sim.event?.id ?? ''}`;
+    if (!force && key === this.sheetKey) return;
+    this.sheetKey = key;
+    const list = sim.trades().map((offer) => ({ ...offer, affordable: sim.canAfford(offer.give) }));
+    if (!list.length) {
+      this.game.deselect();
+      return;
+    }
+    const merchant = sim.event?.id === 'merchant';
+    const hint = merchant ? '🧳 Offres du marchand (dorées) jusqu’à la nuit.' : 'Le marché échange tes ressources à tout moment.';
+    this.ui.openTrades(list, (r) => sim.amountOf(r), hint);
+  }
+
+  doTrade(index) {
+    if (!this.sim.trade(index)) {
+      this.game.audio.denied();
+      return;
+    }
+    this.refreshTrades(true);
+  }
+
+  selectPortal(portal) {
+    const game = this.game;
+    // The portals sit at the edge of the map: bring the camera over.
+    game.rig.goal.set(portal.x, 0, portal.z);
+    game.rig.clampGoal();
+    game.deselect();
+    game.selection = { kind: 'portal', portal };
+    game.effects.showCursor(portal.x, portal.z);
+    this.sheetKey = '';
+    this.refreshPortal(true);
+    game.audio.click();
+    game.haptics.pulse(CONFIG.haptics.tap);
+  }
+
+  refreshPortal(force = false) {
+    const sim = this.sim;
+    const portal = this.game.selection.portal;
+    const active = sim.activePortals().includes(portal);
+    const sealed = sim.sealed[portal.portal] ?? 0;
+    const key = `${this.stockKey()}|${active}|${sealed}|${sim.phase}`;
+    if (!force && key === this.sheetKey) return;
+    this.sheetKey = key;
+    const cost = sim.sealCost();
+    const have = (r) => sim.amountOf(r);
+    const rows = [];
+    let state = 'Fermé';
+    if (sealed) state = `Scellé (${sealed} nuit${sealed > 1 ? 's' : ''})`;
+    else if (active) state = 'Ouvert';
+    rows.push(['État', state]);
+    if (!sealed && !active) rows.push(['Ouverture', 'Plus tard dans ta progression']);
+    let label = `🔒 Sceller ${SEAL.nights} nuits`;
+    let enabled = sim.canSeal(portal) && sim.canAfford(cost);
+    if (sim.phase !== PHASE.DAY) label = '🔒 Impossible la nuit';
+    else if (active && sim.activePortals().length < 2) label = '🔒 Le dernier portail ne se scelle pas';
+    else if (!active) enabled = false;
+    this.ui.openRealmInfo({
+      image: this.ui.thumbnails.portal,
+      name: 'Portail des ovnis',
+      level: 0,
+      levels: 1,
+      stats: rows,
+      upgrade: false,
+      extra: active ? { label, cost: sim.phase === PHASE.DAY ? cost : null, enabled } : null,
+      demolish: null,
+      confirm: false,
+      targeting: null,
+    }, have);
   }
 
   // ------------------------------------------------------------ dawn report
@@ -443,11 +678,16 @@ export class RealmMode {
       { label: 'Bâtiments perdus', value: report.lost, tone: report.lost ? 'bad' : '' },
     ];
     if (info.gems) stats.push({ label: 'Gemmes', value: info.gems, prefix: '+', suffix: ' 💎', tone: 'gold' });
+    if (report.food) stats.push({ label: 'Nourriture', value: report.food.produced - report.food.eaten, prefix: report.food.produced >= report.food.eaten ? '+' : '', suffix: ' 🌾', tone: report.food.famine ? 'bad' : '' });
     const notes = [];
     if (info.fallen && this.lastLoss) notes.push(`Les pillards ont emporté ${costText(this.lastLoss)}.`);
     const quote = sim.repairQuote();
     if (quote.damaged.length) notes.push('Les maçons ont réparé la moitié des dégâts.');
     if (sim.activePortals().length > this.portalsBefore) notes.push('⚠️ Un nouveau portail s’ouvrira cette nuit.');
+    if (this.reopened) notes.push('🔓 Un portail scellé se rouvre.');
+    this.reopened = 0;
+    if (report.food?.famine) notes.push('🌾 Famine : pas assez de nourriture, tes ouvriers sont lents aujourd’hui. Construis des fermes !');
+    if (sim.day % 5 === 0) notes.push('🛸 Un vaisseau amiral viendra cette nuit.');
     const best = report.best;
     this.lastLoss = null;
     game.deselect();
@@ -478,6 +718,7 @@ export class RealmMode {
     const base = this.sim.level.base;
     game.flyCoinsFrom(base.x, 1.5, base.z, 6);
     this.persist();
+    if (!this.offerBlessing()) this.flushEvent();
   }
 
   repairFromReport() {
@@ -589,6 +830,8 @@ export class RealmMode {
       this.openBuild(cell);
     } else if (cell?.castle) {
       this.selectStructure(sim.castle);
+    } else if (cell?.portal >= 0) {
+      this.selectPortal(sim.level.portals[cell.portal]);
     } else {
       game.deselect();
     }
@@ -597,7 +840,7 @@ export class RealmMode {
   sendWorker(cell) {
     const game = this.game;
     const worker = this.sim.sendWorkerTo(cell);
-    const info = RESOURCE_INFO[cell.node.resource];
+    const info = RESOURCE_INFO[cell.node.resource] ?? { icon: '🗝️' };
     game.deselect();
     if (!worker) {
       game.floatAt(cell.x, 1.2, cell.z, 'Aucun ouvrier', 'danger');
@@ -625,10 +868,11 @@ export class RealmMode {
     const buildingItem = (id) => {
       const def = BUILDINGS[id];
       const cost = sim.buildCost(id);
-      const built = def.unique && sim.buildings.some((b) => b.def.id === id);
-      return { id, kind: 'building', name: def.name, blurb: def.blurb, image: this.ui.thumbnails.buildings[id][0], cost, affordable: affordable(cost), locked: built, lockText: 'Déjà construite' };
+      const built = def.unique && (sim.buildings.some((b) => b.def.id === id) || sim.sites.some((site) => site.typeId === id));
+      const needs = def.requires && !sim.hasBuilding(def.requires);
+      return { id, kind: 'building', name: def.name, blurb: def.blurb, image: this.ui.thumbnails.buildings[id][0], cost, affordable: affordable(cost), locked: built || needs, lockText: needs ? `${BUILDINGS[def.requires].icon} ${BUILDINGS[def.requires].name}` : 'Déjà construite' };
     };
-    if (this.ui.realmTab === 'village') return ['house', 'depot', 'academy'].map(buildingItem);
+    if (this.ui.realmTab === 'village') return ['house', 'farm', 'depot', 'academy', 'market', 'forge'].map(buildingItem);
     const towers = TOWER_ORDER.map((id) => {
       const def = TOWERS[id];
       const cost = sim.buildCost(id);
@@ -684,6 +928,7 @@ export class RealmMode {
       this.ui.denyRealmCard(id);
       game.audio.denied();
       if (item.kind === 'tower') this.ui.$('realm-build-hint').textContent = `${item.name} : à débloquer dans l’Académie (onglet Village).`;
+      else if (BUILDINGS[id].requires && !this.sim.hasBuilding(BUILDINGS[id].requires)) this.ui.$('realm-build-hint').textContent = `${item.name} : construis d’abord l’${BUILDINGS[BUILDINGS[id].requires].name}.`;
       return;
     }
     if (selection.pending === id && selection.cell) {
@@ -900,15 +1145,25 @@ export class RealmMode {
     if (def.id === 'house') rows.push(['Ouvriers logés', `+${level.workers}`]);
     if (def.id === 'depot') rows.push(['Stockage', `+${Math.round(level.storage * sim.modifiers.storage)}`], ['Dépôt', 'Oui']);
     if (def.id === 'academy') rows.push(['Recherches', RESEARCH.filter((r) => sim.researchLevel(r.id) > 0).length]);
+    if (def.id === 'farm') {
+      rows.push(['Nourriture', `+${Math.round(level.food * (sim.modifiers.food ?? 1))} 🌾 à l’aube`]);
+      if (def.levels[s.level + 1]) rows.push(['Niveau suivant', `+${Math.round(def.levels[s.level + 1].food * (sim.modifiers.food ?? 1))} 🌾`]);
+    }
+    if (def.id === 'forge') {
+      rows.push(['Dégâts des tours', `+${Math.round(level.damage * 100)} %`]);
+      if (def.levels[s.level + 1]) rows.push(['Niveau suivant', `+${Math.round(def.levels[s.level + 1].damage * 100)} %`]);
+    }
+    if (def.id === 'market') rows.push(['Échanges', `${sim.trades().length} offres`]);
     const cost = sim.buildingUpgradeCost(s);
+    const opens = { academy: '📜 Ouvrir la recherche', market: '⚖️ Échanger' }[def.id];
     this.ui.openRealmInfo({
       image: this.ui.thumbnails.buildings[def.id][s.level],
       name: level.name ?? def.name,
       level: s.level,
       levels: def.levels.length,
       stats: rows,
-      upgrade: def.id === 'academy' ? { cost: {}, affordable: true } : cost ? { cost, affordable: affordable(cost) } : null,
-      upgradeLabel: def.id === 'academy' ? '📜 Ouvrir la recherche' : def.id === 'wall' ? 'En pierre' : 'Améliorer',
+      upgrade: opens ? { cost: {}, affordable: true } : cost ? { cost, affordable: affordable(cost) } : null,
+      upgradeLabel: opens ?? (def.id === 'wall' ? 'En pierre' : 'Améliorer'),
       maxText: s.upgrading ? '🔨 Amélioration en cours' : 'Niveau max',
       work,
       demolish,
@@ -980,6 +1235,10 @@ export class RealmMode {
       this.openResearch();
       return;
     }
+    if (s.def?.id === 'market') {
+      this.openTrades();
+      return;
+    }
     const ok = Boolean(this.sim.startUpgrade(s));
     if (!ok) {
       this.game.audio.denied();
@@ -1022,6 +1281,10 @@ export class RealmMode {
   /** Third button of the info sheet: "Tout réparer" on the castle. */
   extraSelected() {
     const selection = this.game.selection;
+    if (selection?.kind === 'portal') {
+      if (!this.sim.sealPortal(selection.portal)) this.game.audio.denied();
+      return;
+    }
     if (selection?.kind !== 'structure' || selection.structure.kind !== 'castle') return;
     if (!this.sim.repairAll()) {
       this.game.audio.denied();
@@ -1165,7 +1428,7 @@ export class RealmMode {
 
   stockKey() {
     const s = this.sim;
-    return `${s.stock.wood}|${s.stock.stone}|${s.stock.crystal}|${s.gold}`;
+    return `${s.stock.wood}|${s.stock.stone}|${s.stock.crystal}|${s.stock.food}|${s.gold}`;
   }
 
   /** Night falls over the last seconds of the day; dawn fades back in. */
@@ -1294,10 +1557,28 @@ export class RealmMode {
       sim.hasAcademy(),
       researchReady,
     );
+    const eventId = sim.event?.id ?? '';
+    if (eventId !== this.eventShown) {
+      this.eventShown = eventId;
+      this.ui.setEvent(eventId ? EVENTS[eventId] : null);
+    }
+    this.updateBossBar();
     const kind = game.selection?.kind;
-    if (kind === 'build') this.refreshBuild();
+    if (kind === 'trades') this.refreshTrades();
+    else if (kind === 'portal') this.refreshPortal();
+    else if (kind === 'build') this.refreshBuild();
     else if (kind === 'structure') this.refreshInfo();
     else if (kind === 'workers') this.refreshWorkers();
+  }
+
+  updateBossBar() {
+    const night = this.sim.phase === PHASE.NIGHT;
+    const boss = night ? this.sim.enemies.find((e) => e.active && e.def.boss) ?? this.sim.enemies.find((e) => e.active && e.def.id === 'boss') : null;
+    if (!boss) {
+      this.ui.setBossBar(null);
+      return;
+    }
+    this.ui.setBossBar({ name: boss.def.name, share: boss.hp / boss.maxHp, shield: boss.maxShield > 0 ? boss.shield / boss.maxHp : 0 });
   }
 
   /** Mist hangs over the fields at dawn and burns off during the first minute. */

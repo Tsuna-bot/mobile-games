@@ -24,8 +24,16 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
   - palissades de pieux, qui se raccordent entre elles et deviennent des remparts de pierre ; en mode mur, on les trace en glissant le doigt ;
   - tours ;
   - maisons (plus d'ouvriers) ;
+  - fermes (nourriture) ;
   - entrepôts (stockage et point de dépôt) ;
-  - l'Académie.
+  - l'Académie, puis le **Marché** (échanges de ressources à tout moment) et la **Forge** (+8 % de dégâts pour toutes les tours par niveau).
+- **Nourriture** : chaque ouvrier mange 1 🌾 à l'aube. S'il en manque, c'est la famine : ouvriers et récolte ralentis toute la journée.
+- **Bénédictions** : après chaque nuit tenue, choisis 1 bénédiction parmi 3 (16 au total, cumulables : dégâts, portée, ouvriers, or à l'aube, château, chevalier…).
+- **Événements du jour** (un jour sur deux environ) : marchand ambulant (meilleurs échanges), pluie de météores (cristaux rechargés), éclipse (nuit plus tôt, mais aube 50 % plus riche), fête au village (tout va 30 % plus vite), caravane (provisions). Une pastille en haut de l'écran rappelle l'événement en cours.
+- **Ruines** : 5 coffres dorés cachés sur la carte. Un ouvrier qui les explore trouve des ressources, de l'or, des gemmes, une bénédiction ou une relique.
+- **Portails** : le jour, touche un portail ouvert pour le **sceller** 2 nuits (cristaux + or, de plus en plus cher). Il en reste toujours au moins un ouvert.
+- **Vaisseau amiral** toutes les 5 nuits : énorme, il largue des mini-ovnis et s'entoure d'un bouclier à mi-vie. Une barre de vie de boss s'affiche en haut.
+- **Le chevalier** défend aussi le Royaume (voir Contenu).
 - **Le château** a 3 niveaux (Fort, Château, Citadelle) : plus de vie, de stockage et d'ouvriers. Sa fiche propose aussi « Réparer » pour tout remettre en état.
 - **Objectifs** : un objectif à la fois, avec une récompense ; les premiers servent de tutoriel.
 - **Rapport à l'aube** : étoiles, ovnis détruits, or gagné, dégâts subis, meilleure tour, réparation en un geste.
@@ -41,7 +49,7 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
 
 ## Contenu
 
-- **5 niveaux** faits main, chacun avec sa propre ambiance :
+- **10 niveaux** faits main, chacun avec sa propre ambiance :
 
   | Niveau | Vagues | Ambiance |
   | --- | --- | --- |
@@ -50,6 +58,16 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
   | Forêt du crépuscule | 12 | coucher de soleil, lucioles |
   | Canyon cristallin | 15 | lumière magique, poussière de cristal |
   | Citadelle nocturne | 18 | nuit étoilée, lueur du château |
+  | Vallée d'automne | 16 | herbe rousse, feuilles mortes |
+  | Dunes brûlantes | 18 | sable, vent chaud |
+  | Marais brumeux | 16 | brume verte, lucioles des marais |
+  | Cratère ardent | 20 | lave, braises |
+  | Pic de l'orage | 22 | pluie, éclairs et tonnerre |
+
+- **Le chevalier** (héros) : touche-le puis touche la carte pour l'envoyer. Il frappe les ovnis au corps à corps, gagne de l'expérience (7 niveaux) et a un pouvoir, la **Frappe tournoyante** (dégâts de zone + étourdissement). S'il tombe, il revient au château après quelques secondes.
+- **Spécialisations** : au niveau maximum, chaque tour choisit une voie parmi 2 (24 en tout), par exemple Baliste « Tir rapide » ou « Carreaux perçants ».
+- **Défi du jour** : une carte, 12 vagues et 2 règles spéciales tirées au sort chaque jour (ovnis rapides, pas de sorts, tout en boucliers…). Il rapporte 15 gemmes et compte une série de jours consécutifs.
+- **Bestiaire** : fiche de chaque ovni rencontré (description, statistiques, nombre abattu). Un nouvel ovni est annoncé la première fois qu'il apparaît.
 
 - **Mode Survie** : vagues infinies, débloqué après le niveau 3. Le record est sauvegardé.
 - **Mode Héroïque** : se débloque sur un niveau fini avec 3 étoiles. 5 vies, ennemis plus résistants et plus rapides, et une couronne à gagner.
@@ -80,10 +98,11 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
 - **Boutique et gemmes** : on gagne des gemmes en finissant des niveaux (gros bonus la première fois), en Héroïque, en Survie et avec les succès. Elles achètent les nouvelles tours et les nouveaux sorts.
 - **15 succès** (première victoire, 3 étoiles, campagne finie, 3 000 ovnis détruits, vague parfaite…), chacun récompensé en gemmes.
 - **Sauvegarde automatique** : la progression est enregistrée en continu. Une partie en cours est sauvegardée toutes les 4 secondes, en pause et quand on quitte la page. Au retour, la carte « Reprendre la partie » du menu la relance là où on l'avait laissée. Dans l'app Claude (artefact), une copie privée est aussi gardée dans la base de données de l'artefact, liée à ton compte : elle survit même si le navigateur de l'app efface son stockage (`src/core/cloud.js`).
-- **5 ennemis** :
+- **10 ennemis** :
   - Éclaireur, Rapide et Blindé ;
+  - Bouclier (bouclier qui se recharge), Diviseur (se sépare en 2 mini-ovnis), Soigneur (soigne les ovnis autour) ;
   - Vaisseau-mère, qui libère 4 Rapides en mourant ;
-  - Démolisseur (Royaume seulement).
+  - Démolisseur et Vaisseau amiral (Royaume seulement).
 - **Progression** :
   - on gagne des étoiles (3 par niveau, 1 couronne en Héroïque, 1 étoile toutes les 10 vagues en Survie, jusqu'à 3) ;
   - elles s'échangent contre **6 améliorations permanentes** : dégâts, or de départ, portée, coût des améliorations, sorts, vies ;
@@ -139,10 +158,11 @@ tower-defense/
 ├── tools/balance.mjs           # Bot d'équilibrage (Node, sans navigateur)
 └── src/
     ├── config.js               # Réglages globaux (économie, caméra, combat)
-    ├── data/                   # Tours, ennemis, sorts, améliorations, succès, cartes, ambiances, vagues
+    ├── data/                   # Tours, ennemis, sorts, améliorations, succès, cartes, ambiances, vagues, héros, défi du jour, extras du Royaume
     ├── sim/                    # Logique pure, sans Three.js ni DOM
     │   ├── level.js            # Lecture de carte, chemin, virages arrondis
     │   ├── simulation.js       # Vagues, ennemis, tours, projectiles, économie
+    │   ├── hero.js             # Le chevalier : déplacement, attaque, niveaux, pouvoir
     │   └── realm.js            # Royaume : carte générée, champ de flux, ouvriers, jour/nuit
     ├── render/                 # Tout le visuel Three.js
     │   ├── assets.js           # Chargement GLB, matériau unique partagé
@@ -152,6 +172,7 @@ tower-defense/
     │   ├── ambient.js          # Particules d'ambiance animées sur le GPU
     │   ├── spellViews.js       # Météore, éclairs, traces au sol
     │   ├── towerViews.js       # Tours empilées, visée, recul, animations
+    │   ├── heroView.js         # Le chevalier animé, anneau, barre de vie
     │   ├── enemyViews.js       # Ovnis (pool), barres de vie, flash, teinte givre
     │   ├── projectileViews.js  # Flèches, boulets, balles, rochers
     │   ├── effects.js          # Particules, ondes, portée, curseur

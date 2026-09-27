@@ -74,6 +74,25 @@ export const ENEMIES = {
     // Only appears at night in the Kingdom, where it smashes walls.
     realmOnly: true,
   },
+  mothership: {
+    id: 'mothership',
+    name: 'Vaisseau amiral',
+    blurb: 'Le boss des nuits de pleine lune : lâche des drones et se protège d’un bouclier à mi-vie.',
+    model: 'enemy-ufo-d',
+    tint: 0xffb0d8,
+    hp: 2600,
+    speed: 0.32,
+    armor: 12,
+    reward: 250,
+    leak: 10,
+    scale: 2.4,
+    siege: 90,
+    boss: true,
+    // Drones launched every `every` s; at half HP a shield of `phaseShield` × max HP.
+    summon: { type: 'mini', count: 2, every: 7 },
+    phaseShield: 0.35,
+    realmOnly: true,
+  },
   shield: {
     id: 'shield',
     name: 'Bouclier',

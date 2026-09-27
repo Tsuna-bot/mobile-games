@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v14';
+const VERSION = 'bastion-v15';
 
 const APP_SHELL = [
   './',
@@ -217,11 +217,14 @@ const APP_SHELL = [
   './src/core/random.js',
   './src/core/storage.js',
   './src/data/achievements.js',
+  './src/data/daily.js',
   './src/data/enemies.js',
+  './src/data/hero.js',
   './src/data/levels.js',
   './src/data/objectives.js',
   './src/data/perks.js',
   './src/data/realm.js',
+  './src/data/realmExtras.js',
   './src/data/spells.js',
   './src/data/themes.js',
   './src/data/towers.js',
@@ -236,6 +239,7 @@ const APP_SHELL = [
   './src/render/cameraRig.js',
   './src/render/effects.js',
   './src/render/enemyViews.js',
+  './src/render/heroView.js',
   './src/render/particles.js',
   './src/render/projectileViews.js',
   './src/render/realmTerrain.js',
@@ -245,6 +249,7 @@ const APP_SHELL = [
   './src/render/towerViews.js',
   './src/render/view.js',
   './src/render/world.js',
+  './src/sim/hero.js',
   './src/sim/level.js',
   './src/sim/realm.js',
   './src/sim/simulation.js',

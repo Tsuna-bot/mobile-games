@@ -5,12 +5,13 @@
 import { ENEMIES } from './enemies.js';
 import { TOWERS } from './towers.js';
 
-export const RESOURCES = ['wood', 'stone', 'crystal', 'gold'];
+export const RESOURCES = ['wood', 'stone', 'crystal', 'food', 'gold'];
 
 export const RESOURCE_INFO = {
   wood: { name: 'Bois', icon: '🪵' },
   stone: { name: 'Pierre', icon: '🪨' },
   crystal: { name: 'Cristal', icon: '💎' },
+  food: { name: 'Nourriture', icon: '🌾' },
   gold: { name: 'Or', icon: '🪙' },
 };
 
@@ -24,7 +25,10 @@ export const REALM = {
   earlyNightBonus: 0.5,
   dawnGold: (night) => 20 + night * 6,
   dawnGems: (night) => 2 + (night % 5 === 0 ? 10 : 0),
-  start: { wood: 70, stone: 30, crystal: 0, gold: 60 },
+  start: { wood: 70, stone: 30, crystal: 0, food: 30, gold: 60 },
+  // Each worker eats this much at dawn; hungry workers are slower the next day.
+  foodPerWorker: 1,
+  famine: 0.7,
   startWorkers: 3,
   castleHp: 60,
   // Castle damage per point of an enemy's `leak`.
@@ -39,6 +43,8 @@ export const REALM = {
     tree: { resource: 'wood', amount: 40, regrowDays: 2 },
     rock: { resource: 'stone', amount: 50, regrowDays: 3 },
     crystal: { resource: 'crystal', amount: 35, regrowDays: 4 },
+    // Ruins hold one treasure and never come back.
+    ruin: { resource: 'treasure', amount: 1, regrowDays: Infinity, exploreTime: 2.2 },
   },
   // Share of the normal gathering rate earned while away (daytime saves only), capped.
   offlineRate: 0.5,
@@ -81,6 +87,39 @@ export const BUILDINGS = {
       { cost: { stone: 10 }, hp: 520, name: 'Muraille' },
     ],
   },
+  farm: {
+    id: 'farm',
+    name: 'Ferme',
+    blurb: 'Produit la nourriture des ouvriers (chacun mange 1 🌾 à l’aube).',
+    icon: '🌾',
+    levels: [
+      { cost: { wood: 35 }, hp: 150, food: 6 },
+      { cost: { wood: 40, stone: 30 }, hp: 230, food: 11 },
+      { cost: { wood: 60, stone: 50, crystal: 10 }, hp: 320, food: 17 },
+    ],
+  },
+  market: {
+    id: 'market',
+    name: 'Marché',
+    blurb: 'Échange tes ressources à tout moment.',
+    icon: '⚖️',
+    unique: true,
+    requires: 'academy',
+    levels: [{ cost: { wood: 70, stone: 40 }, hp: 260 }],
+  },
+  forge: {
+    id: 'forge',
+    name: 'Forge',
+    blurb: 'Chaque niveau : +8 % de dégâts pour toutes les tours.',
+    icon: '⚒️',
+    unique: true,
+    requires: 'academy',
+    levels: [
+      { cost: { wood: 50, stone: 80 }, hp: 300, damage: 0.08 },
+      { cost: { stone: 120, crystal: 25 }, hp: 420, damage: 0.16 },
+      { cost: { stone: 180, crystal: 60, gold: 150 }, hp: 560, damage: 0.24 },
+    ],
+  },
   academy: {
     id: 'academy',
     name: 'Académie',
@@ -91,7 +130,7 @@ export const BUILDINGS = {
   },
 };
 
-export const BUILDING_ORDER = ['wall', 'house', 'depot', 'academy'];
+export const BUILDING_ORDER = ['wall', 'house', 'farm', 'depot', 'academy', 'market', 'forge'];
 
 /**
  * The castle itself can be upgraded (a long construction site): more hit points,
@@ -228,24 +267,35 @@ export const RESEARCH_GROUPS = ['Économie', 'Défense', 'Magie', 'Arsenal'];
 export const REALM_STARTER_TOWERS = ['ballista'];
 export const REALM_STARTER_SPELLS = ['meteor'];
 
-/** Combat and economy multipliers from the researched levels. */
-export function realmModifiers(research) {
+/**
+ * Combat and economy multipliers from the researched levels, plus `bonus`: the sum of
+ * blessings, the forge and the day's event (keys as in BLESSINGS mods).
+ */
+export function realmModifiers(research, bonus = {}) {
   const r = (id) => research[id] ?? 0;
+  const b = (key) => bonus[key] ?? 0;
   return {
-    damage: 1 + 0.1 * r('ballistics'),
-    range: 1 + 0.07 * r('optics'),
+    damage: 1 + 0.1 * r('ballistics') + b('damage'),
+    range: 1 + 0.07 * r('optics') + b('range'),
     upgradeCost: 1 - 0.12 * r('engineering'),
-    spellCooldown: 1 - 0.1 * r('focus'),
+    spellCooldown: Math.max(0.4, 1 - 0.1 * r('focus') - b('spellCooldown')),
     spellPower: 1 + 0.2 * r('arcana'),
     startGold: 0,
     lives: 0,
-    harvest: 1 / (1 + 0.15 * r('tools')),
+    harvest: 1 / (1 + 0.15 * r('tools') + b('harvestSpeed')),
     carry: 2 * r('bags'),
-    workerSpeed: 1 + 0.15 * r('boots'),
-    storage: 1 + 0.4 * r('granary'),
-    hp: 1 + 0.4 * r('masonry'),
-    castleHp: 20 * r('bastion'),
-    buildSpeed: 1 + 0.35 * r('carpentry'),
+    workerSpeed: 1 + 0.15 * r('boots') + b('workerSpeed'),
+    storage: 1 + 0.4 * r('granary') + b('storage'),
+    hp: 1 + 0.4 * r('masonry') + b('hp'),
+    castleHp: 20 * r('bastion') + b('castleHp'),
+    buildSpeed: 1 + 0.35 * r('carpentry') + b('buildSpeed'),
+    bounty: b('bounty'),
+    dawnGold: b('dawnGold'),
+    workers: b('workers'),
+    hero: 1 + b('hero'),
+    enemySpeed: 1 - b('enemySlow'),
+    salvage: b('salvage') ? 0.8 : 0.5,
+    food: 1 + b('food'),
   };
 }
 
@@ -270,14 +320,21 @@ export function makeNight(n, portalCount) {
       portal++;
     }
   };
-  add('scout', Math.round(6 + n * 2), Math.max(0.3, 1 - n * 0.03), 0);
+  // Shielded, splitting and healing UFOs replace scouts worth about the same HP.
+  const variants = [];
+  if (n >= 5) variants.push(['shield', Math.round(1 + (n - 5) * 0.45), 1.6, 6, 2.4]);
+  if (n >= 7) variants.push(['splitter', Math.round(1 + (n - 7) * 0.35), 2.4, 10, 3.6]);
+  if (n >= 8) variants.push(['healer', Math.round(1 + (n - 8) * 0.22), 4, 9, 2.8]);
+  const replaced = variants.reduce((sum, v) => sum + v[1] * v[4], 0);
+  add('scout', Math.max(4, Math.round(6 + n * 2 - replaced)), Math.max(0.3, 1 - n * 0.03), 0);
+  for (const [type, count, interval, delay] of variants) add(type, count, interval, delay);
   if (n >= 2) add('runner', Math.round(2 + n * 1.1), 0.5, 5);
   if (n >= 3) add('tank', Math.round(1 + (n - 2) * 0.6), Math.max(1.2, 2.2 - n * 0.04), 8);
   if (n >= 3) add('siege', Math.round(1 + (n - 3) * 0.35), 3, 12);
-  if (n % 5 === 0) add('boss', Math.max(1, Math.floor(n / 10) + 1), 7, 14);
-  if (n >= 4) add('shield', Math.round(1 + (n - 4) * 0.5), 1.6, 6);
-  if (n >= 5) add('splitter', Math.round(1 + (n - 5) * 0.4), 2.4, 10);
-  if (n >= 6) add('healer', Math.round(1 + (n - 6) * 0.25), 4, 9);
+  // Every fifth night: the mothership (plus regular bosses later on).
+  if (n % 5 === 0) add('mothership', 1 + Math.floor(n / 20), 9, 16);
+  if (n % 5 === 0 && n >= 10) add('boss', Math.floor(n / 10), 7, 12);
+
   if (n >= 7) add('runner', Math.round(n * 0.7), 0.4, 18);
   spawns.sort((a, b) => a.time - b.time);
   const hpMultiplier = 0.85 * (1 + 0.16 * (n - 1) + 0.014 * (n - 1) ** 2);

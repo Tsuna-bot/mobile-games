@@ -17,6 +17,8 @@ const COLORS = {
   site: '#ffc93c',
   castle: '#ffd65c',
   portal: '#8dff5a',
+  ruin: '#ffd23c',
+  sealed: '#7fb6ff',
   enemy: '#ff4747',
   worker: '#ffffff',
 };
@@ -110,11 +112,13 @@ export class RealmHud {
     for (const t of sim.towers) dot(t.x, t.z, k * 0.45, COLORS.tower);
     for (const s of sim.sites) if (!s.target) dot(s.x, s.z, k * 0.35, COLORS.site);
     const time = performance.now() / 1000;
-    const open = sim.activePortals().length;
-    sim.level.portals.forEach((portal, i) => {
+    const active = sim.activePortals();
+    sim.level.portals.forEach((portal) => {
+      const open = active.includes(portal);
+      const sealed = Boolean(sim.sealed[portal.portal]);
       ctx.beginPath();
-      ctx.arc(px(portal.x), px(portal.z), k * (i < open ? 0.8 + Math.sin(time * 5) * 0.15 : 0.55), 0, Math.PI * 2);
-      ctx.fillStyle = i < open ? COLORS.portal : 'rgba(0,0,0,0.35)';
+      ctx.arc(px(portal.x), px(portal.z), k * (open ? 0.8 + Math.sin(time * 5) * 0.15 : 0.55), 0, Math.PI * 2);
+      ctx.fillStyle = open ? COLORS.portal : sealed ? COLORS.sealed : 'rgba(0,0,0,0.35)';
       ctx.fill();
     });
     const base = sim.level.base;

@@ -62,6 +62,7 @@ export function renderThumbnails(renderer, assets) {
   for (const def of Object.values(BUILDINGS)) {
     thumbnails.buildings[def.id] = def.levels.map((_, level) => snap(buildBuildingModel(assets, def, level)));
   }
+  thumbnails.portal = snap(assets.clone('spawn-round'));
   thumbnails.hero = snap(assets.clone('characters/character-male-e'));
   const flagMaterial = assets.materials.castle ?? assets.material;
   thumbnails.castle = CASTLE_LEVELS.map((_, level) => snap(buildCastleModel(assets, level, flagMaterial)));

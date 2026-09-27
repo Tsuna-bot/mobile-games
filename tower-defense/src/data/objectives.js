@@ -3,6 +3,8 @@
 
 const built = (sim, id) => sim.buildings.filter((b) => b.def.id === id).length;
 const nightsPassed = (sim) => sim.day - 1;
+const ruinsExplored = (sim) => sim.level.cells.filter((c) => c.node?.type === 'ruin' && c.node.amount <= 0).length;
+const blessingCount = (sim) => Object.values(sim.blessings ?? {}).reduce((sum, n) => sum + n, 0);
 
 export const OBJECTIVES = [
   {
@@ -46,9 +48,19 @@ export const OBJECTIVES = [
     progress: (sim) => sim.workers.length,
   },
   {
+    id: 'farm', text: 'Construis une ferme', goal: 1, reward: { wood: 40 },
+    hint: 'Onglet Village : chaque ouvrier mange 1 🌾 à l’aube. Sans nourriture, ils ralentissent.',
+    progress: (sim) => built(sim, 'farm'),
+  },
+  {
     id: 'night3', text: 'Survis à la nuit 3', goal: 3, reward: { gems: 5 },
     hint: 'Un deuxième portail s’ouvre la nuit 3 : renforce l’autre côté.',
     progress: nightsPassed,
+  },
+  {
+    id: 'ruin', text: 'Explore une ruine', goal: 1, reward: { gold: 60 },
+    hint: 'Les coffres dorés dans les ruines cachent un trésor : touche-en un pour y envoyer un ouvrier.',
+    progress: ruinsExplored,
   },
   {
     id: 'castle1', text: 'Agrandis le château', goal: 1, reward: { gold: 120 },
@@ -71,14 +83,34 @@ export const OBJECTIVES = [
     progress: (sim) => built(sim, 'depot'),
   },
   {
+    id: 'forge', text: 'Construis la forge', goal: 1, reward: { crystal: 30 },
+    hint: 'Onglet Village (après l’Académie) : toutes les tours frappent plus fort.',
+    progress: (sim) => built(sim, 'forge'),
+  },
+  {
     id: 'stone', text: 'Passe 4 murs en pierre', goal: 4, reward: { crystal: 40 },
     hint: 'Touche une palissade puis « En pierre » : bien plus solide.',
     progress: (sim) => sim.buildings.filter((b) => b.def.id === 'wall' && b.level > 0).length,
   },
   {
+    id: 'seal', text: 'Scelle un portail', goal: 1, reward: { gold: 100 },
+    hint: 'Le jour, touche un portail ouvert : tu peux le fermer pour deux nuits (cristaux + or).',
+    progress: (sim) => sim.sealsUsed ?? 0,
+  },
+  {
     id: 'night7', text: 'Survis à la nuit 7', goal: 7, reward: { gems: 10 },
     hint: 'Trois portails à partir de la nuit 7.',
     progress: nightsPassed,
+  },
+  {
+    id: 'mothership', text: 'Abats un vaisseau amiral', goal: 1, reward: { gems: 10 },
+    hint: 'Il arrive toutes les 5 nuits : très résistant, il se protège à mi-vie et largue des mini-ovnis.',
+    progress: (sim) => sim.stats.mothershipKills ?? 0,
+  },
+  {
+    id: 'blessings', text: 'Réunis 6 bénédictions', goal: 6, reward: { gems: 8 },
+    hint: 'Chaque aube, choisis une bénédiction parmi trois.',
+    progress: blessingCount,
   },
   {
     id: 'citadel', text: 'Bâtis la Citadelle', goal: 2, reward: { gems: 15 },
@@ -91,6 +123,16 @@ export const OBJECTIVES = [
     progress: nightsPassed,
   },
 ];
+
+/** Order of the first version, to map the index an older save kept. */
+const LEGACY_ORDER = ['gather', 'tower', 'house', 'night1', 'walls', 'academy', 'research', 'workers', 'night3', 'castle1', 'towers6', 'upgrade', 'depot', 'stone', 'night7', 'citadel', 'night12'];
+export const OBJECTIVES_VERSION = 2;
+
+/** Index in the current list for an index saved by the first version. */
+export function migrateObjective(index) {
+  if (index >= LEGACY_ORDER.length) return OBJECTIVES.length + (index - LEGACY_ORDER.length);
+  return OBJECTIVES.findIndex((o) => o.id === LEGACY_ORDER[index]);
+}
 
 /** Objective number `index` (after the list: survive 5 more nights, again and again). */
 export function objectiveAt(index) {

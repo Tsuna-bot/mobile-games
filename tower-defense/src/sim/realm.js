@@ -15,6 +15,7 @@ import {
 } from '../data/realm.js';
 import { SPELLS } from '../data/spells.js';
 import { BRANCHES, TOWERS } from '../data/towers.js';
+import { BLESSINGS, EVENTS, EVENT_CHANCE, EVENT_ORDER, MARKET_TRADES, MERCHANT_TRADES, SEAL, TREASURES, blessingMods, rollBlessings } from '../data/realmExtras.js';
 import { restoreHero, serializeHero, updateHero } from './hero.js';
 import { SIM_STATE, Simulation, Tower } from './simulation.js';
 
@@ -24,7 +25,7 @@ const DIRS = [
   [1, 1, SQRT2], [1, -1, SQRT2], [-1, 1, SQRT2], [-1, -1, SQRT2],
 ];
 const FLOW_MAX = 10000;
-const NODE_TYPES = ['tree', 'rock', 'crystal'];
+const NODE_TYPES = ['tree', 'rock', 'crystal', 'ruin'];
 const DAWN_DELAY = 2.5;
 const WORKER_RETRY = 3;
 const SIEGE_FX_EVERY = 0.7;
@@ -122,6 +123,22 @@ export class RealmGrid {
     ensure('rock', 6, 5.5, 9.5);
     ensure('crystal', 4, 8, 12.5);
     this.connectPortals(random);
+    // Ruins with a treasure, from their own random stream (older maps keep their layout).
+    const ruins = seededRandom(this.seed ^ 0x7e11);
+    for (let placed = 0, guard = 0; placed < 5 && guard < 600; guard++) {
+      const cell = this.cellAt(Math.floor(ruins() * this.width), Math.floor(ruins() * this.height));
+      const d = cell ? this.distanceToCastle(cell) : 0;
+      if (!cell || cell.node || cell.castle || cell.portal >= 0 || d < 7 || d > 15) continue;
+      if (this.portals.some((p) => Math.abs(p.col - cell.col) + Math.abs(p.row - cell.row) <= 2)) continue;
+      cell.node = { type: 'ruin', resource: 'treasure', variant: Math.floor(ruins() * 3), amount: 1, max: 1, regrow: 0, reserved: 0 };
+      // The UFOs still get through, and workers can walk up to it from the castle.
+      const open = DIRS.slice(0, 4).map(([dc, dr]) => this.cellAt(cell.col + dc, cell.row + dr)).filter((n) => n && !nodeBlocks(n) && n.portal < 0);
+      if (!this.reachable(this.portals[0]) || !open.some((n) => this.reachable(n))) {
+        cell.node = null;
+        continue;
+      }
+      placed++;
+    }
     this.initial = this.cells.map((c) => (c.node ? c.node.type : null));
   }
 
@@ -251,7 +268,17 @@ export class RealmSim extends Simulation {
     this.phaseTimer = REALM.firstDayLength;
     this.dawnTimer = -1;
     this.gold = REALM.start.gold;
-    this.stock = { wood: REALM.start.wood, stone: REALM.start.stone, crystal: REALM.start.crystal };
+    this.stock = { wood: REALM.start.wood, stone: REALM.start.stone, crystal: REALM.start.crystal, food: REALM.start.food };
+    // Blessings chosen at dawn (id → stacks) and the three on offer, the day's event,
+    // sealed portals (index → nights left), hunger.
+    this.blessings = {};
+    this.pendingBlessings = [];
+    this.event = null;
+    this.lastEvent = null;
+    this.sealed = {};
+    this.sealsUsed = 0;
+    this.famine = false;
+    this.eclipseBonus = false;
     this.startLives = REALM.castleHp;
     this.lives = this.startLives;
     this.buildings = [];
@@ -397,6 +424,7 @@ export class RealmSim extends Simulation {
     if (!def || !this.canPlace(cell)) return null;
     if (tower && !this.unlockedTowers.includes(typeId)) return null;
     if (def.unique && (this.buildings.some((b) => b.def.id === typeId) || this.sites.some((site) => site.typeId === typeId))) return null;
+    if (def.requires && !this.hasBuilding(def.requires)) return null;
     const cost = this.buildCost(typeId);
     if (!free && !this.pay(cost)) return null;
     const work = buildTime(typeId, 0);
@@ -506,6 +534,8 @@ export class RealmSim extends Simulation {
       structure = this.addBuilding(site.def, site.cell, 0);
       structure.spentCost = site.cost;
     }
+    // The forge sharpens every tower.
+    if (site.def.id === 'forge') this.applyResearch();
     this.listener.onSiteComplete?.(site, structure);
     return structure;
   }
@@ -659,7 +689,7 @@ export class RealmSim extends Simulation {
   demolish(structure) {
     if (structure.kind === 'site') return this.cancelSite(structure, 0.8);
     if (structure.upgrading) this.cancelSite(structure.upgrading, 1);
-    const back = this.refund(this.spentOn(structure), 0.5);
+    const back = this.refund(this.spentOn(structure), this.modifiers.salvage ?? 0.5);
     this.removeStructure(structure);
     this.listener.onStructureRemoved?.(structure, back);
     return back;
@@ -690,6 +720,7 @@ export class RealmSim extends Simulation {
     } else {
       this.buildings.splice(this.buildings.indexOf(structure), 1);
       this.syncWorkers();
+      if (structure.def.id === 'forge') this.applyResearch();
     }
     for (const enemy of this.enemies) if (enemy.attacking === structure) enemy.attacking = null;
     this.flowDirty = true;
@@ -721,8 +752,22 @@ export class RealmSim extends Simulation {
     return true;
   }
 
+  /** Blessings, the forge and the day's event, summed for realmModifiers. */
+  bonusMods() {
+    const bonus = blessingMods(this.blessings);
+    const forge = this.buildings.find((b) => b.def.id === 'forge');
+    if (forge) bonus.damage = (bonus.damage ?? 0) + forge.def.levels[forge.level].damage;
+    for (const [key, value] of Object.entries(this.event?.mods ?? {})) bonus[key] = (bonus[key] ?? 0) + value;
+    return bonus;
+  }
+
+  /** The knight is stronger with the matching blessing. */
+  get heroBoost() {
+    return this.modifiers.hero ?? 1;
+  }
+
   applyResearch() {
-    Object.assign(this.modifiers, realmModifiers(this.research));
+    Object.assign(this.modifiers, realmModifiers(this.research, this.bonusMods()));
     for (const tower of this.towers) {
       tower.refreshStats();
       this.refreshHp(tower);
@@ -778,8 +823,149 @@ export class RealmSim extends Simulation {
     return this.phase === PHASE.DAY ? Math.round(Math.max(0, this.phaseTimer) * REALM.earlyNightBonus) : 0;
   }
 
+  /** Open portals tonight: unlocked by the night count, minus the sealed ones (never all). */
   activePortals() {
-    return this.level.portals.slice(0, portalsOpen(this.day));
+    const open = this.level.portals.slice(0, portalsOpen(this.day));
+    const unsealed = open.filter((p) => !this.sealed[p.portal]);
+    return unsealed.length ? unsealed : open.slice(0, 1);
+  }
+
+  // ------------------------------------------------------------ portals, market, blessings, events, ruins
+
+  sealCost() {
+    return SEAL.cost(this.sealsUsed);
+  }
+
+  canSeal(portal) {
+    return this.phase === PHASE.DAY && this.activePortals().includes(portal) && this.activePortals().length > 1;
+  }
+
+  /** Shuts an open portal for a few nights (at least one always stays open). */
+  sealPortal(portal) {
+    if (!this.canSeal(portal) || !this.pay(this.sealCost())) return false;
+    this.sealed[portal.portal] = SEAL.nights;
+    this.sealsUsed++;
+    this.flowDirty = true;
+    this.listener.onPortalSealed?.(portal);
+    return true;
+  }
+
+  hasBuilding(id) {
+    return this.buildings.some((b) => b.def.id === id);
+  }
+
+  /** Trades on offer now: the market's, plus the merchant's on his day. */
+  trades() {
+    const list = [];
+    if (this.event?.id === 'merchant') list.push(...MERCHANT_TRADES.map((t) => ({ ...t, merchant: true })));
+    if (this.hasBuilding('market')) list.push(...MARKET_TRADES);
+    return list;
+  }
+
+  trade(index) {
+    const offer = this.trades()[index];
+    if (!offer || !this.pay(offer.give)) return false;
+    for (const [resource, amount] of Object.entries(offer.get)) this.addStock(resource, amount);
+    this.listener.onTrade?.(offer);
+    return true;
+  }
+
+  chooseBlessing(id) {
+    if (!this.pendingBlessings.includes(id)) return false;
+    const blessing = BLESSINGS.find((b) => b.id === id);
+    this.blessings[id] = Math.min(blessing.max, (this.blessings[id] ?? 0) + 1);
+    this.pendingBlessings = [];
+    this.applyResearch();
+    this.syncWorkers();
+    this.listener.onBlessing?.(blessing, this.blessings[id]);
+    return true;
+  }
+
+  /** Rolls the day's event at dawn (not every day). */
+  rollEvent(random) {
+    if (random() > EVENT_CHANCE) return;
+    const options = EVENT_ORDER.filter((id) => id !== this.lastEvent);
+    this.startEvent(options[Math.floor(random() * options.length)]);
+  }
+
+  startEvent(id) {
+    const def = EVENTS[id];
+    if (!def) return;
+    this.event = { id, mods: null };
+    this.lastEvent = id;
+    let detail = null;
+    if (id === 'festival') {
+      this.event.mods = { workerSpeed: 0.3, buildSpeed: 0.3, harvestSpeed: 0.3 };
+      this.applyResearch();
+    } else if (id === 'eclipse') {
+      this.phaseTimer = Math.max(25, this.phaseTimer - 60);
+      this.eclipseBonus = true;
+    } else if (id === 'caravan') {
+      detail = { wood: this.addStock('wood', 40), stone: this.addStock('stone', 40), food: this.addStock('food', 25) };
+    } else if (id === 'meteor') {
+      const cells = [];
+      for (const cell of this.level.cells) {
+        const node = cell.node;
+        if (node?.type !== 'crystal' || node.amount >= node.max) continue;
+        if (node.amount <= 0 && (cell.structure || this.workers.some((w) => w.cell === cell))) continue;
+        node.amount = node.max;
+        node.regrow = 0;
+        cells.push(cell);
+        this.listener.onNodeRegrown?.(cell);
+      }
+      this.flowDirty = true;
+      detail = { cells, crystal: this.addStock('crystal', 25) };
+    }
+    this.listener.onEvent?.(def, detail);
+  }
+
+  endEvent() {
+    if (!this.event) return;
+    const hadMods = Boolean(this.event.mods);
+    this.event = null;
+    if (hadMods) this.applyResearch();
+  }
+
+  /** A worker finished exploring a ruin: roll its treasure. */
+  lootRuin(worker, cell, random = Math.random) {
+    const node = cell.node;
+    node.amount = 0;
+    node.regrow = Infinity;
+    node.reserved = 0;
+    this.flowDirty = true;
+    let roll = random() * TREASURES.reduce((sum, t) => sum + t.weight, 0);
+    const pick = TREASURES.find((t) => (roll -= t.weight) < 0) ?? TREASURES[0];
+    const reward = { kind: pick.kind };
+    if (pick.kind === 'resources') {
+      const types = ['wood', 'stone', 'crystal'].sort(() => random() - 0.5).slice(0, 2);
+      reward.stock = {};
+      for (const type of types) reward.stock[type] = this.addStock(type, (type === 'crystal' ? 20 : 40) + Math.floor(random() * 30));
+    } else if (pick.kind === 'gold') {
+      reward.gold = 80 + Math.floor(random() * 80);
+      this.addGold(reward.gold);
+    } else if (pick.kind === 'gems') {
+      reward.gems = 5 + Math.floor(random() * 6);
+    } else if (pick.kind === 'blessing') {
+      this.pendingBlessings = rollBlessings(this.blessings, random);
+      if (!this.pendingBlessings.length) {
+        reward.kind = 'gold';
+        reward.gold = 120;
+        this.addGold(120);
+      }
+    } else {
+      // Relic: a free "sharpened blades" blessing.
+      reward.relic = true;
+      this.blessings.sharp = (this.blessings.sharp ?? 0) + 1;
+      this.applyResearch();
+    }
+    worker.job = worker.prevJob ?? null;
+    worker.prevJob = null;
+    worker.node = null;
+    worker.preferred = null;
+    worker.state = 'idle';
+    this.listener.onNodeDepleted?.(cell);
+    this.listener.onTreasure?.(worker, cell, reward);
+    return reward;
   }
 
   startNight(bonus = 0) {
@@ -795,6 +981,7 @@ export class RealmSim extends Simulation {
     this.dawnTimer = -1;
     this.report = emptyNightReport(this.day);
     this.report.goldStart = this.gold;
+    this.endEvent();
     for (const worker of this.workers) if (!worker.site) this.sendHome(worker);
     this.listener.onNightStart?.(this.day, this.nightWave, bonus);
   }
@@ -809,8 +996,26 @@ export class RealmSim extends Simulation {
     this.day++;
     this.nextWave = this.day;
     this.phaseTimer = REALM.dayLength;
-    const gold = fallen ? 0 : REALM.dawnGold(night);
+    let gold = fallen ? 0 : REALM.dawnGold(night) + (this.modifiers.dawnGold ?? 0);
+    if (this.eclipseBonus && !fallen) gold = Math.round(gold * 1.5);
+    this.eclipseBonus = false;
     this.addGold(gold);
+    // Farms feed the workers; without enough food they are slow all day.
+    let produced = 0;
+    for (const b of this.buildings) if (b.def.id === 'farm') produced += Math.round(b.def.levels[b.level].food * (this.modifiers.food ?? 1));
+    produced = this.addStock('food', produced);
+    const eaten = Math.min(this.stock.food, this.workers.length * REALM.foodPerWorker);
+    this.famine = eaten < this.workers.length * REALM.foodPerWorker;
+    this.stock.food -= eaten;
+    // Sealed portals reopen after their nights.
+    for (const [index, nights] of Object.entries(this.sealed)) {
+      if (nights > 1) this.sealed[index] = nights - 1;
+      else {
+        delete this.sealed[index];
+        this.listener.onPortalReopened?.(this.level.portals[index]);
+      }
+    }
+    this.flowDirty = true;
     if (!fallen) {
       this.stats.nightsSurvived++;
       this.stats.bestNight = Math.max(this.stats.bestNight, night);
@@ -837,6 +1042,11 @@ export class RealmSim extends Simulation {
     let best = null;
     for (const [tower, damage] of report.damage) if (!best || damage > best.damage) best = { tower, damage };
     report.best = best && { type: best.tower.def.id, name: best.tower.def.name, level: best.tower.level, damage: Math.round(best.damage) };
+    report.food = { produced, eaten, famine: this.famine };
+    // A blessing to choose after each night held; maybe an event for the day.
+    const random = seededRandom((this.seed ^ (this.day * 7919)) >>> 0);
+    this.pendingBlessings = fallen ? [] : rollBlessings(this.blessings, random);
+    this.rollEvent(random);
     this.listener.onDawn?.(this.day, { night, gold, income, fallen, gems: fallen ? 0 : REALM.dawnGems(night), report });
   }
 
@@ -844,7 +1054,7 @@ export class RealmSim extends Simulation {
     let changed = false;
     for (const cell of this.level.cells) {
       const node = cell.node;
-      if (!node || node.amount > 0) continue;
+      if (!node || node.amount > 0 || node.type === 'ruin') continue;
       if (node.regrow > 1) {
         node.regrow--;
         continue;
@@ -911,7 +1121,7 @@ export class RealmSim extends Simulation {
         if (len > 1 && !this.diagonalOpen(cell, dc, dr)) continue;
         // Moving from `next` into `cell`: pay for breaking through `cell` if it is built.
         const cost = len * (cell.structure ? 1 + REALM.breakCost : 1);
-        const value = d + cost;
+        const value = Math.fround(d + cost);
         if (value < flow[next.index]) {
           flow[next.index] = value;
           heap.push(value, next);
@@ -964,6 +1174,7 @@ export class RealmSim extends Simulation {
     enemy.dirX = dx / len;
     enemy.dirZ = dz / len;
     enemy.distance = FLOW_MAX - this.flow[source.cell.index];
+    enemy.speed *= this.modifiers.enemySpeed ?? 1;
   }
 
   damage(enemy, amount, tower, pierce = false, silent = false) {
@@ -976,7 +1187,9 @@ export class RealmSim extends Simulation {
 
   kill(enemy, tower) {
     this.report.kills++;
+    this.gold += this.modifiers.bounty ?? 0;
     if (enemy.def.id === 'boss') this.report.bossKills++;
+    if (enemy.def.id === 'mothership') this.stats.mothershipKills = (this.stats.mothershipKills ?? 0) + 1;
     // Children of a mothership appear where it died.
     this.pendingSpawnAt = { cell: enemy.cell, x: enemy.x, z: enemy.z };
     super.kill(enemy, tower);
@@ -1109,7 +1322,7 @@ export class RealmSim extends Simulation {
   // ------------------------------------------------------------ workers
 
   get workerCapacity() {
-    let total = REALM.startWorkers + CASTLE_LEVELS[this.castle.level].workers;
+    let total = REALM.startWorkers + CASTLE_LEVELS[this.castle.level].workers + (this.modifiers.workers ?? 0);
     for (const b of this.buildings) if (b.def.id === 'house') total += b.def.levels[b.level].workers;
     return total;
   }
@@ -1158,7 +1371,7 @@ export class RealmSim extends Simulation {
   jobCounts() {
     const counts = { wood: 0, stone: 0, crystal: 0, idle: 0, building: 0 };
     for (const w of this.workers) {
-      counts[w.job ?? 'idle']++;
+      counts[w.job in counts ? w.job : 'idle']++;
       if (w.site) counts.building++;
     }
     return counts;
@@ -1192,6 +1405,8 @@ export class RealmSim extends Simulation {
       ?? this.nearestWorker(cell, () => true);
     if (!worker) return null;
     this.releaseNode(worker);
+    // Exploring a ruin is a one-off trip: the worker goes back to their job afterwards.
+    if (node.type === 'ruin') worker.prevJob = worker.job === 'treasure' ? worker.prevJob : worker.job;
     worker.job = node.resource;
     worker.preferred = cell;
     worker.retry = 0;
@@ -1237,7 +1452,8 @@ export class RealmSim extends Simulation {
         const next = this.level.cellAt(cell.col + dc, cell.row + dr);
         if (!walkable(next)) continue;
         if (len > 1 && !this.diagonalOpen(cell, dc, dr)) continue;
-        const value = d + len;
+        // Rounded like the Float32Array, or the popped cell looks stale and is skipped.
+        const value = Math.fround(d + len);
         if (value < dist[next.index]) {
           dist[next.index] = value;
           from[next.index] = cell.index;
@@ -1348,7 +1564,8 @@ export class RealmSim extends Simulation {
   }
 
   updateWorkers(dt) {
-    const speed = REALM.worker.speed * this.modifiers.workerSpeed;
+    // Hungry workers (famine at the last dawn) are slower.
+    const speed = REALM.worker.speed * this.modifiers.workerSpeed * (this.famine ? REALM.famine : 1);
     this.staffSites();
     for (const worker of this.workers) {
       if (worker.site && !this.sites.includes(worker.site)) {
@@ -1432,7 +1649,10 @@ export class RealmSim extends Simulation {
           {
             const cell = this.findNode(worker);
             if (cell) this.goToNode(worker, cell);
-            else worker.retry = WORKER_RETRY;
+            else if (worker.job === 'treasure') {
+              worker.job = worker.prevJob ?? null;
+              worker.prevJob = null;
+            } else worker.retry = WORKER_RETRY;
           }
           break;
         default:
@@ -1479,7 +1699,7 @@ export class RealmSim extends Simulation {
     worker.dirZ = dz / d;
     worker.state = 'harvest';
     worker.path = [];
-    worker.timer = REALM.worker.harvestTime * this.modifiers.harvest;
+    worker.timer = (cell.node.type === 'ruin' ? REALM.nodes.ruin.exploreTime : 1) * REALM.worker.harvestTime * this.modifiers.harvest / (this.famine ? REALM.famine : 1);
     this.listener.onHarvestStart?.(worker, cell);
   }
 
@@ -1489,6 +1709,10 @@ export class RealmSim extends Simulation {
     if (!node || node.amount <= 0) {
       this.releaseNode(worker);
       worker.state = 'idle';
+      return;
+    }
+    if (node.type === 'ruin') {
+      this.lootRuin(worker, cell);
       return;
     }
     const amount = Math.min(node.amount, REALM.worker.carry + this.modifiers.carry);
@@ -1599,6 +1823,14 @@ export class RealmSim extends Simulation {
       towers: this.towers.map((t) => [t.def.id, t.cell.index, t.level, Math.round(t.hp), t.targeting, t.kills, t.branch?.id ?? null]),
       jobs: this.workers.map((w) => w.job),
       castle: this.castle.level,
+      blessings: { ...this.blessings },
+      pendingBlessings: [...this.pendingBlessings],
+      event: this.event?.id ?? null,
+      lastEvent: this.lastEvent,
+      sealed: { ...this.sealed },
+      sealsUsed: this.sealsUsed,
+      famine: this.famine,
+      eclipseBonus: this.eclipseBonus,
       sites: this.sites.map((site) => [site.typeId, site.target?.kind === 'castle' ? -1 : site.cell.index, round(site.progress), site.cost, site.target ? 1 : 0]),
       night: this.phase === PHASE.NIGHT ? {
         spawner: this.spawners[0] ? { cursor: this.spawners[0].cursor, elapsed: round(this.spawners[0].elapsed) } : null,
@@ -1619,6 +1851,16 @@ export class RealmSim extends Simulation {
     this.gold = data.gold;
     Object.assign(this.stock, data.stock);
     Object.assign(this.research, data.research);
+    for (const [id, count] of Object.entries(data.blessings ?? {})) if (BLESSINGS.some((b) => b.id === id)) this.blessings[id] = count;
+    this.pendingBlessings = (data.pendingBlessings ?? []).filter((id) => BLESSINGS.some((b) => b.id === id));
+    this.lastEvent = data.lastEvent ?? null;
+    if (data.event && EVENTS[data.event] && this.phase === PHASE.DAY) {
+      this.event = { id: data.event, mods: data.event === 'festival' ? { workerSpeed: 0.3, buildSpeed: 0.3, harvestSpeed: 0.3 } : null };
+    }
+    Object.assign(this.sealed, data.sealed ?? {});
+    this.sealsUsed = data.sealsUsed ?? 0;
+    this.famine = Boolean(data.famine);
+    this.eclipseBonus = Boolean(data.eclipseBonus);
     this.applyResearch();
     this.lives = Math.min(this.startLives, data.lives);
     for (const [id, cooldown] of Object.entries(data.spells ?? {})) if (this.spells[id]) this.spells[id].cooldown = cooldown;
@@ -1644,6 +1886,8 @@ export class RealmSim extends Simulation {
       if (!def || !cell || !this.canPlace(cell)) continue;
       this.addBuilding(def, cell, Math.min(level, def.levels.length - 1), hp);
     }
+    // The forge counts in the towers' damage.
+    if (this.hasBuilding('forge')) Object.assign(this.modifiers, realmModifiers(this.research, this.bonusMods()));
     for (const [id, index, level, hp, targeting, kills, branch] of data.towers ?? []) {
       const def = TOWERS[id];
       const cell = cells[index];
@@ -1700,6 +1944,7 @@ export class RealmSim extends Simulation {
           x, z, cell: cells[index], next: null, attacking: null, siegeTimer: 0, slowFactor: 1, slowTimer: 0,
           freezeTimer: 0, stunTimer: 0, burnTimer: 0, poisonTimer: 0, dotTower: null, wave: this.day, view: null,
           maxShield: Math.round((def.shield ?? 0) * (maxHp / def.hp)), shield: 0, shieldDelay: 0, healTimer: def.healEvery ?? 0,
+          summonTimer: def.summon?.every ?? 0, phased: hp < maxHp * 0.5,
         });
       }
       for (const worker of this.workers) worker.state = 'hidden';

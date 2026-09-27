@@ -47,6 +47,7 @@ export class UI {
       research: $('screen-research'),
       report: $('screen-report'),
       bestiary: $('screen-bestiary'),
+      blessing: $('screen-blessing'),
     };
     this.hud = $('hud');
     this.dock = $('dock');
@@ -146,6 +147,7 @@ export class UI {
     this.realmInfoSheet = $('sheet-realm-info');
     this.workersSheet = $('sheet-workers');
     this.heroSheet = $('sheet-hero');
+    this.tradeSheet = $('sheet-trade');
     this.realmTab = 'defense';
     this.researchTab = 'Économie';
     this.shownRes = {};
@@ -158,7 +160,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back', 'event-chip']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -755,6 +757,7 @@ export class UI {
     this.realmInfoSheet.classList.remove('is-open');
     this.workersSheet.classList.remove('is-open');
     this.heroSheet.classList.remove('is-open');
+    this.tradeSheet.classList.remove('is-open');
   }
 
   // ------------------------------------------------------------ Kingdom
@@ -822,6 +825,63 @@ export class UI {
     this.resTarget = {};
     this.resHold = {};
     this.shown.wave = '';
+  }
+
+  /** @param e { icon, name } or null */
+  setEvent(e) {
+    const chip = this.$('event-chip');
+    chip.hidden = !e;
+    if (!e) return;
+    this.$('event-icon').textContent = e.icon;
+    this.$('event-name').textContent = e.name;
+  }
+
+  /** @param b { name, share, shield } or null */
+  setBossBar(b) {
+    const bar = this.$('boss-bar');
+    bar.hidden = !b;
+    if (!b) return;
+    this.$('boss-name').textContent = b.name;
+    this.$('boss-fill').style.width = `${Math.round(b.share * 100)}%`;
+    this.$('boss-shield').style.width = `${Math.round(b.shield * 100)}%`;
+  }
+
+  /** @param list [{ give, get, merchant, affordable }] */
+  openTrades(list, have, hint) {
+    if (!this.tradeSheet.classList.contains('is-open')) this.closeSheets();
+    const box = this.$('trades');
+    box.replaceChildren();
+    list.forEach((offer, i) => {
+      const row = document.createElement('div');
+      row.className = `trade${offer.merchant ? ' is-merchant' : ''}`;
+      row.innerHTML = `<span class="trade__deal">${this.costHtml(offer.give, have)} → ${this.costHtml(offer.get)}</span>`;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn--gold';
+      button.textContent = 'Échanger';
+      button.disabled = !offer.affordable;
+      button.addEventListener('click', () => this.handlers.trade?.(i));
+      row.append(button);
+      box.append(row);
+    });
+    this.$('trade-hint').textContent = hint;
+    this.tradeSheet.classList.add('is-open');
+  }
+
+  /** @param list [{ id, icon, name, text, count, max }] */
+  showBlessings(list) {
+    const box = this.$('blessings');
+    box.replaceChildren();
+    list.forEach((b, i) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'blessing';
+      card.style.animationDelay = `${0.1 + i * 0.12}s`;
+      card.innerHTML = `<span aria-hidden="true">${b.icon}</span><span><b>${b.name}</b><small>${b.text}</small></span><em>${b.count}/${b.max}</em>`;
+      card.addEventListener('click', () => this.handlers.blessing?.(b.id));
+      box.append(card);
+    });
+    this.showScreen('blessing');
   }
 
   setDailyCard(title, detail, tag, done) {
@@ -1025,6 +1085,9 @@ export class UI {
     demolish.classList.toggle('btn--ghost', !info.confirm);
     const verb = info.demolishLabel ?? 'Démolir';
     demolish.innerHTML = info.confirm ? `Confirmer ${info.demolish ?? ''}` : `${verb} ${info.demolish ?? ''}`;
+    // A lone button (a portal's seal) spans the whole row.
+    const actions = upgrade.parentElement;
+    actions.classList.toggle('is-single', [...actions.children].filter((b) => !b.hidden).length === 1);
     this.realmInfoSheet.classList.add('is-open');
   }
 
