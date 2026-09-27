@@ -337,7 +337,7 @@ export function makeNight(n, portalCount) {
 
   if (n >= 7) add('runner', Math.round(n * 0.7), 0.4, 18);
   spawns.sort((a, b) => a.time - b.time);
-  const hpMultiplier = 0.85 * (1 + 0.16 * (n - 1) + 0.014 * (n - 1) ** 2);
+  const hpMultiplier = 0.85 * (1 + 0.2 * (n - 1) + 0.045 * (n - 1) ** 2);
   const counts = {};
   for (const s of spawns) counts[s.type] = (counts[s.type] ?? 0) + 1;
   return { number: n, spawns, hpMultiplier, counts, reward: spawns.reduce((sum, s) => sum + ENEMIES[s.type].reward, 0) };

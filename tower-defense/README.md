@@ -198,7 +198,7 @@ node tools/balance.mjs 1 --leaks      # détaille les ennemis qui passent
 node tools/realm-bot.mjs 4 20          # Royaume : 4 cartes, 20 nuits, bot qui récolte, construit et recherche
 ```
 
-Royaume : le bot, qui ne construit pas de murs et utilise surtout des balistes, voit son château tomber pour la première fois entre la nuit 10 et la nuit 15 selon la carte. Ensuite il tombe presque chaque nuit.
+Royaume : le bot, qui ne construit pas de murs et empile surtout des balistes, voit son château tomber pour la première fois vers la nuit 10 (premier vaisseau amiral de taille), parfois la nuit 20 selon la carte. Les nuits de vaisseau amiral (toutes les 5 nuits) sont les plus dures.
 
 Résultat actuel (bot qui utilise les sorts de départ, mais pas les tours de la boutique) :
 
