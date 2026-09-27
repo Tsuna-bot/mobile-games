@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'bastion-v15';
+const VERSION = 'bastion-v16';
 
 const APP_SHELL = [
   './',
@@ -219,7 +219,7 @@ const APP_SHELL = [
   './src/data/achievements.js',
   './src/data/daily.js',
   './src/data/enemies.js',
-  './src/data/hero.js',
+  './src/data/heroes.js',
   './src/data/levels.js',
   './src/data/objectives.js',
   './src/data/perks.js',

@@ -59,7 +59,15 @@ const GradeShader = {
     }`,
 };
 
+/** iPhones and iPads (iPadOS reports itself as a Mac with touch). */
+export function isAppleMobile() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 export function detectInitialQuality() {
+  // Safari hides the real core count and memory: recent iPhones handle "high" easily,
+  // and the dynamic resolution below keeps older ones smooth.
+  if (isAppleMobile()) return 'high';
   const cores = navigator.hardwareConcurrency || 4;
   const memory = navigator.deviceMemory || 4;
   if (cores <= 4 || memory <= 2) return 'low';
@@ -72,33 +80,59 @@ export function lowerQuality(level) {
   return index > 0 ? QUALITY_LEVELS[index - 1] : null;
 }
 
-/** Averages the frame rate and reports when it stays too low. */
-export class FrameRateMonitor {
-  constructor() {
+/**
+ * Dynamic resolution: trades sharpness for smoothness before any effect is cut.
+ * Below 52 fps the render resolution drops a step; after a long run at 60 it creeps
+ * back up, but never again to a step that already proved too slow.
+ * `sample` returns true when even the lowest resolution is too slow (drop a quality level).
+ */
+export class ResolutionScaler {
+  constructor(view) {
+    this.view = view;
     this.reset();
   }
 
   reset() {
     this.elapsed = 0;
     this.frames = 0;
-    this.warmup = CONFIG.quality.warmup;
+    this.cooldown = CONFIG.quality.warmup;
+    this.good = 0;
+    this.ceiling = Infinity;
   }
 
   sample(frameDt) {
     if (frameDt <= 0) return false;
-    if (this.warmup > 0) {
-      this.warmup -= frameDt;
+    if (this.cooldown > 0) {
+      this.cooldown -= frameDt;
       return false;
     }
     this.elapsed += frameDt;
     this.frames++;
-    if (this.elapsed < CONFIG.quality.sampleWindow) return false;
+    if (this.elapsed < 1.5) return false;
     const fps = this.frames / this.elapsed;
     this.elapsed = 0;
     this.frames = 0;
-    if (fps >= CONFIG.quality.minFps) return false;
-    this.warmup = CONFIG.quality.warmup;
-    return true;
+    const view = this.view;
+    const { minPixelRatio, lowFps, goodFps } = CONFIG.quality;
+    const min = Math.min(minPixelRatio, view.maxPixelRatio);
+    if (fps < lowFps) {
+      this.good = 0;
+      if (view.pixelRatio <= min + 0.01) return fps < CONFIG.quality.minFps;
+      this.ceiling = view.pixelRatio - 0.05;
+      view.setPixelRatio(Math.max(min, view.pixelRatio - 0.25));
+      this.cooldown = 1;
+      return false;
+    }
+    if (fps >= goodFps) {
+      this.good++;
+      const next = Math.min(view.maxPixelRatio, view.pixelRatio + 0.125);
+      if (this.good >= 4 && next > view.pixelRatio + 0.01 && next < this.ceiling) {
+        view.setPixelRatio(next);
+        this.good = 0;
+        this.cooldown = 1;
+      }
+    } else this.good = 0;
+    return false;
   }
 }
 
@@ -120,6 +154,10 @@ export class View {
     this.width = 1;
     this.height = 1;
     this.pixelRatio = 1;
+    this.maxPixelRatio = 1;
+    // Phones: the shadow map (a second render of every caster) is refreshed every other frame.
+    this.shadowInterval = window.matchMedia?.('(pointer: coarse)').matches ? 2 : 1;
+    this.frameCount = 0;
     this.contextLost = false;
     this.onResize = null;
     this.onContextLost = null;
@@ -149,10 +187,20 @@ export class View {
   applyQuality(level) {
     this.qualityLevel = level;
     this.preset = QUALITY_PRESETS[level];
-    this.pixelRatio = Math.min(window.devicePixelRatio || 1, this.preset.maxPixelRatio);
+    this.maxPixelRatio = Math.min(window.devicePixelRatio || 1, this.preset.maxPixelRatio);
+    this.pixelRatio = this.maxPixelRatio;
     this.renderer.setPixelRatio(this.pixelRatio);
+    this.refreshShadows();
     if (this.composer) this.disposeComposer();
     if (this.preset.grade || this.preset.bloom) this.createComposer();
+    this.resize();
+  }
+
+  /** Changes the render resolution (dynamic resolution). */
+  setPixelRatio(ratio) {
+    if (Math.abs(ratio - this.pixelRatio) < 0.01) return;
+    this.pixelRatio = ratio;
+    this.renderer.setPixelRatio(ratio);
     this.resize();
   }
 
@@ -216,8 +264,16 @@ export class View {
     this.onResize?.(this.width, this.height);
   }
 
+  /** Forces the next frame to redraw the shadow map (new level, quality change). */
+  refreshShadows() {
+    this.renderer.shadowMap.needsUpdate = true;
+  }
+
   render() {
     if (this.contextLost) return;
+    const shadows = this.renderer.shadowMap;
+    shadows.autoUpdate = this.shadowInterval <= 1;
+    if (!shadows.autoUpdate && ++this.frameCount % this.shadowInterval === 0) shadows.needsUpdate = true;
     if (this.gradePass) this.gradePass.uniforms.uTime.value = (performance.now() % 10000) / 1000;
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);

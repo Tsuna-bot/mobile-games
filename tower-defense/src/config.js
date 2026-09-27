@@ -61,6 +61,11 @@ export const CONFIG = {
   },
 
   quality: {
+    // Dynamic resolution: below lowFps the resolution drops, above goodFps it may rise.
+    lowFps: 52,
+    goodFps: 57,
+    minPixelRatio: 1,
+    // Still under minFps at the lowest resolution: one quality level down.
     minFps: 42,
     sampleWindow: 3,
     warmup: 2,

@@ -33,10 +33,11 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
 - **Ruines** : 5 coffres dorés cachés sur la carte. Un ouvrier qui les explore trouve des ressources, de l'or, des gemmes, une bénédiction ou une relique.
 - **Portails** : le jour, touche un portail ouvert pour le **sceller** 2 nuits (cristaux + or, de plus en plus cher). Il en reste toujours au moins un ouvert.
 - **Vaisseau amiral** toutes les 5 nuits : énorme, il largue des mini-ovnis et s'entoure d'un bouclier à mi-vie. Une barre de vie de boss s'affiche en haut.
-- **Le chevalier** défend aussi le Royaume (voir Contenu).
+- **Le héros choisi** défend aussi le Royaume (voir Contenu). En changer garde son niveau.
 - **Le château** a 3 niveaux (Fort, Château, Citadelle) : plus de vie, de stockage et d'ouvriers. Sa fiche propose aussi « Réparer » pour tout remettre en état.
 - **Objectifs** : un objectif à la fois, avec une récompense ; les premiers servent de tutoriel.
 - **Rapport à l'aube** : étoiles, ovnis détruits, or gagné, dégâts subis, meilleure tour, réparation en un geste.
+- **Caméra** : tourne deux doigts sur l'écran (ou touche la boussole sous la mini-carte, par quarts de tour) pour voir le royaume sous tous les angles.
 - **Repères** : mini-carte (toucher pour y aller), bouton de retour au château, chemin des ovnis en flèches (en construction et le soir), flèches au bord de l'écran vers les ovnis hors champ, cloche 30 s puis 10 s avant la nuit, vitesse x1/x2/x3.
 - **Ambiance** : le soleil traverse le ciel (lever et coucher dorés), brume du matin, feuilles qui tombent, oiseaux, fumée des cheminées, fenêtres et torches allumées la nuit, lucioles, chemins de terre là où passent les ouvriers, traces de brûlure après les combats, arbres qui basculent, rochers qui éclatent, cristaux qui se brisent, lasers des Démolisseurs.
 - **Retours** : ressources qui volent jusqu'aux compteurs, compteurs qui défilent, petits sons (marteau, chute d'arbre, oiseaux le jour, grillons la nuit), à-coups de caméra sur les grands moments et vibrations. Sur iPhone (iOS 18 et plus), les vibrations passent par l'interrupteur système, seul moyen pour une page web.
@@ -64,7 +65,17 @@ Un mode sans fin sur une grande carte (33 × 33 cases), générée aléatoiremen
   | Cratère ardent | 20 | lave, braises |
   | Pic de l'orage | 22 | pluie, éclairs et tonnerre |
 
-- **Le chevalier** (héros) : touche-le puis touche la carte pour l'envoyer. Il frappe les ovnis au corps à corps, gagne de l'expérience (7 niveaux) et a un pouvoir, la **Frappe tournoyante** (dégâts de zone + étourdissement). S'il tombe, il revient au château après quelques secondes.
+- **5 héros** (un par partie, choisi dans l'écran **Héros** du menu, campagne et Royaume). Touche le héros puis la carte pour l'envoyer ; il gagne de l'expérience (7 niveaux) et revient au château s'il tombe.
+
+  | Héros | Rôle | Attaque | Pouvoir | Prix |
+  | --- | --- | --- | --- | --- |
+  | Chevalier | Duelliste | Corps à corps, solide | Frappe tournoyante : dégâts autour de lui + étourdit | offert |
+  | Archère | Sentinelle | Flèches à très longue portée, fragile | Pluie de flèches : dégâts ×3,5 et ralentit tout autour | 150 💎 |
+  | Mage de givre | Contrôleur | Sorts qui ralentissent | Tempête de glace : gèle les ovnis proches 2,5 s | 200 💎 |
+  | Ingénieur | Soutien | Corps à corps ; aura : tours proches +20 % de cadence | Tourelle automatique pendant 18 s | 250 💎 |
+  | Prêtresse | Guérisseuse | Lumière qui ignore l'armure ; aura : tours proches +15 % de dégâts | Lumière sacrée : éblouit, brûle et soigne le château | 300 💎 |
+
+  Chaque héros a son modèle, une cape à sa couleur et son équipement (marteau, arc et carquois, bâton de glace, pioche et sac, bâton-lanterne).
 - **Spécialisations** : au niveau maximum, chaque tour choisit une voie parmi 2 (24 en tout), par exemple Baliste « Tir rapide » ou « Carreaux perçants ».
 - **Défi du jour** : une carte, 12 vagues et 2 règles spéciales tirées au sort chaque jour (ovnis rapides, pas de sorts, tout en boucliers…). Il rapporte 15 gemmes et compte une série de jours consécutifs.
 - **Bestiaire** : fiche de chaque ovni rencontré (description, statistiques, nombre abattu). Un nouvel ovni est annoncé la première fois qu'il apparaît.
@@ -195,6 +206,7 @@ cd tower-defense
 node tools/balance.mjs 6 --survival   # 6 parties par niveau, sorts compris, et la Survie
 node tools/balance.mjs 6 --perks      # même chose avec des améliorations « milieu de partie »
 node tools/balance.mjs 1 --leaks      # détaille les ennemis qui passent
+node tools/balance.mjs 3 --hero=frost --survival --from=11   # le bot joue un héros (placé sur la route, pouvoir sur les groupes)
 node tools/realm-bot.mjs 4 20          # Royaume : 4 cartes, 20 nuits, bot qui récolte, construit et recherche
 ```
 
@@ -213,7 +225,11 @@ Résultat actuel (bot qui utilise les sorts de départ, mais pas les tours de la
 
 La difficulté est volontairement élevée : il faut les améliorations, les tours de la boutique et bien viser ses sorts pour tout finir en 3 étoiles. Toutes les valeurs d'équilibrage sont dans `src/data/` et `src/config.js`.
 
-**Performance** : terrain et décor en InstancedMesh, un seul matériau et une seule texture pour tous les modèles, objets (ennemis, projectiles, particules) réutilisés en pool. La qualité (ombres, pixel ratio, particules) baisse automatiquement si le FPS chute.
+**Performance** : terrain et décor en InstancedMesh, un seul matériau et une seule texture pour tous les modèles, objets (ennemis, projectiles, particules) réutilisés en pool.
+- **Résolution dynamique** : sous 52 images/s, la résolution de rendu baisse par paliers ; après un long moment à 60, elle remonte, sans jamais revenir à un palier qui a ramé. Si même la résolution minimale ne suffit pas, un niveau de qualité saute (effets, ombres).
+- Sur téléphone, l'ombre portée est recalculée une image sur deux (la moitié des appels de dessin en moins).
+- Sur iPhone et iPad, la qualité Auto démarre en Haute (Safari cache le nombre de cœurs), la résolution dynamique gardant la fluidité.
+- Mesure sur une nuit chargée du Royaume (50 tours, 30 ovnis) : environ 1 ms de JavaScript par image (simulation + mise à jour des vues), 270 appels de dessin sans l'ombre, 530 avec.
 
 ## Lancer en local
 

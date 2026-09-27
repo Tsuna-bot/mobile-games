@@ -20,7 +20,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { heroNextXp } from '../sim/hero.js';
 import { SpellViews } from '../render/spellViews.js';
 import { TowerViews } from '../render/towerViews.js';
-import { FrameRateMonitor, detectInitialQuality, lowerQuality } from '../render/view.js';
+import { ResolutionScaler, detectInitialQuality, lowerQuality } from '../render/view.js';
 import { World } from '../render/world.js';
 import { Level } from '../sim/level.js';
 import { SIM_STATE, Simulation } from '../sim/simulation.js';
@@ -62,7 +62,7 @@ export class Game {
     };
     this.rig = new CameraRig(view.camera);
     this.input = new PointerInput(view.canvas);
-    this.monitor = new FrameRateMonitor();
+    this.monitor = new ResolutionScaler(view);
     this.autoQuality = detectInitialQuality();
 
     this.mode = MODE.MENU;
