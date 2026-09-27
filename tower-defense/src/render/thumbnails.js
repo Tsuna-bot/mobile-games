@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { HEROES, HERO_ORDER } from '../data/heroes.js';
+import { buildHeroFigure } from './heroView.js';
 import { ENEMIES } from '../data/enemies.js';
 import { TOWERS } from '../data/towers.js';
 import { BUILDINGS, CASTLE_LEVELS } from '../data/realm.js';
@@ -33,9 +35,13 @@ export function renderThumbnails(renderer, assets) {
   const previousClear = renderer.getClearAlpha();
   renderer.setClearAlpha(0);
 
-  const snap = (object) => {
+  // `frames`: the parts to fit in the picture (defaults to the whole object).
+  const partBox = new THREE.Box3();
+  const snap = (object, frames = [object]) => {
     scene.add(object);
-    box.setFromObject(object);
+    object.updateMatrixWorld(true);
+    box.makeEmpty();
+    for (const frame of frames) box.union(partBox.setFromObject(frame, true));
     box.getCenter(center);
     box.getSize(size);
     const radius = Math.max(size.x, size.y, size.z) * 0.62;
@@ -63,7 +69,24 @@ export function renderThumbnails(renderer, assets) {
     thumbnails.buildings[def.id] = def.levels.map((_, level) => snap(buildBuildingModel(assets, def, level)));
   }
   thumbnails.portal = snap(assets.clone('spawn-round'));
-  thumbnails.hero = snap(assets.clone('characters/character-male-e'));
+  // Hero portraits: the figure with its gear, in the idle pose.
+  thumbnails.heroes = {};
+  for (const id of HERO_ORDER) {
+    const figure = buildHeroFigure(assets, id);
+    const clip = THREE.AnimationClip.findByName(assets.animations.get(HEROES[id].model) ?? [], 'idle');
+    if (clip) {
+      const mixer = new THREE.AnimationMixer(figure.model);
+      mixer.clipAction(clip).play();
+      mixer.update(0.4);
+    }
+    figure.model.rotation.y = -0.35;
+    figure.model.updateMatrixWorld(true);
+    // Framed on the body (bust shot), so long staffs do not shrink the hero.
+    const frames = ['body-mesh', 'head-mesh'].map((name) => figure.model.getObjectByName(name)).filter(Boolean);
+    thumbnails.heroes[id] = snap(figure.model, frames.length ? frames : [figure.model]);
+    for (const item of figure.gear) item.dispose();
+  }
+  thumbnails.hero = thumbnails.heroes.knight;
   const flagMaterial = assets.materials.castle ?? assets.material;
   thumbnails.castle = CASTLE_LEVELS.map((_, level) => snap(buildCastleModel(assets, level, flagMaterial)));
   for (const def of Object.values(ENEMIES)) {

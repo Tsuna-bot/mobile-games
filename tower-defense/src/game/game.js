@@ -14,7 +14,7 @@ import { EnemyViews } from '../render/enemyViews.js';
 import { ProjectileViews } from '../render/projectileViews.js';
 import { RealmViews } from '../render/realmViews.js';
 import { HeroView } from '../render/heroView.js';
-import { HERO, HERO_MAX_LEVEL, heroStats } from '../data/hero.js';
+import { HEROES, HERO_LEVELS, HERO_MAX_LEVEL, HERO_ORDER, heroDef, heroStats } from '../data/heroes.js';
 import { DAILY_GEMS, dailyChallenge } from '../data/daily.js';
 import { ENEMIES } from '../data/enemies.js';
 import { heroNextXp } from '../sim/hero.js';
@@ -186,20 +186,53 @@ export class Game {
       },
       onHeroAttack: (hero, target) => {
         this.heroView.attack();
-        this.effects.sparksAt(target.x, CONFIG.world.enemyHover, target.z);
-        this.audio.heroHit();
+        const kind = hero.def.attack;
+        if (kind === 'melee') {
+          this.effects.sparksAt(target.x, CONFIG.world.enemyHover, target.z);
+          this.audio.heroHit();
+          return;
+        }
+        const from = this.heroView.muzzle(this.tmp);
+        this.effects.heroShot(kind, from.x, from.y, from.z, target.x, CONFIG.world.enemyHover, target.z);
+        this.audio.shoot(kind === 'arrow' ? 'ballista' : kind === 'frost' ? 'frost' : 'tesla');
       },
-      onHeroPower: (hero) => {
+      onHeroPower: (hero, targets = [], healed = 0) => {
+        const power = hero.def.power;
         this.heroView.power();
-        this.effects.heroPower(hero.x, hero.z, HERO.power.radius);
-        this.rig.shake(0.45);
+        if (power.id === 'volley') this.effects.arrowRain(hero.x, hero.z, power.radius);
+        else if (power.id === 'blizzard') {
+          this.effects.iceBurst(hero.x, hero.z, power.radius);
+          this.audio.blizzard();
+        } else if (power.id === 'sanctuary') {
+          this.effects.holyLight(hero.x, hero.z, power.radius);
+          this.audio.heal();
+          if (healed > 0) {
+            const base = this.sim.level.base;
+            this.effects.heal(base.x, base.z);
+            this.floatAt(base.x, 2.2, base.z, `+${healed} ❤`, 'res');
+          }
+        } else if (power.id === 'turret') {
+          this.heroView.turretPlaced();
+          const turret = this.sim.heroTurret;
+          if (turret) this.effects.build(turret.x, turret.z, false);
+          this.audio.build();
+        } else this.effects.heroPower(hero.x, hero.z, power.radius);
+        this.rig.shake(power.id === 'turret' ? 0.15 : 0.45);
         this.rig.punch?.(0.04);
-        this.audio.heroPower();
+        if (power.id !== 'blizzard' && power.id !== 'sanctuary') this.audio.heroPower();
         this.haptics.pulse(CONFIG.haptics.build);
+      },
+      onHeroTurretShot: (turret, target) => {
+        const y = CONFIG.world.tileTop + 0.45;
+        this.effects.heroShot('turret', turret.x + turret.dirX * 0.25, y, turret.z + turret.dirZ * 0.25, target.x, CONFIG.world.enemyHover, target.z);
+        this.audio.shoot('turret');
+      },
+      onHeroTurretGone: (turret) => {
+        this.effects.sell(turret.x, turret.z);
       },
       onHeroDown: (hero) => {
         this.heroView.fall();
-        this.ui.showBanner('Le chevalier est tombé', `De retour au château dans ${HERO.respawn} s`, 'danger');
+        this.ui.showBanner(`${hero.def.name} est à terre`, `De retour au château dans ${hero.def.respawn} s`, 'danger');
         this.audio.leak();
         this.haptics.pulse(CONFIG.haptics.leak);
       },
@@ -208,7 +241,7 @@ export class Game {
         this.effects.heal(hero.x, hero.z);
       },
       onHeroLevel: (hero) => {
-        this.floatAt(hero.x, 1.9, hero.z, `Chevalier niv. ${hero.level} !`, 'res');
+        this.floatAt(hero.x, 1.9, hero.z, `${hero.def.name} niv. ${hero.level} !`, 'res');
         this.effects.upgrade(hero.x, hero.z);
         this.audio.upgrade();
         this.haptics.pulse(CONFIG.haptics.complete);
@@ -387,6 +420,10 @@ export class Game {
     ui.on('btn-achievements', () => this.showAchievements());
     ui.on('btn-daily', () => this.startDaily());
     ui.on('btn-bestiary', () => this.showBestiary());
+    ui.on('btn-heroes', () => this.showHeroes());
+    ui.on('btn-heroes-back', () => this.showMenu());
+    ui.on('heroChip', (id) => this.previewHero(id));
+    ui.on('btn-hero-choose', () => this.chooseHero());
     ui.on('btn-bestiary-back', () => this.showMenu());
     ui.on('btn-achievements-back', () => this.showMenu());
     ui.on('btn-resume-run', () => this.resumeRun());
@@ -553,6 +590,7 @@ export class Game {
       dailyDone ? '✓ Réussi' : `+${DAILY_GEMS} 💎`,
       dailyDone,
     );
+    this.refreshHeroCard();
     const realmCard = this.realmMode.menuDetail();
     this.ui.setRealmCard(realmCard.detail, realmCard.fresh);
     this.ui.setResume(runDef ? `${runDef.name}${run.heroic ? ' · Héroïque' : ''} · vague ${Math.max(1, run.snapshot.nextWave)} · ${run.snapshot.lives} vies` : null);
@@ -602,7 +640,7 @@ export class Game {
     this.clearEntities();
     this.current = target;
     const { def, index, heroic } = target;
-    const options = { heroic, modifiers: buildModifiers(this.save.perks), spells: this.save.owned.spells, rules: target.daily?.options ?? {} };
+    const options = { heroic, modifiers: buildModifiers(this.save.perks), spells: this.save.owned.spells, rules: target.daily?.options ?? {}, hero: this.save.heroes.selected };
     if (snapshot) {
       // Rebuild the saved run silently, then attach the listener and create the views.
       this.sim = new Simulation(def, index, {}, options);
@@ -848,7 +886,11 @@ export class Game {
       const def = SPELLS[id];
       return { id, kind: 'spell', name: def.name, blurb: def.blurb, stats: `Recharge ${def.cooldown} s`, price: def.shopPrice, owned: this.save.owned.spells.includes(id) };
     });
-    return [...towers, ...spells];
+    const heroes = HERO_ORDER.filter((id) => HEROES[id].price).map((id) => {
+      const def = HEROES[id];
+      return { id, kind: 'hero', name: `${def.icon} ${def.name}`, blurb: def.blurb, stats: `${def.role} · ${def.power.name}`, price: def.price, owned: this.save.heroes.owned.includes(id) };
+    });
+    return [...towers, ...spells, ...heroes];
   }
 
   showShop() {
@@ -859,7 +901,7 @@ export class Game {
   }
 
   renderShop() {
-    const kind = this.ui.shopTab === 'spells' ? 'spell' : 'tower';
+    const kind = { spells: 'spell', heroes: 'hero' }[this.ui.shopTab] ?? 'tower';
     this.ui.renderShop(this.shopItems().filter((item) => item.kind === kind), this.save.gems, (item) => this.buyItem(item));
   }
 
@@ -870,13 +912,99 @@ export class Game {
     }
     this.save.gems -= item.price;
     if (item.kind === 'tower') this.save.owned.towers.push(item.id);
+    else if (item.kind === 'hero') this.save.heroes.owned.push(item.id);
     else this.save.owned.spells.push(item.id);
     writeSave(this.save);
     this.audio.upgrade();
     this.haptics.pulse(CONFIG.haptics.victory);
-    this.ui.showBanner(`${item.name} débloqué !`, item.kind === 'tower' ? 'Disponible dans le menu de construction' : 'Disponible dans la barre des sorts');
+    const where = { tower: 'Disponible dans le menu de construction', hero: 'Choisis-le dans l’écran Héros', spell: 'Disponible dans la barre des sorts' }[item.kind];
+    this.ui.showBanner(`${item.name} débloqué !`, where);
     this.renderShop();
     this.refreshWallet();
+  }
+
+  // ------------------------------------------------------------ heroes
+
+  refreshHeroCard() {
+    const def = heroDef(this.save.heroes.selected);
+    const owned = this.save.heroes.owned.length;
+    this.ui.setHeroCard(`${def.icon} ${def.name}`, `${def.role} · ${def.power.name}`, this.ui.thumbnails?.heroes[def.id], `${owned}/${HERO_ORDER.length} héros`);
+  }
+
+  showHeroes() {
+    this.mode = MODE.PERKS;
+    this.heroPreview = this.save.heroes.selected;
+    this.renderHeroes();
+    this.ui.showScreen('heroes');
+    this.audio.click();
+  }
+
+  previewHero(id) {
+    if (!HEROES[id]) return;
+    this.heroPreview = id;
+    this.renderHeroes();
+    this.audio.click();
+    this.haptics.pulse(CONFIG.haptics.tap);
+  }
+
+  renderHeroes() {
+    const id = this.heroPreview;
+    const def = HEROES[id];
+    const owned = this.save.heroes.owned.includes(id);
+    const chosen = this.save.heroes.selected === id;
+    const stats = heroStats(1, 1, def);
+    const color = `#${def.color.toString(16).padStart(6, '0')}`;
+    let action;
+    if (chosen) action = { label: '✓ Choisi', enabled: false };
+    else if (owned) action = { label: 'Choisir', enabled: true };
+    else action = { label: `Débloquer <span class="gem" aria-hidden="true"></span>${def.price}`, enabled: this.save.gems >= def.price };
+    const attack = { melee: 'Mêlée', arrow: 'Flèches', frost: 'Givre', holy: 'Lumière' }[def.attack];
+    this.ui.renderHeroPick({
+      name: def.name,
+      role: `${def.icon} ${def.role}`,
+      blurb: def.blurb,
+      image: this.ui.thumbnails.heroes[id],
+      color,
+      stats: [
+        ['Vie', stats.maxHp],
+        ['Dégâts', Math.round(stats.damage)],
+        ['Portée', stats.range.toFixed(1).replace('.', ',')],
+        ['Attaque', attack],
+      ],
+      power: def.power,
+      aura: def.aura?.text ?? null,
+      action,
+    }, HERO_ORDER.map((h) => ({
+      id: h,
+      name: HEROES[h].name,
+      image: this.ui.thumbnails.heroes[h],
+      active: h === id,
+      locked: !this.save.heroes.owned.includes(h),
+      chosen: this.save.heroes.selected === h,
+      price: HEROES[h].price,
+    })));
+  }
+
+  chooseHero() {
+    const id = this.heroPreview;
+    const def = HEROES[id];
+    if (!def) return;
+    if (!this.save.heroes.owned.includes(id)) {
+      if (this.save.gems < def.price) {
+        this.audio.denied();
+        return;
+      }
+      this.save.gems -= def.price;
+      this.save.heroes.owned.push(id);
+      this.ui.showBanner(`${def.icon} ${def.name} débloqué !`, def.role);
+      this.haptics.pulse(CONFIG.haptics.victory);
+      this.audio.victory();
+    } else this.audio.upgrade();
+    this.save.heroes.selected = id;
+    writeSave(this.save);
+    this.refreshWallet();
+    this.refreshHeroCard();
+    this.renderHeroes();
   }
 
   /** Bestiary: the first time a UFO type shows up, it is announced and recorded. */
@@ -1195,14 +1323,16 @@ export class Game {
     if (!hero || this.selection?.kind !== 'hero') return;
     const down = hero.respawn > 0;
     const next = heroNextXp(hero);
-    const stats = heroStats(hero.level, this.sim.threat);
-    const power = HERO.power;
+    const def = hero.def;
+    const stats = heroStats(hero.level, this.sim.threat, def);
+    const power = def.power;
     const key = `${hero.level}|${hero.xp}|${Math.ceil(hero.hp)}|${Math.ceil(hero.respawn)}|${Math.ceil(hero.powerCooldown)}|${hero.kills}`;
     if (key === this.heroSheetKey) return;
     this.heroSheetKey = key;
-    const previous = HERO.levels[hero.level - 1];
+    const previous = HERO_LEVELS[hero.level - 1];
     this.ui.openHero({
-      image: this.ui.thumbnails.hero,
+      image: this.ui.thumbnails.heroes[def.id],
+      name: def.name,
       level: hero.level,
       levels: HERO_MAX_LEVEL,
       xp: next === null ? { fraction: 1, text: `Niveau max · ${hero.kills} ovnis` } : { fraction: (hero.xp - previous) / (next - previous), text: `XP ${hero.xp}/${next} · ${hero.kills} ovnis` },
@@ -1211,8 +1341,8 @@ export class Game {
         ['Dégâts', Math.round(stats.damage)],
         ['Portée', stats.range.toFixed(1).replace('.', ',')],
       ],
-      power: { label: !down && hero.powerCooldown > 0 ? `Frappe (${Math.ceil(hero.powerCooldown)} s)` : 'Frappe tournoyante', ready: !down && hero.powerCooldown <= 0 },
-      hint: down ? `Tombé au combat : de retour au château dans ${Math.ceil(hero.respawn)} s.` : 'Touche la carte pour l’envoyer : il frappe les ovnis à sa portée. ' + power.blurb,
+      power: { label: !down && hero.powerCooldown > 0 ? `${power.short} (${Math.ceil(hero.powerCooldown)} s)` : power.name, ready: !down && hero.powerCooldown <= 0 },
+      hint: down ? `À terre : de retour au château dans ${Math.ceil(hero.respawn)} s.` : `Touche la carte pour l’envoyer. ${power.name} : ${power.blurb}${def.aura ? ` Aura : ${def.aura.text}.` : ''}`,
     });
   }
 
@@ -1312,7 +1442,7 @@ export class Game {
     this.projectileViews.update(dt);
     this.spellViews.update(dt);
     this.effects.update(dt);
-    this.heroView.update(dt, this.renderTime, this.view.camera);
+    this.heroView.update(dt, this.renderTime, this.view.camera, this.sim?.heroTurret ?? null);
 
     const sim = this.sim;
     if (sim?.hero && this.mode === MODE.PLAYING) {
@@ -1322,7 +1452,8 @@ export class Game {
         hpShare: hero.maxHp ? hero.hp / hero.maxHp : 0,
         down: hero.respawn > 0,
         respawn: hero.respawn,
-        powerCharge: 1 - Math.max(0, hero.powerCooldown) / HERO.power.cooldown,
+        type: hero.type,
+        powerCharge: 1 - Math.max(0, hero.powerCooldown) / hero.def.power.cooldown,
         powerLeft: hero.powerCooldown,
         selected: this.selection?.kind === 'hero',
         enabled: true,

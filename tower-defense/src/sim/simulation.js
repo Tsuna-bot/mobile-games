@@ -7,8 +7,8 @@ import { DEFAULT_MODIFIERS } from '../data/perks.js';
 import { SPELLS, STARTER_SPELLS } from '../data/spells.js';
 import { BRANCHES, TOWERS, applyBranch, branchCost, stackHeight } from '../data/towers.js';
 import { makeWave } from '../data/waves.js';
-import { HERO } from '../data/hero.js';
-import { castHeroPower, createHero, heroOnKill, moveHero, restoreHero, serializeHero, updateHero } from './hero.js';
+import { HERO_LEVELS } from '../data/heroes.js';
+import { castHeroPower, createHero, heroAura, heroOnKill, moveHero, restoreHero, serializeHero, updateHero } from './hero.js';
 import { Level } from './level.js';
 
 const MAX_ENEMIES = 260;
@@ -185,12 +185,14 @@ export class Simulation {
       this.spells[id] = { cooldown: spell.initialCooldown * modifiers.spellCooldown, max };
     }
     this.strikes = [];
-    // The knight stands guard in front of the castle.
+    // The hero (`hero`: true for the knight, or a hero id) stands guard in front of the castle.
     this.heroStrike = false;
     this.hero = null;
+    this.heroTurret = null;
+    this.heroType = typeof hero === 'string' ? hero : 'knight';
     if (hero) {
       const home = this.heroHome();
-      this.hero = createHero(home.x, home.z, rules.heroLevel ?? 1, rules.heroLevel ? HERO.levels[rules.heroLevel - 1] : 0);
+      this.hero = createHero(home.x, home.z, rules.heroLevel ?? 1, rules.heroLevel ? HERO_LEVELS[rules.heroLevel - 1] : 0, this.heroType);
     }
   }
 
@@ -381,7 +383,7 @@ export class Simulation {
     for (const [id, cooldown] of Object.entries(data.spells)) if (this.spells[id]) this.spells[id].cooldown = cooldown;
     this.strikes = data.strikes.map((s) => ({ ...s }));
     Object.assign(this.stats, data.stats);
-    restoreHero(this.hero, data.hero);
+    restoreHero(this.hero, data.hero, this.heroType);
     for (const saved of data.towers) {
       const cell = this.level.cells[saved.cell];
       const def = TOWERS[saved.type];
@@ -777,7 +779,10 @@ export class Simulation {
 
   updateTowers(dt) {
     for (const tower of this.towers) {
-      const stats = tower.stats;
+      // A hero's aura (engineer: faster, priestess: stronger) applies while they stand close.
+      const aura = this.hero ? heroAura(this, tower) : null;
+      const stats = aura && tower.stats.damage !== undefined ? { ...tower.stats, rate: tower.stats.rate * (aura.rate ?? 1), damage: tower.stats.damage * (aura.damage ?? 1) } : tower.stats;
+      tower.aura = Boolean(aura);
       tower.cooldown -= dt;
       if (tower.beaming > 0) tower.beaming -= dt;
       if (tower.def.id === 'frost') {

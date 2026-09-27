@@ -122,7 +122,7 @@ export class RealmMode {
     game.clearEntities();
     game.realmViews.clear();
     const data = loadRealm();
-    this.sim = new RealmSim(data, {});
+    this.sim = new RealmSim(data, {}, { hero: this.save.heroes.selected });
     let gains = null;
     if (data?.phase === PHASE.DAY && data.savedAt) {
       const away = (Date.now() - data.savedAt) / 1000;

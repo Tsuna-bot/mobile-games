@@ -1,5 +1,5 @@
 // Headless balance check: a greedy bot plays every level with the real simulation.
-// Usage: node tools/balance.mjs [runs] [--perks] [--no-spells] [--leaks] [--survival]
+// Usage: node tools/balance.mjs [runs] [--perks] [--no-spells] [--leaks] [--survival] [--hero=archer] [--from=N]
 import { LEVELS, SURVIVAL } from '../src/data/levels.js';
 import { buildModifiers } from '../src/data/perks.js';
 import { SPELLS } from '../src/data/spells.js';
@@ -10,6 +10,8 @@ const args = process.argv.slice(2);
 const runs = Number(args.find((a) => /^\d+$/.test(a)) ?? 5);
 const usePerks = args.includes('--perks');
 const useSpells = !args.includes('--no-spells');
+// With --hero=id the bot plays that hero: parked on the road, power used on groups.
+const heroId = args.find((a) => a.startsWith('--hero='))?.slice(7) ?? null;
 const STEP = 1 / 60;
 const PLAN = ['ballista', 'cannon', 'ballista', 'frost', 'upgrade', 'catapult', 'turret', 'upgrade', 'cannon', 'upgrade', 'upgrade', 'ballista', 'catapult', 'upgrade', 'upgrade'];
 // A mid-game player: about 12 stars spent.
@@ -76,25 +78,44 @@ function botSpells(sim) {
   }
 }
 
+function botHero(sim) {
+  const hero = sim.hero;
+  if (!hero || hero.powerCooldown > 0 || hero.respawn > 0) return;
+  const power = hero.def.power;
+  const radius = power.radius ?? power.range;
+  const near = sim.enemies.filter((e) => e.active && (e.x - hero.x) ** 2 + (e.z - hero.z) ** 2 <= radius * radius).length;
+  if (near >= 3) sim.castHeroPower();
+}
+
 export function play(levelDef, levelIndex, { bot = true, perks = false, spells = true, leaks = {}, maxWaves = 60 } = {}) {
+  let downs = 0;
   const sim = new Simulation(levelDef, levelIndex, {
     onEnemyLeaked: (e) => {
       const key = `w${e.wave + 1}:${e.def.id}`;
       leaks[key] = (leaks[key] ?? 0) + 1;
     },
-  }, { modifiers: perks ? MID_PERKS : undefined });
+    onHeroDown: () => {
+      downs++;
+    },
+  }, { modifiers: perks ? MID_PERKS : undefined, hero: heroId ?? true });
   const state = { step: 0 };
+  if (heroId && sim.hero) {
+    sim.level.sampleRoute(sim.level.routeLength * 0.62, sim.sample);
+    sim.moveHero(sim.sample.x, sim.sample.z);
+  }
   if (bot) botBuild(sim, state);
   sim.callNextWave();
   let frame = 0;
   while (!sim.over && sim.time < 7200 && sim.nextWave <= maxWaves) {
     if (bot) {
       botBuild(sim, state);
-      if (spells && frame++ % 15 === 0) botSpells(sim);
+      if (spells && frame % 15 === 0) botSpells(sim);
+      if (heroId && frame % 15 === 0) botHero(sim);
+      frame++;
     }
     sim.step(STEP);
   }
-  return { won: sim.state === SIM_STATE.WON, lives: sim.lives, wave: sim.nextWave, time: sim.time, stars: sim.stars };
+  return { won: sim.state === SIM_STATE.WON, lives: sim.lives, wave: sim.nextWave, time: sim.time, stars: sim.stars, downs, heroKills: sim.hero?.kills ?? 0 };
 }
 
 const label = `${usePerks ? 'with mid perks' : 'no perks'}, ${useSpells ? 'spells' : 'no spells'}`;
@@ -112,8 +133,8 @@ LEVELS.forEach((level, i) => {
 });
 
 if (args.includes('--survival')) {
-  const waves = Array.from({ length: runs }, () => play(SURVIVAL, SURVIVAL.unlockAfter, { perks: usePerks, spells: useSpells }).wave);
-  console.log(`Survie: bot reached waves [${waves.join(',')}]`);
+  const results = Array.from({ length: runs }, () => play(SURVIVAL, SURVIVAL.unlockAfter, { perks: usePerks, spells: useSpells }));
+  console.log(`Survie: bot reached waves [${results.map((r) => r.wave).join(',')}]${heroId ? `  hero kills [${results.map((r) => r.heroKills).join(',')}] downs [${results.map((r) => r.downs).join(',')}]` : ''}`);
 }
 
 if (args.includes('--leaks')) {

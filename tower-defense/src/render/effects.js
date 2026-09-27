@@ -22,6 +22,9 @@ const COLORS = {
   leaf: new THREE.Color(0x6aa83a),
   autumn: new THREE.Color(0xe08a2e),
   laser: new THREE.Color(0x7dff5a),
+  arrow: new THREE.Color(0xeaffd0),
+  holy: new THREE.Color(0xfff3b8),
+  turret: new THREE.Color(0xffb35a),
 };
 
 export { COLORS as EFFECT_COLORS };
@@ -310,6 +313,49 @@ export class Effects {
     this.puffs.burst(x, top + 0.1, z, this.count(20), radius * 2.4, COLORS.dust, 0.35, 0.8, { upward: 0.25, drag: 3, endSize: 0.9 });
     this.sparks.burst(x, top + 0.6, z, this.count(26), radius * 2.2, COLORS.gold, 0.14, 0.6, { upward: 0.3, drag: 2, brightness: 1.6 });
     this.flash(x, top + 0.7, z, 2);
+  }
+
+  /** A hero's ranged attack: arrow streak, frost bolt or beam of light. */
+  heroShot(kind, fx, fy, fz, tx, ty, tz) {
+    const color = kind === 'frost' ? COLORS.frost : kind === 'holy' ? COLORS.holy : kind === 'turret' ? COLORS.turret : COLORS.arrow;
+    const n = this.count(kind === 'holy' ? 12 : 8);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      // Arrows arc a little; bolts and light go straight.
+      const lift = kind === 'arrow' ? Math.sin(t * Math.PI) * 0.35 : 0;
+      this.sparks.emit(fx + (tx - fx) * t, fy + (ty - fy) * t + lift, fz + (tz - fz) * t, 0, 0, 0, color, kind === 'holy' ? 0.16 : 0.1, 0.08 + t * 0.1, { endSize: 0.02, drag: 0, brightness: 2 });
+    }
+    if (kind === 'frost') {
+      this.sparks.burst(tx, ty, tz, this.count(8), 1.6, COLORS.frost, 0.1, 0.4, { gravity: 2, brightness: 1.7 });
+      this.puffs.burst(tx, ty, tz, this.count(4), 0.8, COLORS.snow, 0.18, 0.5, { drag: 2, endSize: 0.05 });
+    } else if (kind === 'holy') {
+      this.flash(tx, ty, tz, 0.9);
+      this.sparks.burst(tx, ty, tz, this.count(6), 1.4, COLORS.gold, 0.1, 0.45, { upward: 0.8, gravity: -0.5, brightness: 1.8 });
+    } else this.sparksAt(tx, ty, tz, color);
+  }
+
+  /** Arrow rain: streaks falling all over the area. */
+  arrowRain(x, z, radius) {
+    const top = CONFIG.world.tileTop;
+    for (let i = 0; i < this.count(40); i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius;
+      const px = x + Math.cos(a) * r;
+      const pz = z + Math.sin(a) * r;
+      this.sparks.emit(px, top + 2.2 + Math.random() * 1.2, pz, 0, -9, 0, COLORS.arrow, 0.09, 0.28, { drag: 0, brightness: 1.8, endSize: 0.05 });
+      if (i % 3 === 0) this.puffs.emit(px, top + 0.1, pz, 0, 0.4, 0, COLORS.dust, 0.2, 0.6, { drag: 2, endSize: 0.4 });
+    }
+    this.ring(x, z, radius, 0.6, COLORS.alien);
+  }
+
+  /** Sacred light: a pillar, a golden ring and sparkles rising everywhere. */
+  holyLight(x, z, radius) {
+    const top = CONFIG.world.tileTop;
+    for (let i = 0; i < this.count(24); i++) this.sparks.emit(x + (Math.random() - 0.5) * 0.5, top + Math.random() * 2.5, z + (Math.random() - 0.5) * 0.5, 0, 1.5, 0, COLORS.holy, 0.22, 0.8, { drag: 0.5, brightness: 2.2, endSize: 0.05 });
+    this.sparks.burst(x, top + 0.3, z, this.count(36), radius * 2, COLORS.gold, 0.14, 1, { upward: 0.9, gravity: -0.8, drag: 1.5, brightness: 1.8 });
+    this.ring(x, z, radius, 0.7, COLORS.gold);
+    this.ring(x, z, radius * 0.5, 0.5, COLORS.holy);
+    this.flash(x, top + 1, z, 3);
   }
 
   /** Healer pulse: a green ring and sparkles rising from the UFOs it mends. */

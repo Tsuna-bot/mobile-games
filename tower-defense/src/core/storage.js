@@ -1,3 +1,4 @@
+import { HEROES } from '../data/heroes.js';
 import { ACHIEVEMENTS, EMPTY_STATS } from '../data/achievements.js';
 import { persist } from './cloud.js';
 import { ENEMIES } from '../data/enemies.js';
@@ -26,6 +27,7 @@ function defaults() {
     daily: { day: 0, streak: 0 },
     // Bestiary: UFO types met and killed.
     bestiary: {},
+    heroes: { owned: ['knight'], selected: 'knight' },
     settings: { sound: true, music: true, haptics: true, quality: 'auto' },
   };
 }
@@ -76,6 +78,8 @@ export function loadSave() {
     for (const [type, kills] of Object.entries(data.bestiary ?? {})) {
       if (ENEMIES[type] && isCount(Number(kills), 1e9)) save.bestiary[type] = Number(kills);
     }
+    if (Array.isArray(data.heroes?.owned)) save.heroes.owned = [...new Set(['knight', ...data.heroes.owned.filter((id) => HEROES[id])])];
+    if (save.heroes.owned.includes(data.heroes?.selected)) save.heroes.selected = data.heroes.selected;
     // Saves from before the bestiary: the classic UFOs have been met already.
     if (!data.bestiary && save.stats.kills > 0) for (const type of ['scout', 'runner', 'tank', 'boss']) save.bestiary[type] = 0;
     const settings = data.settings ?? {};

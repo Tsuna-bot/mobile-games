@@ -286,6 +286,11 @@
         <button id="btn-achievements" class="btn btn--small" type="button">Succès <span class="badge badge--soft" id="achievements-count">0/0</span></button>
         </div>
       </div>
+      <button id="btn-heroes" class="realm-card realm-card--hero" type="button">
+        <img class="realm-card__portrait" id="hero-card-portrait" alt="">
+        <span><b id="hero-card-name">Héros · Chevalier</b><span id="hero-card-detail">Choisis ton héros avant la partie</span></span>
+        <span class="realm-card__tag" id="hero-card-tag">5 héros</span>
+      </button>
       <button id="btn-realm" class="realm-card" type="button">
         <span class="realm-card__icon" aria-hidden="true">🏰</span>
         <span><b>Royaume</b><span id="realm-detail">Monde ouvert : récolte, construis, survis aux nuits</span></span>
@@ -333,6 +338,7 @@
       <div class="tabs" role="tablist">
         <button class="tab" type="button" role="tab" data-tab="towers" aria-selected="true">Tours</button>
         <button class="tab" type="button" role="tab" data-tab="spells" aria-selected="false">Sorts</button>
+        <button class="tab" type="button" role="tab" data-tab="heroes" aria-selected="false">Héros</button>
       </div>
       <div class="shop" id="shop"></div>
       <p class="perks-note">Gagne des gemmes en finissant des niveaux (bonus la première fois), en Héroïque, en Survie et avec les succès.</p>
@@ -346,6 +352,28 @@
       <div class="achievements" id="achievements"></div>
       <div class="panel">
         <button id="btn-achievements-back" class="btn btn--primary" type="button">Retour</button>
+      </div>
+    </section>
+
+    <section id="screen-heroes" class="screen screen--heroes" aria-labelledby="heroes-title">
+      <h2 id="heroes-title" class="screen__title screen__title--small">Héros</h2>
+      <div class="hero-pick" id="hero-pick">
+        <div class="hero-pick__stage">
+          <img class="hero-pick__portrait" id="hero-pick-portrait" alt="">
+          <span class="hero-pick__role" id="hero-pick-role">Duelliste</span>
+        </div>
+        <div class="hero-pick__info">
+          <h3 id="hero-pick-name">Chevalier</h3>
+          <p class="hero-pick__blurb" id="hero-pick-blurb"></p>
+          <dl class="hero-pick__stats" id="hero-pick-stats"></dl>
+          <p class="hero-pick__power" id="hero-pick-power"></p>
+          <p class="hero-pick__aura" id="hero-pick-aura" hidden></p>
+        </div>
+      </div>
+      <div class="hero-roster" id="hero-roster" role="listbox" aria-label="Héros"></div>
+      <div class="panel panel--row">
+        <button id="btn-heroes-back" class="btn btn--ghost" type="button">Retour</button>
+        <button id="btn-hero-choose" class="btn btn--gold" type="button">Choisir</button>
       </div>
     </section>
 

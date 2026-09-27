@@ -255,10 +255,10 @@ export class RealmSim extends Simulation {
    * @param save   `serialize()` output to resume, or null for a new kingdom
    * @param options.seed map seed for a new kingdom
    */
-  constructor(save = null, listener = {}, { seed } = {}) {
+  constructor(save = null, listener = {}, { seed, hero = 'knight' } = {}) {
     const mapSeed = save?.seed ?? seed ?? Math.floor(Math.random() * REALM.seedRange);
     const modifiers = realmModifiers({});
-    super({ id: 'realm', theme: 'meadow', name: 'Royaume', startGold: 0, endless: true, hpScale: 1, waves: Infinity, seed: mapSeed }, 7, {}, { modifiers, spells: [] });
+    super({ id: 'realm', theme: 'meadow', name: 'Royaume', startGold: 0, endless: true, hpScale: 1, waves: Infinity, seed: mapSeed }, 7, {}, { modifiers, spells: [], hero });
     this.realm = true;
     this.seed = mapSeed;
     this.research = {};
@@ -1843,7 +1843,7 @@ export class RealmSim extends Simulation {
 
   restoreRealm(data) {
     if (data?.version !== 1) return;
-    restoreHero(this.hero, data.hero);
+    restoreHero(this.hero, data.hero, this.heroType);
     this.day = data.day;
     this.nextWave = data.day;
     this.phase = data.phase === PHASE.NIGHT ? PHASE.NIGHT : PHASE.DAY;

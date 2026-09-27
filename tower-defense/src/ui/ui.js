@@ -48,6 +48,7 @@ export class UI {
       report: $('screen-report'),
       bestiary: $('screen-bestiary'),
       blessing: $('screen-blessing'),
+      heroes: $('screen-heroes'),
     };
     this.hud = $('hud');
     this.dock = $('dock');
@@ -160,7 +161,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-rotate', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back', 'event-chip']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-rotate', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back', 'event-chip', 'btn-heroes', 'btn-heroes-back', 'btn-hero-choose']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
@@ -273,9 +274,10 @@ export class UI {
     for (const item of items) {
       const row = document.createElement('div');
       row.className = `shop-item${item.owned ? ' is-owned' : ''}`;
-      const art = item.kind === 'tower'
-        ? `<img src="${this.thumbnails.towers[item.id][2]}" alt="">`
-        : `<span class="spell" data-spell="${item.id}">${this.spellButtons[item.id].button.querySelector('svg').outerHTML}</span>`;
+      let art;
+      if (item.kind === 'tower') art = `<img src="${this.thumbnails.towers[item.id][2]}" alt="">`;
+      else if (item.kind === 'hero') art = `<img src="${this.thumbnails.heroes[item.id]}" alt="">`;
+      else art = `<span class="spell" data-spell="${item.id}">${this.spellButtons[item.id].button.querySelector('svg').outerHTML}</span>`;
       row.innerHTML = `
         <span class="shop-item__art">${art}</span>
         <span>
@@ -584,9 +586,9 @@ export class UI {
     const group = this.$('btn-hero').parentElement;
     group.hidden = !h;
     if (!h) return;
-    if (!this.heroPortraitSet && this.thumbnails?.hero) {
-      this.$('hero-portrait').src = this.thumbnails.hero;
-      this.heroPortraitSet = true;
+    if (this.heroPortraitType !== h.type && this.thumbnails?.heroes) {
+      this.$('hero-portrait').src = this.thumbnails.heroes[h.type];
+      this.heroPortraitType = h.type;
     }
     const key = `${h.level}|${Math.round(h.hpShare * 40)}|${h.down}|${Math.ceil(h.respawn)}|${Math.round(h.powerCharge * 60)}|${h.selected}|${h.enabled}`;
     if (key === this.shown.hero) return;
@@ -608,7 +610,7 @@ export class UI {
   openHero(info) {
     if (!this.heroSheet.classList.contains('is-open')) this.closeSheets();
     this.$('hero-image').src = info.image;
-    this.$('hero-name').textContent = `Chevalier · niv. ${info.level}`;
+    this.$('hero-name').textContent = `${info.name} · niv. ${info.level}`;
     this.$('hero-pips').innerHTML = Array.from({ length: info.levels }, (_, i) => `<i class="${i < info.level ? 'on' : ''}"></i>`).join('');
     this.$('hero-xp-fill').style.width = `${Math.round(info.xp.fraction * 100)}%`;
     this.$('hero-xp-text').textContent = info.xp.text;
@@ -618,6 +620,56 @@ export class UI {
     power.textContent = info.power.label;
     power.disabled = !info.power.ready;
     this.heroSheet.classList.add('is-open');
+  }
+
+  /** Menu card of the chosen hero. */
+  setHeroCard(name, detail, image, tag) {
+    this.$('hero-card-name').textContent = name;
+    this.$('hero-card-detail').textContent = detail;
+    this.$('hero-card-tag').textContent = tag;
+    if (image) this.$('hero-card-portrait').src = image;
+  }
+
+  /**
+   * Hero selection screen.
+   * @param d { name, role, blurb, image, color, stats: [[label, value]], power, aura, action: { label, enabled } }
+   * @param roster [{ id, image, name, active, locked, chosen, price }]
+   */
+  renderHeroPick(d, roster) {
+    const screen = this.screens.heroes;
+    screen.style.setProperty('--hero-glow', d.color);
+    const portrait = this.$('hero-pick-portrait');
+    if (portrait.getAttribute('src') !== d.image) {
+      portrait.src = d.image;
+      portrait.style.animation = 'none';
+      void portrait.offsetWidth; // Restart the entrance animation.
+      portrait.style.animation = '';
+    }
+    this.$('hero-pick-role').textContent = d.role;
+    this.$('hero-pick-name').textContent = d.name;
+    this.$('hero-pick-blurb').textContent = d.blurb;
+    this.$('hero-pick-stats').innerHTML = d.stats.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+    this.$('hero-pick-power').innerHTML = `<b>⚡ ${d.power.name}</b> · ${d.power.blurb}`;
+    const aura = this.$('hero-pick-aura');
+    aura.hidden = !d.aura;
+    if (d.aura) aura.innerHTML = `<b>◎ Aura</b> · ${d.aura}`;
+    const action = this.$('btn-hero-choose');
+    action.innerHTML = d.action.label;
+    action.disabled = !d.action.enabled;
+    const box = this.$('hero-roster');
+    box.replaceChildren();
+    for (const r of roster) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `hero-chip${r.active ? ' is-active' : ''}${r.locked ? ' is-locked' : ''}`;
+      chip.setAttribute('role', 'option');
+      chip.setAttribute('aria-selected', String(r.active));
+      chip.setAttribute('aria-label', r.name);
+      chip.innerHTML = `<img src="${r.image}" alt=""><span class="hero-chip__badge">${r.chosen ? '✓' : r.locked ? `💎${r.price}` : ''}</span>`;
+      if (!r.chosen && !r.locked) chip.querySelector('.hero-chip__badge').remove();
+      chip.addEventListener('click', () => this.handlers.heroChip?.(r.id));
+      box.append(chip);
+    }
   }
 
   /** @param charges { id: 0..1 }, remaining { id: seconds }, armed id|null, enabled */
