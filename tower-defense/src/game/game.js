@@ -416,6 +416,9 @@ export class Game {
     this.input.onZoom = (factor) => {
       if (this.mode === MODE.PLAYING || this.mode === MODE.ENDED) this.rig.zoomBy(factor);
     };
+    this.input.onRotate = (angle) => {
+      if (this.mode === MODE.PLAYING) this.rig.rotateBy(angle);
+    };
     this.handleKey = (event) => {
       if (event.code === 'Escape' || event.code === 'KeyP') {
         if (this.armedSpell) this.armSpell(null);

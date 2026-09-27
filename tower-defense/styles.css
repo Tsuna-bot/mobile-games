@@ -835,17 +835,43 @@ button:disabled {
 
 .minimap__recenter {
   position: absolute;
-  left: 50%;
-  bottom: -40px;
+  right: 0;
+  bottom: -42px;
   width: 36px;
   height: 36px;
-  margin-left: -18px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: var(--cream);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   animation: objective-new 0.3s var(--spring);
+}
+
+.minimap__rotate {
+  position: absolute;
+  left: 0;
+  bottom: -42px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cream);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.minimap__rotate svg {
+  width: 22px;
+  height: 22px;
+}
+
+.minimap__rotate .needle-n {
+  fill: #e0463c;
+}
+
+.minimap__rotate .needle-s {
+  fill: var(--ink);
+  opacity: 0.55;
 }
 
 .minimap__recenter[hidden] {

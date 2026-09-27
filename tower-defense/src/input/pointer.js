@@ -1,9 +1,11 @@
 import { CONFIG } from '../config.js';
 
+const TWIST_START = 0.18;
+
 /**
  * Turns raw pointer events on the canvas into gestures:
  * tap (select), one-finger drag (pan, or "paint" when `onDragStart` claims it),
- * two-finger pinch (zoom + pan), wheel (zoom).
+ * two-finger pinch (zoom + pan) and twist (rotate), wheel (zoom).
  */
 export class PointerInput {
   constructor(element) {
@@ -12,6 +14,7 @@ export class PointerInput {
     this.onTap = null;
     this.onPan = null;
     this.onZoom = null;
+    this.onRotate = null;
     this.onDragStart = null;
     this.onDragMove = null;
     this.onDragEnd = null;
@@ -29,6 +32,9 @@ export class PointerInput {
         this.gesture.moved = true;
         this.gesture.pinchDistance = this.pinchDistance();
         this.gesture.mid = this.midpoint();
+        this.gesture.angle = this.pinchAngle();
+        this.gesture.twist = 0;
+        this.gesture.twisting = false;
       }
     };
 
@@ -47,6 +53,18 @@ export class PointerInput {
         const mid = this.midpoint();
         this.onPan?.(mid.x - this.gesture.mid.x, mid.y - this.gesture.mid.y);
         this.gesture.mid = mid;
+        // Twist: ignored until the fingers clearly turn, so a pinch does not rotate by accident.
+        const angle = this.pinchAngle();
+        let delta = angle - this.gesture.angle;
+        if (delta > Math.PI) delta -= Math.PI * 2;
+        if (delta < -Math.PI) delta += Math.PI * 2;
+        this.gesture.angle = angle;
+        this.gesture.twist += delta;
+        if (!this.gesture.twisting && Math.abs(this.gesture.twist) > TWIST_START) {
+          this.gesture.twisting = true;
+          delta = this.gesture.twist - Math.sign(this.gesture.twist) * TWIST_START;
+        }
+        if (this.gesture.twisting && delta) this.onRotate?.(delta);
         return;
       }
       if (!this.gesture.moved) {
@@ -72,7 +90,10 @@ export class PointerInput {
       const gesture = this.gesture;
       if (this.pointers.size > 0) {
         // Leaving a pinch with one finger still down: keep panning from there.
-        if (gesture) gesture.pinch = false;
+        if (gesture) {
+          gesture.pinch = false;
+          gesture.twisting = false;
+        }
         return;
       }
       this.gesture = null;
@@ -98,6 +119,11 @@ export class PointerInput {
   pinchDistance() {
     const [a, b] = [...this.pointers.values()];
     return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  pinchAngle() {
+    const [a, b] = [...this.pointers.values()];
+    return Math.atan2(b.y - a.y, b.x - a.x);
   }
 
   midpoint() {

@@ -78,6 +78,9 @@
         </div>
         <div class="minimap" id="minimap-wrap">
           <canvas id="minimap" width="168" height="168" aria-label="Carte du royaume : touche pour y aller"></canvas>
+          <button id="btn-rotate" class="minimap__rotate" type="button" aria-label="Tourner la vue (ou tourne deux doigts sur l’écran)">
+            <svg id="rotate-needle" viewBox="0 0 24 24" aria-hidden="true"><path class="needle-n" d="M12 2l4 10h-8z"/><path class="needle-s" d="M8 12h8l-4 10z"/></svg>
+          </button>
           <button id="btn-recenter" class="minimap__recenter" type="button" aria-label="Revenir au château" hidden>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V10l2-1.5V5h2.5v2L12 4.5 15.5 7V5H18v3.5L20 10v11h-6v-5h-4v5z"/></svg>
           </button>

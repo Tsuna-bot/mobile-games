@@ -155,6 +155,9 @@ export class RealmMode {
     game.rig.zoom = game.rig.targetZoom = 0.42;
     game.rig.clampGoal();
     game.rig.setOrbit(0);
+    // The Kingdom can be seen from every side (two-finger twist, or the compass button).
+    game.rig.allowRotate = true;
+    game.rig.userYaw = 0;
     game.speed = 1;
     game.loop.timeScale = 1;
     this.ui.setSpeed(1);
@@ -202,6 +205,7 @@ export class RealmMode {
     this.eventShown = null;
     this.ui.setBossBar(null);
     this.game.world.terrain.showGrid(false);
+    this.game.rig.lockRotation();
     this.ui.setRealmMode(false);
     this.game.realmViews.clear();
     this.sim = null;

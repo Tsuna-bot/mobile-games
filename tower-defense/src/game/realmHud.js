@@ -38,6 +38,7 @@ export class RealmHud {
     this.recenterShown = null;
     realm.ui.on('minimap', (u, v) => this.travel(u, v));
     realm.ui.on('btn-recenter', () => this.recenter());
+    realm.ui.on('btn-rotate', () => this.rotate());
   }
 
   get game() {
@@ -59,6 +60,16 @@ export class RealmHud {
     this.timer = 0;
   }
 
+  /** Quarter turn; the needle keeps pointing north. */
+  rotate() {
+    const rig = this.game.rig;
+    // Snap to the next quarter so repeated taps stay square with the map.
+    const quarter = Math.PI / 2;
+    rig.userYaw = (Math.round(rig.userYaw / quarter) + 1) * quarter;
+    this.game.audio.click();
+    this.game.haptics.pulse(6);
+  }
+
   recenter() {
     const base = this.sim?.level.base;
     if (!base) return;
@@ -72,6 +83,11 @@ export class RealmHud {
   update(dt) {
     const sim = this.sim;
     if (!sim) return;
+    const yaw = Math.round(this.game.rig.yaw * 100) / 100;
+    if (yaw !== this.needleYaw) {
+      this.needleYaw = yaw;
+      this.realm.ui.$('rotate-needle').style.transform = `rotate(${yaw}rad)`;
+    }
     this.timer -= dt;
     if (this.timer <= 0) {
       this.timer = MINIMAP_EVERY;

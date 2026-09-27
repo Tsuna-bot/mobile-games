@@ -8,7 +8,8 @@ for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3());
 /**
  * Tilted perspective camera that always frames the whole map above/below the
  * HUD, whatever the screen shape. Supports pan and pinch zoom (zoom < 1 moves
- * closer), a slow orbit for the menu backdrop, and shake.
+ * closer), turning around the look-at point (Kingdom), a slow orbit for the menu
+ * backdrop, and shake.
  */
 export class CameraRig {
   constructor(camera) {
@@ -25,6 +26,9 @@ export class CameraRig {
     this.orbitPhase = 0;
     this.orbitSpeed = 0;
     this.yaw = 0;
+    // Angle the player turned the view to (only where `allowRotate` is on).
+    this.userYaw = 0;
+    this.allowRotate = false;
     this.trauma = 0;
     this.time = 0;
     this.raycaster = new THREE.Raycaster();
@@ -56,7 +60,7 @@ export class CameraRig {
     let hi = 80;
     for (let i = 0; i < 30; i++) {
       const d = (lo + hi) / 2;
-      this.place(camera, d, 0, this.lookOffset(d), 0);
+      this.place(camera, d, 0, 0, 0, this.lookOffset(d));
       camera.updateMatrixWorld();
       let fits = true;
       let n = 0;
@@ -79,7 +83,10 @@ export class CameraRig {
     return (this.screenOffset * distance * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / Math.sin(this.pitch);
   }
 
-  place(camera, distance, tx, tz, yaw) {
+  /** Camera `distance` from the ground point (tx, tz), turned by `yaw`; `offset` slides the look-at point toward the camera. */
+  place(camera, distance, tx, tz, yaw, offset = 0) {
+    tx += Math.sin(yaw) * offset;
+    tz += Math.cos(yaw) * offset;
     const horizontal = Math.cos(this.pitch) * distance;
     camera.position.set(tx + Math.sin(yaw) * horizontal, Math.sin(this.pitch) * distance, tz + Math.cos(yaw) * horizontal);
     camera.lookAt(tx, 0, tz);
@@ -88,8 +95,13 @@ export class CameraRig {
   pan(dxPixels, dyPixels) {
     const distance = this.fitDistance * this.zoom;
     const worldPerPixel = (2 * distance * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / this.viewport.height;
-    this.goal.x -= dxPixels * worldPerPixel;
-    this.goal.z -= (dyPixels * worldPerPixel) / Math.sin(this.pitch);
+    // Screen axes on the ground, turned with the view.
+    const a = dxPixels * worldPerPixel;
+    const b = (dyPixels * worldPerPixel) / Math.sin(this.pitch);
+    const cos = Math.cos(this.yaw);
+    const sin = Math.sin(this.yaw);
+    this.goal.x -= cos * a + sin * b;
+    this.goal.z -= cos * b - sin * a;
     this.clampGoal();
   }
 
@@ -100,12 +112,28 @@ export class CameraRig {
 
   clampGoal() {
     const slack = 1 - this.targetZoom;
-    this.goal.x = clamp(this.goal.x, -this.bounds.halfW * slack * 1.4, this.bounds.halfW * slack * 1.4);
-    this.goal.z = clamp(this.goal.z, -this.bounds.halfH * slack * 1.2, this.bounds.halfH * slack * 1.2);
+    // A turning view may look along either axis: the same limit both ways.
+    const halfW = this.allowRotate ? Math.max(this.bounds.halfW, this.bounds.halfH) : this.bounds.halfW;
+    const halfH = this.allowRotate ? halfW : this.bounds.halfH;
+    this.goal.x = clamp(this.goal.x, -halfW * slack * 1.4, halfW * slack * 1.4);
+    this.goal.z = clamp(this.goal.z, -halfH * slack * 1.2, halfH * slack * 1.2);
+  }
+
+  /** Turns the view around the point looked at (radians, positive = the map turns clockwise). */
+  rotateBy(angle) {
+    if (!this.allowRotate) return;
+    this.userYaw += angle;
+  }
+
+  /** Stops turning: back to the default angle. */
+  lockRotation() {
+    this.allowRotate = false;
+    this.userYaw = 0;
   }
 
   reset() {
     this.yaw = 0;
+    this.userYaw = 0;
     this.orbitPhase = 0;
     this.zoom = this.targetZoom = 1;
     this.goal.set(0, 0, 0);
@@ -137,7 +165,7 @@ export class CameraRig {
       this.yaw = Math.sin(this.orbitPhase) * 0.35;
     } else {
       this.orbitPhase = 0;
-      this.yaw = damp(this.yaw, 0, 4, dt);
+      this.yaw = damp(this.yaw, this.userYaw, this.allowRotate ? 12 : 4, dt);
     }
     const yaw = this.yaw;
 
@@ -147,7 +175,7 @@ export class CameraRig {
     this.punchAmount = Math.max(0, (this.punchAmount ?? 0) - dt * 0.35);
     const kick = this.punchAmount > 0 ? Math.sin(Math.min(1, this.punchAmount / 0.15) * Math.PI * 0.5) * this.punchAmount : 0;
     const distance = this.fitDistance * this.zoom * (1 - kick);
-    this.place(this.camera, distance, this.target.x + shake * wobble(t), this.target.z + this.lookOffset(distance) + shake * wobble(t + 9), yaw);
+    this.place(this.camera, distance, this.target.x + shake * wobble(t), this.target.z + shake * wobble(t + 9), yaw, this.lookOffset(distance));
   }
 
   /** Converts a screen point into the ground point under it (or null). */

@@ -160,7 +160,7 @@ export class UI {
     }
 
     for (const id of ['btn-pause', 'btn-speed', 'btn-wave', 'btn-resume', 'btn-restart', 'btn-quit', 'btn-next', 'btn-retry', 'btn-menu', 'btn-upgrade', 'btn-sell', 'btn-perks', 'btn-perks-back', 'btn-perks-reset', 'btn-spell-cancel', 'btn-shop', 'btn-shop-back', 'btn-achievements', 'btn-achievements-back', 'btn-resume-run',
-      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back', 'event-chip']) {
+      'btn-realm', 'btn-workers', 'btn-research', 'btn-research-back', 'btn-demolish', 'btn-realm-upgrade', 'btn-new-realm', 'btn-realm-extra', 'btn-undo', 'btn-report-repair', 'btn-report-ok', 'objective', 'btn-recenter', 'btn-rotate', 'btn-hero', 'btn-hero-power', 'btn-hero-home', 'btn-hero-power-sheet', 'btn-daily', 'btn-bestiary', 'btn-bestiary-back', 'event-chip']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('[data-close]')) {
