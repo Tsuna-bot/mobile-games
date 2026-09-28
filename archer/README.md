@@ -2,7 +2,7 @@
 
 Roguelite d’archer en 3D pour mobile (Three.js), dans l’esprit d’Archero : **cours pour esquiver, arrête-toi pour tirer.** Chaque salle nettoyée ouvre la porte suivante ; à chaque niveau, tu choisis 1 capacité parmi 3 et ton archère devient de plus en plus folle.
 
-Modèles 3D de Kenney, licence CC0 : [Mini Characters](https://kenney.nl/assets/mini-characters), [Mini Dungeon](https://kenney.nl/assets/mini-dungeon), [Graveyard Kit](https://kenney.nl/assets/graveyard-kit), [Nature Kit](https://kenney.nl/assets/nature-kit) (licences dans `assets/models/`).
+Modèles 3D arrondis **KayKit** de Kay Lousberg, licence CC0 : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).
 
 ## Jouer
 
@@ -19,16 +19,16 @@ Flèche frontale, tir multiple, flèches diagonales / latérales / arrière, reb
 
 | Monstre | Comportement |
 | --- | --- |
-| Zombie | fonce sur toi |
-| Squelette archer | vise (ligne rouge) puis tire |
-| Orc chargeur | se prépare puis charge en ligne droite |
+| Squelette | fonce sur toi |
+| Squelette archer | vise (ligne rouge) puis tire à l’arbalète |
+| Guerrier squelette | se prépare puis charge en ligne droite |
 | Fantôme, feu follet | traversent les obstacles |
-| Vampire | éventail de 3 orbes, se téléporte |
+| Mage de sang | éventail de 3 orbes, se téléporte |
 | Nécromancien | cercle d’orbes lentes |
 | Bandit grenadier | bombes : sors du cercle rouge |
 | **Ogre des bois** (boss) | charges, frappe au sol, rochers |
 | **Roi squelette** (boss) | spirales d’os, cercles, invocations |
-| **Comte vampire** (boss) | téléportation, éventails, chauves-souris |
+| **Liche pourpre** (boss) | téléportation, éventails, chauves-souris |
 
 Les boss deviennent plus agressifs sous la moitié de leur vie.
 
@@ -40,7 +40,7 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
   - Améliorer avec l’or, **fusionner 3 exemplaires identiques** pour passer à la rareté suivante, démonter pour récupérer de l’or.
 - **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
 - **Talents** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
-- **Héros** : Lyra (archère), Kael (rôdeur), Iris (mage, flèches de foudre), Bran (chevalier), chacun avec son bonus.
+- **Héros** : Lyra (archère encapuchonnée), Kael (rôdeur), Iris (mage, flèches de foudre), Bran (chevalier), chacun avec son modèle, son arme et son bonus.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
 - Un objet est trouvé à chaque chapitre gagné (et parfois après une bonne partie).
 
@@ -67,15 +67,17 @@ Un humain esquive mieux que le bot : c’est une borne basse.
 ## Technique
 
 - Simulation pure à pas fixe (60 Hz), sans Three.js ni DOM (`src/sim/`), testable dans Node.
-- Rendu : modèles instanciés, projectiles et bonus en InstancedMesh, particules GPU, ombres douces sous les personnages. Environ 180 appels de dessin dans une salle de boss chargée.
+- Rendu : personnages KayKit animés (un seul squelette partagé : les animations sont stockées une fois), leurs morceaux fusionnés en un seul maillage ; décors d’une salle fusionnés en quelques maillages ; projectiles et bonus en InstancedMesh ; sol en dalles arrondies. Environ 50 à 95 appels de dessin par image (salle de boss chargée comprise).
+- Modèles compressés (meshopt + quantification) : 3,2 Mo pour tout le jeu. `tools/convert-kaykit.mjs` refait la conversion depuis les packs KayKit.
 - Résolution dynamique (baisse la netteté avant de couper des effets) et qualité automatique, comme Bastion.
 - Hors ligne après la première visite (service worker, cache d’abord) ; installable sur l’écran d’accueil.
 
 ```
 archer/
 ├── index.html, styles.css, manifest.webmanifest, sw.js
-├── assets/models/          # Modèles Kenney (CC0)
+├── assets/kk/              # Modèles KayKit convertis (CC0)
 ├── tools/bot.mjs           # Bot d'équilibrage
+├── tools/convert-kaykit.mjs # Conversion des packs KayKit
 └── src/
     ├── data/               # Capacités, monstres, chapitres, équipement, talents, familiers, héros
     ├── sim/                # Arène (grille, collisions, chemins), run (héros, tirs, salles), IA des monstres

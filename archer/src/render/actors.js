@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { damp } from '../core/math.js';
+import { mergeSkinned } from './batch.js';
 
 const TMP = new THREE.Color();
 
@@ -56,16 +57,23 @@ function radialTexture() {
   return texture;
 }
 
+// KayKit characters are ~2.5 units tall: this brings them to ~1.3.
+const CHARACTER_SCALE = 0.52;
+
+// Weapons and accessories modelled on the characters: all hidden unless asked for.
+const PARTS = new Set(['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable', '1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', '2H_Axe', 'Mug', 'Barbarian_Hat',
+  '1H_Sword_Offhand', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '1H_Sword', '2H_Sword', 'Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff']);
+
 /** Plays one clip at a time with short cross-fades. */
 class Animator {
   constructor(model, clips, names) {
     this.mixer = new THREE.AnimationMixer(model);
     this.actions = {};
     for (const [key, name] of Object.entries(names)) {
-      const clip = THREE.AnimationClip.findByName(clips, name);
+      const clip = name && THREE.AnimationClip.findByName(clips, name);
       if (!clip) continue;
       const action = this.mixer.clipAction(clip);
-      if (key === 'die' || key === 'shoot' || key === 'hit') {
+      if (key === 'die' || key === 'shoot' || key === 'hit' || key === 'aim' || key === 'spawn') {
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -79,8 +87,8 @@ class Animator {
     if (!next) return;
     next.timeScale = speed;
     if (this.current === key && !restart) return;
-    next.reset().fadeIn(0.1).play();
-    if (this.current && this.current !== key) this.actions[this.current]?.fadeOut(0.1);
+    next.reset().fadeIn(0.12).play();
+    if (this.current && this.current !== key) this.actions[this.current]?.fadeOut(0.12);
     this.current = key;
   }
 
@@ -90,9 +98,68 @@ class Animator {
   }
 }
 
+/** A KayKit character with the wanted weapon parts shown, and an extra prop in the right hand. */
+function dressCharacter(assets, name, show = [], attach = null) {
+  const figure = assets.clone(name);
+  figure.scale.setScalar(CHARACTER_SCALE);
+  figure.traverse((o) => {
+    if (PARTS.has(o.name)) o.visible = show.includes(o.name);
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.frustumCulled = false;
+    }
+  });
+  mergeSkinned(figure, `${name}|${show.join(',')}`, assets.mergedCache);
+  if (attach) {
+    const hand = figure.getObjectByName('handslot.r');
+    if (hand) hand.add(assets.clone(attach));
+  }
+  return figure;
+}
+
+/** A soft rounded ghost (no rig): a dome, a wavy skirt and glowing eyes. */
+function makeGhost(color, gear) {
+  const group = new THREE.Group();
+  const profile = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    const a = t * Math.PI * 0.5;
+    profile.push(new THREE.Vector2(Math.sin(a) * 0.36 + 0.001, 1.05 - (1 - Math.cos(a)) * 0.36));
+  }
+  profile.push(new THREE.Vector2(0.4, 0.45), new THREE.Vector2(0.44, 0.22), new THREE.Vector2(0.001, 0.22));
+  const geometry = new THREE.LatheGeometry(profile, 24);
+  // Wavy hem.
+  const pos = geometry.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y < 0.5) {
+      const a = Math.atan2(pos.getZ(i), pos.getX(i));
+      pos.setY(i, y + Math.sin(a * 6) * 0.06 * (0.5 - y) / 0.28);
+    }
+  }
+  geometry.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.35, transparent: true, opacity: 0.85, emissive: 0x000000 });
+  const body = new THREE.Mesh(geometry, material);
+  body.castShadow = true;
+  const eyeGeometry = new THREE.SphereGeometry(0.055, 12, 8);
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x1a1030 });
+  for (const x of [-0.12, 0.12]) {
+    const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    eye.position.set(x, 0.8, 0.31);
+    eye.scale.set(1, 1.4, 0.6);
+    group.add(eye);
+  }
+  const mouth = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  mouth.position.set(0, 0.63, 0.34);
+  mouth.scale.set(1.3, 0.9, 0.5);
+  group.add(body, mouth);
+  gear.push(geometry, eyeGeometry, eyeMaterial);
+  return { group, material };
+}
+
 /**
- * The hero (Kenney character with a bow, a quiver and a cape) and the monsters:
- * animated models, health bars, hit flashes, spawn and death animations.
+ * The hero and the monsters (KayKit characters with their weapons), health bars,
+ * hit flashes, spawn and death animations.
  */
 export class Actors {
   constructor(scene, assets) {
@@ -107,53 +174,19 @@ export class Actors {
 
   // ------------------------------------------------------------ hero
 
-  createHero(model = 'characters/character-female-b', capeColor = 0x3fa9ff) {
+  createHero(def) {
     if (this.hero) this.removeHero();
     const root = new THREE.Group();
     const body = new THREE.Group();
     root.add(body);
-    const figure = this.assets.clone(model);
-    figure.scale.setScalar(1.12);
-    figure.traverse((o) => {
-      if (o.isMesh) o.castShadow = true;
-    });
-    body.add(figure);
     const gear = [];
-    const material = (color, extra = {}) => {
-      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
-      gear.push(m);
-      return m;
-    };
-    const mesh = (geometry, mat) => {
-      gear.push(geometry);
-      const m = new THREE.Mesh(geometry, mat);
-      m.castShadow = true;
-      return m;
-    };
-    const left = figure.getObjectByName('arm-left') ?? figure;
-    const torso = figure.getObjectByName('torso') ?? figure;
-    // Bow in the left hand.
-    const bow = mesh(new THREE.TorusGeometry(0.27, 0.024, 6, 20, Math.PI * 0.92), material(0x8a4f2a, { roughness: 0.5 }));
-    bow.rotation.set(0, Math.PI / 2, Math.PI / 2 + Math.PI * 0.04);
-    bow.position.set(0.02, -0.18, 0.08);
-    left.add(bow);
-    const string = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.52, 4), material(0xfff4dc));
-    string.position.set(0.02, -0.18, 0.08);
-    left.add(string);
-    // Quiver and cape.
-    const quiver = mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.34, 8), material(0x6a3f22));
-    quiver.position.set(0.08, 0.12, -0.14);
-    quiver.rotation.z = -0.35;
-    torso.add(quiver);
-    const cape = mesh(new THREE.PlaneGeometry(0.36, 0.48, 1, 3), material(capeColor, { side: THREE.DoubleSide, roughness: 0.8 }));
-    cape.geometry.translate(0, -0.2, 0);
-    cape.position.set(0, 0.2, -0.13);
-    torso.add(cape);
+    const figure = dressCharacter(this.assets, def.model, def.show, def.attach);
+    body.add(figure);
 
-    // Cyan ring at the feet like the original, and a big pick-free health bar.
+    // Ring at the feet in the hero's colour, and a big health bar.
     const ringGeometry = new THREE.RingGeometry(0.36, 0.46, 40);
     ringGeometry.rotateX(-Math.PI / 2);
-    const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x5fe0ff, transparent: true, opacity: 0.55, depthWrite: false });
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: def.cape ?? 0x5fe0ff, transparent: true, opacity: 0.55, depthWrite: false });
     const ring = new THREE.Mesh(ringGeometry, ringMaterial);
     ring.position.y = 0.02;
     ring.renderOrder = 2;
@@ -161,18 +194,18 @@ export class Actors {
     gear.push(ringGeometry, ringMaterial);
     root.add(blobShadow(0.32, gear, this.shadowTexture));
     const bar = makeBar(0.8, 0x5fe06a, gear);
-    bar.group.position.y = 1.25;
+    bar.group.position.y = 1.35;
     root.add(bar.group);
 
-    const animator = new Animator(figure, this.assets.animations.get(model) ?? [], { idle: 'idle', run: 'sprint', shoot: 'holding-left-shoot', die: 'die', hit: 'emote-no' });
+    const animator = new Animator(figure, this.assets.clips, { idle: 'Idle', run: 'Running_A', shoot: def.shoot ?? '1H_Ranged_Shoot', die: 'Death_A', hit: 'Hit_A', cheer: 'Cheer' });
     animator.play('idle');
     this.scene.add(root);
-    this.hero = { root, body, figure, cape, ring, ringMaterial, bar, animator, gear, yaw: Math.PI, flash: 0, shieldMesh: null };
+    this.hero = { root, body, figure, ring, ringMaterial, bar, animator, gear, yaw: Math.PI, flash: 0, shieldMesh: null };
     // Shield bubble (Bouclier divin).
-    const shieldGeometry = new THREE.SphereGeometry(0.62, 20, 14);
+    const shieldGeometry = new THREE.SphereGeometry(0.66, 24, 16);
     const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
     const shield = new THREE.Mesh(shieldGeometry, shieldMaterial);
-    shield.position.y = 0.5;
+    shield.position.y = 0.55;
     shield.visible = false;
     root.add(shield);
     gear.push(shieldGeometry, shieldMaterial);
@@ -248,39 +281,55 @@ export class Actors {
     const root = new THREE.Group();
     const body = new THREE.Group();
     root.add(body);
-    const model = this.assets.clone(def.model);
-    const scale = def.scale * 1.12;
-    model.scale.setScalar(scale);
-    // Own material so each monster can flash and be tinted.
+    const gear = [];
     const materials = [];
-    model.traverse((o) => {
-      if (!o.isMesh) return;
-      o.castShadow = true;
-      o.material = o.material.clone();
-      if (def.tint) o.material.color.setHex(def.tint);
-      if (def.id === 'ghost' || def.id === 'wisp') {
-        o.material.transparent = true;
-        o.material.opacity = 0.82;
-      }
-      o.material.emissive = new THREE.Color(0x000000);
-      materials.push(o.material);
-    });
+    let model;
+    if (def.model === 'ghost') {
+      const ghost = makeGhost(def.tint ?? 0xe8f4ff, gear);
+      model = ghost.group;
+      model.scale.setScalar(def.scale);
+      materials.push(ghost.material);
+    } else {
+      model = dressCharacter(this.assets, def.model, def.show, def.attach);
+      model.scale.setScalar(CHARACTER_SCALE * def.scale);
+      // Own materials so each monster can flash and be tinted.
+      const copies = new Map();
+      model.traverse((o) => {
+        if (!o.isMesh) return;
+        let copy = copies.get(o.material);
+        // Blob shadows are enough for the crowd; only bosses cast real ones.
+        o.castShadow = Boolean(def.boss);
+        if (!copy) {
+          copy = o.material.clone();
+          if (def.tint && copy.map) copy.color.setHex(def.tint);
+          copy.emissive = new THREE.Color(0x000000);
+          copies.set(o.material, copy);
+          materials.push(copy);
+        }
+        o.material = copy;
+      });
+    }
+    gear.push(...materials);
+    const scale = def.scale;
     body.add(model);
-    const gear = [...materials];
     root.add(blobShadow(def.radius, gear, this.shadowTexture));
     let bar = null;
     if (!def.boss) {
       bar = makeBar(0.7 * Math.max(0.8, def.scale), 0xff5a4a, gear);
-      bar.group.position.y = 0.95 * scale + 0.25;
+      bar.group.position.y = 1.1 * scale + 0.25;
       bar.group.visible = false;
       root.add(bar.group);
     }
-    const animator = new Animator(model, this.assets.animations.get(def.model) ?? [], { idle: 'idle', walk: 'walk', run: 'sprint', die: 'die', hit: 'emote-no', aim: 'pick-up' });
-    animator.play('idle');
+    const skeleton = def.model.startsWith('skeleton');
+    const animator = new Animator(model, def.model === 'ghost' ? [] : this.assets.clips, {
+      idle: skeleton ? 'Idle_Combat' : 'Idle', walk: skeleton ? 'Walking_D_Skeletons' : 'Walking_A', run: 'Running_A', die: 'Death_A', hit: 'Hit_A', aim: def.aimClip, spawn: skeleton ? 'Spawn_Ground_Skeletons' : null,
+    });
+    animator.play(animator.actions.spawn ? 'spawn' : 'idle');
     root.position.set(enemy.x, 0, enemy.z);
-    body.position.y = -1.2;
+    // Skeletons climb out of the ground with their own animation; the others rise.
+    body.position.y = animator.actions.spawn ? 0 : -1.2;
     this.scene.add(root);
-    const view = { enemy, root, body, model, materials, bar, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: Boolean(def.flying) };
+    const view = { enemy, root, body, model, materials, bar, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: Boolean(def.flying), ghost: def.model === 'ghost', risesByAnim: Boolean(animator.actions.spawn) };
     enemy.view = view;
     this.enemies.set(enemy.id, view);
     return view;
@@ -321,7 +370,6 @@ export class Actors {
         if (p.moving) hero.animator.play('run', false, 1.1);
         else if (!hero.animator.busy()) hero.animator.play('idle');
       }
-      hero.cape.rotation.x = 0.18 + (p.moving ? 0.55 + Math.sin(time * 16) * 0.12 : Math.sin(time * 2) * 0.05);
       const share = p.hp / p.maxHp;
       hero.bar.fill.scale.x = Math.max(0.001, hero.bar.width * share);
       hero.bar.fillMaterial.color.setHex(share < 0.3 ? 0xff5a4a : 0x5fe06a);
@@ -364,15 +412,18 @@ export class Actors {
       view.root.position.x = damp(view.root.position.x, e.x, 25, dt);
       view.root.position.z = damp(view.root.position.z, e.z, 25, dt);
       // Rises from the ground when it spawns.
-      view.body.position.y = damp(view.body.position.y, e.spawning > 0 ? -1.2 : view.floaty ? 0.25 + Math.sin(time * 3 + e.id) * 0.08 : 0, 8, dt);
+      const hidden = e.spawning > 0 && !view.risesByAnim;
+      view.body.position.y = damp(view.body.position.y, hidden ? -1.2 : view.floaty ? 0.25 + Math.sin(time * 3 + e.id) * 0.08 : 0, 8, dt);
+      if (view.ghost) view.model.rotation.z = Math.sin(time * 2.2 + e.id) * 0.08;
       const aiming = e.state === 'aim';
       if (e.moving || aiming) {
         const desired = Math.atan2(aiming ? e.aimX : e.dirX, aiming ? e.aimZ : e.dirZ);
         view.yaw += shortestAngle(view.yaw, desired) * Math.min(1, dt * 12);
       }
       view.body.rotation.y = view.yaw;
-      if (e.state === 'dash') view.animator.play('run', false, 1.6);
-      else if (aiming) view.animator.play('aim');
+      if (e.spawning > 0 && view.risesByAnim) view.animator.play('spawn', false, 1.3);
+      else if (e.state === 'dash') view.animator.play('run', false, 1.6);
+      else if (aiming || e.state === 'slam') view.animator.play('aim', false, 0.8);
       else if (e.moving) view.animator.play('walk', false, 1 + e.def.speed * 0.3);
       else view.animator.play('idle');
       // Hit flash (white), frozen (blue), burning (orange glow).

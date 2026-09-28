@@ -1,84 +1,82 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-const BASE_URL = 'assets/models/';
+const BASE_URL = 'assets/kk/';
 
-// Kenney kits (CC0): Mini Characters (heroes), Mini Dungeon, Graveyard Kit, Nature Kit.
-const MODELS = [
-  ...['character-female-b', 'character-female-d', 'character-female-f', 'character-male-a', 'character-male-c', 'character-male-e'].map((n) => `characters/${n}`),
-  ...['character-orc', 'character-human', 'floor', 'floor-detail', 'wall', 'wall-half', 'column', 'gate', 'barrel', 'chest', 'coin', 'banner', 'stones', 'rocks', 'pot', 'wood-structure', 'trap', 'potion'].map((n) => `dungeon/${n}`),
-  ...['character-zombie', 'character-skeleton', 'character-ghost', 'character-vampire', 'character-keeper', 'gravestone-cross', 'gravestone-round', 'gravestone-bevel', 'grave', 'pine', 'pine-crooked', 'lightpost-single', 'fence', 'iron-fence', 'iron-fence-border-gate', 'stone-wall', 'pumpkin-carved', 'crypt-small', 'rocks-tall', 'fire-basket', 'debris', 'trunk', 'pillar-large'].map((n) => `graveyard/${n}`),
-  ...['tree_oak', 'tree_pineRoundA', 'tree_default', 'tree_fat', 'tree_detailed', 'plant_bush', 'plant_bushLarge', 'rock_tallA', 'rock_smallA', 'stump_round', 'log_stack', 'flower_redA', 'flower_yellowA', 'mushroom_redGroup', 'grass_large'].map((n) => `nature/${n}`),
+// KayKit packs by Kay Lousberg (CC0): Adventurers, Skeletons, Dungeon Remastered,
+// Halloween Bits, Medieval Hexagon. Converted by tools (meshopt, quantized).
+const CHARACTERS = ['rogue_hooded', 'rogue', 'mage', 'knight', 'barbarian', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage'];
+const PROPS = [
+  // Forest.
+  'trees_A_large', 'trees_A_medium', 'trees_B_large', 'trees_B_medium', 'tree_single_A', 'tree_single_B',
+  'rock_single_A', 'rock_single_C', 'rock_single_E', 'resource_lumber', 'crate_A_big', 'barrel', 'waterlily_A', 'target', 'fence_wood_straight', 'fence_wood_straight_gate',
+  // Dungeon.
+  'column', 'pillar', 'pillar_decorated', 'barrel_large', 'barrel_small_stack', 'box_stacked', 'crates_stacked', 'wall', 'wall_gated', 'torch_lit', 'banner_red', 'banner_patternA_blue',
+  'chest_gold', 'rubble_half', 'keg_decorated', 'coin_stack_large',
+  // Graveyard.
+  'grave_A', 'grave_B', 'gravestone', 'gravemarker_A', 'crypt', 'coffin_decorated', 'pumpkin_orange_jackolantern', 'pumpkin_yellow',
+  'tree_dead_large', 'tree_dead_medium', 'tree_pine_orange_large', 'tree_pine_yellow_large', 'tree_pine_orange_medium',
+  'fence', 'fence_gate', 'fence_pillar', 'post_lantern', 'post_skull', 'shrine_candles', 'skull_candle', 'arch_gate', 'ribcage', 'bone_A',
+  // Weapons.
+  'crossbow_1handed', 'staff', 'quiver', 'sword_1handed', 'axe_2handed',
 ];
+const MODELS = [...CHARACTERS.map((n) => `chars/${n}`), ...PROPS.map((n) => `props/${n}`)];
 
-/** Palette of a model: each Kenney kit ships one texture shared by all its models. */
-function paletteOf(name) {
-  return name.slice(0, name.indexOf('/'));
-}
-
-/**
- * Loads the models. Every model of a kit uses the same palette texture, so each kit
- * shares one material: few texture uploads, few shader programs, cheap instancing.
- */
+/** Loads the models. Every file of a pack shares one texture: one material per texture. */
 export class Assets {
   constructor() {
     this.models = new Map();
-    this.animations = new Map();
-    this.geometries = new Map();
-    this.materials = {};
+    this.materials = new Map();
+    this.sizes = new Map();
+    this.clips = [];
+    this.mergedCache = new Map();
   }
 
   async load(onProgress) {
     const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
     const bundleUrl = window.ARCHER_MODEL_BUNDLE;
     const bundle = bundleUrl ? await (await fetch(bundleUrl)).json() : null;
     let loaded = 0;
-    await Promise.all(MODELS.map(async (name) => {
-      const folder = name.slice(0, name.lastIndexOf('/') + 1);
+    await Promise.all(MODELS.map(async (path) => {
       const gltf = bundle
-        ? await loader.parseAsync(Uint8Array.from(atob(bundle[name]), (c) => c.charCodeAt(0)).buffer, BASE_URL + folder)
-        : await loader.loadAsync(`${BASE_URL}${name}.glb`);
+        ? await loader.parseAsync(Uint8Array.from(atob(bundle[path]), (c) => c.charCodeAt(0)).buffer, BASE_URL)
+        : await loader.loadAsync(`${BASE_URL}${path}.glb`);
+      const name = path.slice(path.indexOf('/') + 1);
       this.register(name, gltf.scene);
-      if (gltf.animations.length) this.animations.set(name, gltf.animations);
+      // All the characters share one rig: the clips live in skeleton_minion.
+      if (gltf.animations.length) this.clips = gltf.animations;
       onProgress?.(++loaded / MODELS.length);
     }));
   }
 
   register(name, scene) {
-    const palette = paletteOf(name);
     scene.updateMatrixWorld(true);
     let skinned = false;
     scene.traverse((object) => {
       if (!object.isMesh) return;
       if (object.isSkinnedMesh) skinned = true;
-      // The Nature Kit uses flat colours: bake them into the vertices, one shared material.
-      if (palette === 'nature' && !object.geometry.attributes.color) {
-        const color = (object.material.color ?? new THREE.Color(1, 1, 1)).clone();
-        // The kit's teal greens clash with the grass: pull them toward yellow-green.
-        const hsl = color.getHSL({});
-        if (hsl.h > 0.26 && hsl.h < 0.56 && hsl.s > 0.15) color.setHSL(0.24 + (hsl.h - 0.26) * 0.22, hsl.s * 0.9, hsl.l * 1.02);
-        const count = object.geometry.attributes.position.count;
-        const colors = new Float32Array(count * 3);
-        for (let i = 0; i < count; i++) colors.set([color.r, color.g, color.b], i * 3);
-        object.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        if (!this.materials.nature) this.materials.nature = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
-      }
-      const shared = this.materials[palette];
+      const key = object.material.map?.image ? `${object.material.name}|${object.material.map.name || object.material.map.image.width}` : object.material.name;
+      const shared = this.materials.get(key);
       if (!shared) {
-        this.materials[palette] = object.material;
-        object.material.roughness = 0.75;
-        object.material.metalness = 0;
+        const m = object.material;
+        m.roughness = 0.72;
+        m.metalness = 0;
+        if (m.map) m.map.anisotropy = 4;
+        this.materials.set(key, m);
       } else if (object.material !== shared) {
         object.material.map?.dispose();
         object.material.dispose();
         object.material = shared;
       }
       object.castShadow = true;
-      object.receiveShadow = true;
+      object.receiveShadow = !skinned;
     });
     scene.userData.skinned = skinned;
+    const box = new THREE.Box3().setFromObject(scene);
+    this.sizes.set(name, box);
     this.models.set(name, scene);
   }
 
@@ -88,24 +86,21 @@ export class Assets {
     return source.userData.skinned ? SkeletonUtils.clone(source) : source.clone(true);
   }
 
-  /** The model merged into one geometry (for InstancedMesh). */
-  geometry(name) {
-    if (this.geometries.has(name)) return this.geometries.get(name);
-    const source = this.models.get(name);
-    const parts = [];
-    source.traverse((object) => {
-      if (!object.isMesh) return;
-      const part = object.geometry.clone().applyMatrix4(object.matrixWorld);
-      parts.push(part.index ? part : part.setIndex([...Array(part.attributes.position.count).keys()]));
-    });
-    const keep = ['position', 'normal', 'uv', 'color'].filter((key) => parts.every((part) => part.attributes[key]));
-    for (const part of parts) for (const key of Object.keys(part.attributes)) if (!keep.includes(key)) part.deleteAttribute(key);
-    const merged = parts.length === 1 ? parts[0] : mergeGeometries(parts, false);
-    this.geometries.set(name, merged);
-    return merged;
+  /** A clone scaled so its footprint (widest side) measures `width`, standing on y = 0. */
+  fitted(name, width) {
+    const prop = this.clone(name);
+    const box = this.sizes.get(name);
+    const s = width / Math.max(box.max.x - box.min.x, box.max.z - box.min.z, 1e-3);
+    const holder = new THREE.Group();
+    prop.scale.setScalar(s);
+    prop.position.set(-(box.min.x + box.max.x) / 2 * s, -box.min.y * s, -(box.min.z + box.max.z) / 2 * s);
+    holder.add(prop);
+    return holder;
   }
 
-  materialOf(name) {
-    return this.materials[paletteOf(name)];
+  /** Height of a model once fitted to `width`. */
+  fittedHeight(name, width) {
+    const box = this.sizes.get(name);
+    return (box.max.y - box.min.y) * width / Math.max(box.max.x - box.min.x, box.max.z - box.min.z, 1e-3);
   }
 }

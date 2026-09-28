@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CELL } from '../sim/arena.js';
+import { batchStatic } from './batch.js';
 
 /**
  * Themes: floor checker colours, what stands on blocks, pits and around the arena,
@@ -7,33 +9,37 @@ import { CELL } from '../sim/arena.js';
  */
 export const THEMES = {
   forest: {
-    floor: [0x9fd660, 0x93cc56], edge: 0x6fa844, ground: 0x3f6e2e, fog: 0x86b86a, sky: 0xbfe5a0,
+    floor: [0x9fd660, 0x93cc56], edge: 0x6fa844, ground: 0x4f8a38, fog: 0x86b86a, sky: 0xbfe5a0,
     sun: 0xfff1d6, sunIntensity: 2.6, hemi: [0xdff4ff, 0x4f7a3a], hemiIntensity: 1.4,
-    blocks: ['nature/rock_tallA', 'nature/stump_round', 'nature/log_stack', 'nature/plant_bushLarge'],
-    border: ['nature/tree_oak', 'nature/tree_default', 'nature/tree_fat', 'nature/tree_pineRoundA', 'nature/tree_detailed'],
-    props: ['nature/flower_redA', 'nature/flower_yellowA', 'nature/mushroom_redGroup', 'nature/grass_large', 'nature/plant_bush'],
+    // [model, footprint width] — KayKit props are fitted to the cell.
+    blocks: [['rock_single_C', 0.95, 1.6], ['rock_single_E', 1, 2.2], ['crate_A_big', 0.8], ['barrel', 0.72], ['tree_single_A', 0.95]],
+    border: [['tree_single_A', 1.1], ['tree_single_B', 1.15], ['trees_A_medium', 1.7], ['trees_B_medium', 1.6]],
+    outer: [['trees_A_large', 2.6], ['trees_B_large', 2.6], ['trees_A_medium', 2.2], ['tree_single_B', 1.4], ['tree_single_A', 1.3]],
+    props: [['rock_single_A', 0.5], ['resource_lumber', 0.9], ['target', 0.6], ['waterlily_A', 0.4], ['barrel', 0.5]],
     pit: { deep: 0x2f7fbf, shallow: 0x6fd0e8, foam: 0xe8fbff },
-    door: 'dungeon/gate',
+    door: ['fence_wood_straight_gate', 2.2],
   },
   dungeon: {
     floor: [0x8a88a8, 0x807e9e], edge: 0x5d5b78, ground: 0x2a2838, fog: 0x3a3850, sky: 0x2a2838,
     sun: 0xffd6a8, sunIntensity: 2.2, hemi: [0xc8c0ff, 0x3a3048], hemiIntensity: 1.2,
-    blocks: ['dungeon/column', 'dungeon/barrel', 'dungeon/stones', 'dungeon/rocks'],
-    border: ['dungeon/wall'],
-    props: ['dungeon/pot', 'dungeon/barrel', 'dungeon/banner', 'dungeon/chest'],
+    blocks: [['column', 0.8], ['barrel_large', 0.85], ['crates_stacked', 0.95], ['box_stacked', 0.95], ['keg_decorated', 0.95]],
+    walls: ['wall', 2],
+    outer: [['pillar', 1.2], ['pillar_decorated', 1.4], ['rubble_half', 2.4], ['barrel_small_stack', 1.4]],
+    props: [['chest_gold', 0.7], ['coin_stack_large', 0.55], ['barrel_small_stack', 0.8], ['banner_red', 0.6]],
     pit: { deep: 0x05040a, shallow: 0x251f3a, foam: 0x6a5aa0 },
-    door: 'dungeon/gate',
-    torches: true,
+    door: ['wall_gated', 2.2],
+    torch: ['torch_lit', 0.28, 0xffb050],
   },
   graveyard: {
     floor: [0x6f7f6a, 0x667862], edge: 0x4a5a48, ground: 0x283428, fog: 0x3c4a50, sky: 0x2c3844,
     sun: 0xc8d8ff, sunIntensity: 1.8, hemi: [0xa8c0ff, 0x2a3024], hemiIntensity: 1.3,
-    blocks: ['graveyard/gravestone-cross', 'graveyard/gravestone-round', 'graveyard/crypt-small', 'graveyard/rocks-tall', 'graveyard/pillar-large'],
-    border: ['graveyard/pine', 'graveyard/pine-crooked', 'graveyard/iron-fence'],
-    props: ['graveyard/pumpkin-carved', 'graveyard/grave', 'graveyard/debris', 'graveyard/trunk'],
+    blocks: [['gravestone', 0.9], ['grave_A', 0.95], ['grave_B', 0.95], ['pumpkin_orange_jackolantern', 0.8], ['shrine_candles', 0.75]],
+    walls: ['fence', 2],
+    outer: [['tree_dead_large', 1.8], ['tree_dead_medium', 1.5], ['tree_pine_orange_large', 2.6], ['tree_pine_yellow_large', 2.6], ['tree_pine_orange_medium', 2], ['crypt', 2.6]],
+    props: [['pumpkin_yellow', 0.5], ['skull_candle', 0.45], ['ribcage', 0.5], ['bone_A', 0.4], ['gravemarker_A', 0.45], ['coffin_decorated', 0.8]],
     pit: { deep: 0x0a1a18, shallow: 0x2a5a48, foam: 0x7fffc0 },
-    door: 'graveyard/iron-fence-border-gate',
-    torches: true,
+    door: ['fence_gate', 2.2],
+    torch: ['post_lantern', 0.5, 0x9fffd0],
   },
 };
 
@@ -151,8 +157,8 @@ export class ArenaView {
     this.disposables.push(groundGeometry, groundMaterial);
 
     // Checker floor: one tile per cell, vertex colours, a slight bevel shade at the rim.
-    const tile = new THREE.BoxGeometry(0.98, 0.2, 0.98);
-    tile.translate(0, -0.1, 0);
+    const tile = new RoundedBoxGeometry(0.97, 0.24, 0.97, 1, 0.07);
+    tile.translate(0, -0.12, 0);
     const floorMaterial = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
     const floor = new THREE.InstancedMesh(tile, floorMaterial, W * H);
     floor.receiveShadow = true;
@@ -198,74 +204,77 @@ export class ArenaView {
       }
     }
 
-    // Blocks: one prop per cell, turned and scaled a little at random.
+    const pick = (list) => list[Math.floor(random() * list.length)];
+    const place = ([name, width, stretch = 1], x, z, rotation, scale = 1) => {
+      const prop = this.assets.fitted(name, width * scale);
+      prop.scale.y = stretch;
+      prop.position.set(x, 0, z);
+      prop.rotation.y = rotation;
+      this.root.add(prop);
+      return prop;
+    };
+
+    // Blocks: one prop per cell, turned a little at random.
     for (let r = 0; r < H; r++) {
       for (let c = 0; c < W; c++) {
         if (arena.cells[r * W + c] !== CELL.BLOCK) continue;
-        const name = theme.blocks[Math.floor(random() * theme.blocks.length)];
-        const prop = this.assets.clone(name);
-        prop.position.set(c - halfW + 0.5, 0, r - halfH + 0.5);
-        prop.rotation.y = Math.floor(random() * 4) * (Math.PI / 2) + (random() - 0.5) * 0.3;
-        prop.scale.setScalar(name.includes('crypt') ? 0.72 : name.includes('column') || name.includes('pillar') ? 1.4 : 1.05);
-        this.root.add(prop);
+        place(pick(theme.blocks), c - halfW + 0.5, r - halfH + 0.5, Math.floor(random() * 4) * (Math.PI / 2) + (random() - 0.5) * 0.4);
       }
     }
 
-    // Around the arena: a ring of trees, walls or fences, and small props.
-    const border = theme.border;
-    const ring = [];
-    for (let x = -halfW - 0.5; x <= halfW + 0.5; x += 1) {
-      ring.push([x, -halfH - 0.7, 0], [x, halfH + 0.7, Math.PI]);
-    }
-    for (let z = -halfH + 0.5; z <= halfH - 0.5; z += 1) ring.push([-halfW - 0.7, z, Math.PI / 2], [halfW + 0.7, z, -Math.PI / 2]);
-    for (const [x, z, rot] of ring) {
-      // Leave the door opening free.
-      if (z < -halfH && Math.abs(x) < 1.1) continue;
-      const name = border[Math.floor(random() * border.length)];
-      const prop = this.assets.clone(name);
-      const wall = name.includes('wall') || name.includes('fence');
-      prop.position.set(x + (wall ? 0 : (random() - 0.5) * 0.3), 0, z + (wall ? 0 : (random() - 0.5) * 0.3));
-      prop.rotation.y = wall ? rot : random() * Math.PI * 2;
-      prop.scale.setScalar(wall ? 1.05 : 0.9 + random() * 0.5);
-      this.root.add(prop);
+    if (theme.walls) {
+      // Walls or fences in 2-unit segments; the near side stays low so it never hides the hero.
+      const [name, len] = theme.walls;
+      const segments = [];
+      for (let x = -halfW + len / 2 - 0.5; x < halfW + 0.5; x += len) segments.push([x, -halfH - 0.55, 0, 1], [x, halfH + 0.55, Math.PI, 0.35]);
+      for (let z = -halfH + len / 2 - 0.5; z < halfH + 0.5; z += len) segments.push([-halfW - 0.55, z, Math.PI / 2, 1], [halfW + 0.55, z, -Math.PI / 2, 1]);
+      for (const [x, z, rot, height] of segments) {
+        if (z < -halfH && Math.abs(x) < 1.2) continue;
+        const wall = place([name, len + 0.02], x, z, rot);
+        wall.scale.y = height;
+      }
+      // Corners.
+      for (const [x, z] of [[-halfW - 0.55, -halfH - 0.55], [halfW + 0.55, -halfH - 0.55]]) place(theme.outer[0], x, z, 0, 0.7);
+    } else {
+      // A ring of trees around the arena (lower in front of the camera).
+      const ring = [];
+      for (let x = -halfW - 0.5; x <= halfW + 0.5; x += 1) ring.push([x, -halfH - 0.75, 1], [x, halfH + 0.8, 0.55]);
+      for (let z = -halfH + 0.5; z <= halfH - 0.5; z += 1) ring.push([-halfW - 0.75, z, 1], [halfW + 0.75, z, 1]);
+      for (const [x, z, size] of ring) {
+        if (z < -halfH && Math.abs(x) < 1.3) continue;
+        const prop = place(pick(theme.border), x + (random() - 0.5) * 0.25, z + (random() - 0.5) * 0.25, random() * Math.PI * 2, (0.9 + random() * 0.3) * size);
+        prop.scale.y *= size < 1 ? 0.7 : 1;
+      }
     }
     // A second, looser ring further out for depth.
-    for (let i = 0; i < 44; i++) {
+    for (let i = 0; i < 40; i++) {
       const side = i % 4;
       const t = random();
       let x;
       let z;
-      if (side === 0) [x, z] = [-halfW - 2 - random() * 3, (t - 0.5) * (H + 6)];
-      else if (side === 1) [x, z] = [halfW + 2 + random() * 3, (t - 0.5) * (H + 6)];
-      else if (side === 2) [x, z] = [(t - 0.5) * (W + 8), -halfH - 2 - random() * 3];
-      else [x, z] = [(t - 0.5) * (W + 8), halfH + 2 + random() * 3];
-      const pool = theme.border.filter((b) => !b.includes('wall') && !b.includes('fence'));
-      const name = (pool.length ? pool : theme.props)[Math.floor(random() * (pool.length || theme.props.length))];
-      const prop = this.assets.clone(name);
-      prop.position.set(x, 0, z);
-      prop.rotation.y = random() * Math.PI * 2;
-      prop.scale.setScalar(1 + random() * 0.8);
-      this.root.add(prop);
+      if (side === 0) [x, z] = [-halfW - 2.2 - random() * 3, (t - 0.5) * (H + 6)];
+      else if (side === 1) [x, z] = [halfW + 2.2 + random() * 3, (t - 0.5) * (H + 6)];
+      else if (side === 2) [x, z] = [(t - 0.5) * (W + 8), -halfH - 2.4 - random() * 3];
+      else [x, z] = [(t - 0.5) * (W + 8), halfH + 1.6 + random() * 3];
+      // The near side is right under the camera: only small things there.
+      const far = side === 3 ? place(pick(theme.props), x, z, random() * Math.PI * 2, 0.9 + random() * 0.5) : place(pick(theme.outer), x, z, random() * Math.PI * 2, 0.85 + random() * 0.4);
+      // Far from the light's frustum: no shadow pass for them.
+      far.userData.noShadow = true;
     }
-    // Small props on the floor edges (no gameplay effect).
-    for (let i = 0; i < 6; i++) {
-      const name = theme.props[Math.floor(random() * theme.props.length)];
-      const prop = this.assets.clone(name);
+    // Small props just outside the floor (no gameplay effect).
+    for (let i = 0; i < 8; i++) {
       const onLeft = random() < 0.5;
-      prop.position.set(onLeft ? -halfW - 0.2 : halfW + 0.2, 0, (random() - 0.5) * (H - 2));
-      prop.rotation.y = random() * Math.PI * 2;
-      prop.scale.setScalar(0.8);
-      this.root.add(prop);
+      place(pick(theme.props), onLeft ? -halfW - 0.25 : halfW + 0.25, (random() - 0.5) * (H - 2), random() * Math.PI * 2).userData.noShadow = true;
     }
 
-    // Torches (dungeon, graveyard): glowing flames, no real lights (cheap on phones).
-    if (theme.torches) {
-      for (const [x, z] of [[-halfW - 0.4, -halfH + 3], [halfW + 0.4, -halfH + 3], [-halfW - 0.4, halfH - 3], [halfW + 0.4, halfH - 3]]) {
-        const post = this.assets.clone(themeId === 'graveyard' ? 'graveyard/lightpost-single' : 'graveyard/fire-basket');
-        post.position.set(x, 0, z);
-        this.root.add(post);
-        const flame = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshBasicMaterial({ color: themeId === 'graveyard' ? 0x9fffd0 : 0xffb050, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
-        flame.position.set(x, themeId === 'graveyard' ? 1.05 : 0.62, z);
+    // Torches: glowing flames, no real lights (cheap on phones).
+    if (theme.torch) {
+      const [name, width, flameColor] = theme.torch;
+      const top = this.assets.fittedHeight(name, width);
+      for (const [x, z] of [[-halfW - 0.3, -halfH + 3], [halfW + 0.3, -halfH + 3], [-halfW - 0.3, halfH - 3], [halfW + 0.3, halfH - 3]]) {
+        place([name, width], x, z, 0);
+        const flame = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), new THREE.MeshBasicMaterial({ color: flameColor, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+        flame.position.set(x, top * 0.92, z);
         this.root.add(flame);
         this.disposables.push(flame.geometry, flame.material);
         this.torches.push(flame);
@@ -273,17 +282,16 @@ export class ArenaView {
     }
 
     // The door at the top: closed until the room is cleared.
-    const door = this.assets.clone(theme.door);
-    door.position.set(0, 0, -halfH - 0.15);
-    door.scale.setScalar(theme.door.includes('gate') && theme.door.startsWith('dungeon') ? 2 : 1.6);
-    this.root.add(door);
-    const glowGeometry = new THREE.PlaneGeometry(1.6, 1.4);
+    const door = place(theme.door, 0, -halfH - 0.55, 0);
+    const glowGeometry = new THREE.PlaneGeometry(1.8, 1.6);
     const glowMaterial = new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    glow.position.set(0, 0.7, -halfH - 0.2);
+    glow.position.set(0, 0.8, -halfH - 0.6);
     this.root.add(glow);
     this.disposables.push(glowGeometry, glowMaterial);
-    this.door = { mesh: door, glow, open: 0, target: 0, baseY: 0 };
+    this.door = { mesh: door, glow, open: 0, target: 0, baseY: 0, height: this.assets.fittedHeight(theme.door[0], theme.door[1]) };
+    // Everything else stands still: bake it into one mesh per texture.
+    this.disposables.push(...batchStatic(this.root, new Set([door])));
   }
 
   waterMaterial(theme) {
@@ -317,7 +325,7 @@ export class ArenaView {
     const door = this.door;
     if (door) {
       door.open += (door.target - door.open) * Math.min(1, dt * 3);
-      door.mesh.position.y = -door.open * 1.4;
+      door.mesh.position.y = -door.open * (door.height + 0.1);
       door.glow.material.opacity = door.open * (0.45 + Math.sin(this.time * 4) * 0.15);
     }
   }

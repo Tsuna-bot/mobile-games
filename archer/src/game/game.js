@@ -171,7 +171,7 @@ export class Game {
   /** The chosen hero stands in the menu scene. */
   refreshMenuHero() {
     const hero = HEROES[this.save.heroes.selected] ?? HEROES.archer;
-    this.actors.createHero(hero.model, hero.cape);
+    this.actors.createHero(hero);
     this.actors.removePet();
   }
 
@@ -219,7 +219,7 @@ export class Game {
     this.actors.clearEnemies();
     const gear = this.gearStats();
     this.run = new Run(chapterIndex, gear, this.createListener());
-    this.actors.createHero(gear.hero.model, gear.hero.cape);
+    this.actors.createHero(gear.hero);
     if (this.run.pet) this.actors.createPet(this.run.pet.def.color);
     else this.actors.removePet();
     this.buildRoom();
