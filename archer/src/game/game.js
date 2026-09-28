@@ -382,12 +382,24 @@ export class Game {
         actors.addEnemy(enemy);
         fx.spawn(enemy.x, enemy.z);
       },
+      onShadow: (phase, x, z) => {
+        fx.shadowPuff(x, z);
+        actors.heroShadow(phase, x, z);
+        if (phase !== 'back') audio.whoosh();
+      },
+      onExecute: (enemy, boss) => {
+        fx.execute(enemy.x, enemy.z, boss);
+        this.floatWorld(enemy.x, 1.6 + enemy.def.scale * 0.4, enemy.z, boss ? 'Coup fatal !' : 'Exécution !', 'crit');
+        this.hitStop = Math.max(this.hitStop, 0.09);
+        this.shake = Math.min(1, this.shake + (boss ? 0.6 : 0.3));
+        this.haptics.pulse(boss ? HAPTIC.boss : [18, 30, 18]);
+      },
       onShoot: () => {
         actors.heroShoot();
         audio.shoot('ballista');
       },
       onEnemyHit: (enemy, damage, crit, source) => {
-        this.floatWorld(enemy.x, 1 + enemy.def.scale * 0.5, enemy.z, String(Math.round(damage)), crit ? 'crit' : '');
+        if (!source?.execute || enemy.def.boss) this.floatWorld(enemy.x, 1 + enemy.def.scale * 0.5, enemy.z, String(Math.round(damage)), crit ? 'crit' : '');
         const p = this.run.player;
         fx.hit(enemy.x, enemy.z, crit, source?.orb ?? (p.burn ? 'fire' : p.frost ? 'ice' : p.poison ? 'poison' : null));
         actors.enemyHit(enemy, crit);

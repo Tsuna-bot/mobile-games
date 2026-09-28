@@ -33,6 +33,33 @@ function makeBar(width, color, disposables) {
   return { group, fill, width, fillMaterial };
 }
 
+/** Assassin marks above a monster: 1 to 3 purple pips (shared textures). */
+function markMaterials() {
+  return [1, 2, 3].map((n) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 96;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < 3; i++) {
+      const x = 16 + i * 32;
+      ctx.beginPath();
+      ctx.moveTo(x, 4);
+      ctx.lineTo(x + 11, 16);
+      ctx.lineTo(x, 28);
+      ctx.lineTo(x - 11, 16);
+      ctx.closePath();
+      ctx.fillStyle = i < n ? (n === 3 ? '#ff5ad8' : '#b98cff') : 'rgba(20, 12, 40, 0.55)';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(20, 8, 40, 0.9)';
+      ctx.stroke();
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, fog: false });
+  });
+}
+
 /** Soft round shadow under actors (cheaper and clearer than relying on the shadow map). */
 function blobShadow(radius, disposables, texture) {
   const geometry = new THREE.PlaneGeometry(radius * 2.6, radius * 2.6);
@@ -75,7 +102,7 @@ class Animator {
       const clip = name && THREE.AnimationClip.findByName(clips, name);
       if (!clip) continue;
       const action = this.mixer.clipAction(clip);
-      if (key === 'die' || key === 'shoot' || key === 'hit' || key === 'aim' || key === 'spawn') {
+      if (key === 'die' || key === 'shoot' || key === 'hit' || key === 'aim' || key === 'spawn' || key === 'slash') {
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
@@ -96,7 +123,7 @@ class Animator {
 
   busy() {
     const a = this.actions[this.current];
-    return (this.current === 'shoot' || this.current === 'hit') && a?.isRunning();
+    return (this.current === 'shoot' || this.current === 'hit' || this.current === 'slash') && a?.isRunning();
   }
 }
 
@@ -133,6 +160,8 @@ export class Actors {
     this.cameraQuaternion = new THREE.Quaternion();
     this.hero = null;
     this.theme = 'forest';
+    this.markGeometry = new THREE.PlaneGeometry(0.54, 0.18);
+    this.markMats = null;
   }
 
   // ------------------------------------------------------------ hero
@@ -145,6 +174,21 @@ export class Actors {
     const gear = [];
     const figure = dressCharacter(this.assets, def.model, def.show, def.attach);
     body.add(figure);
+    // A tinted hero (the assassin) gets its own copies of the shared materials.
+    if (def.tint) {
+      const copies = new Map();
+      figure.traverse((o) => {
+        if (!o.isMesh) return;
+        let copy = copies.get(o.material);
+        if (!copy) {
+          copy = patchRim(o.material.clone());
+          if (copy.map) copy.color.setHex(def.tint);
+          copies.set(o.material, copy);
+          gear.push(copy);
+        }
+        o.material = copy;
+      });
+    }
 
     // Ring at the feet in the hero's colour, and a big health bar.
     const ringGeometry = new THREE.RingGeometry(0.36, 0.46, 40);
@@ -160,7 +204,7 @@ export class Actors {
     bar.group.position.y = 1.35;
     root.add(bar.group);
 
-    const animator = new Animator(figure, this.assets.clips, { idle: 'Idle', run: 'Running_A', shoot: def.shoot ?? '1H_Ranged_Shoot', die: 'Death_A', hit: 'Hit_A', cheer: 'Cheer' });
+    const animator = new Animator(figure, this.assets.clips, { idle: 'Idle', run: 'Running_A', shoot: def.shoot ?? '1H_Ranged_Shoot', die: 'Death_A', hit: 'Hit_A', cheer: 'Cheer', slash: '2H_Melee_Attack_Spin' });
     animator.play('idle');
     this.scene.add(root);
     this.hero = { root, body, figure, ring, ringMaterial, bar, animator, gear, yaw: Math.PI, flash: 0, shieldMesh: null };
@@ -225,6 +269,14 @@ export class Actors {
     this.hero?.animator.play('shoot', true, 1.6);
   }
 
+  /** Shadow strike: vanish (`out`), appear and slash (`in`), come back (`back`). */
+  heroShadow(phase, x, z) {
+    const hero = this.hero;
+    if (!hero) return;
+    hero.root.position.set(x, 0, z);
+    if (phase === 'in') hero.animator.play('slash', true, 2.2);
+  }
+
   heroHurt() {
     if (this.hero) this.hero.flash = 0.25;
   }
@@ -282,6 +334,13 @@ export class Actors {
       bar.group.visible = false;
       root.add(bar.group);
     }
+    // Assassin marks (only drawn when the monster carries some).
+    this.markMats ??= markMaterials();
+    const mark = new THREE.Mesh(this.markGeometry, this.markMats[0]);
+    mark.renderOrder = 32;
+    mark.visible = false;
+    mark.position.y = height + (skin.hover ? 0.8 : 0.5);
+    root.add(mark);
     const skeleton = skin.model.startsWith('skeleton');
     const clips = monster ? this.assets.clipsOf(skin.model) : this.assets.clips;
     const has = (name) => clips.some((c) => c.name === name);
@@ -297,7 +356,7 @@ export class Actors {
     // Skeletons climb out of the ground with their own animation; the others rise.
     body.position.y = animator.actions.spawn ? 0 : -1.2;
     this.scene.add(root);
-    const view = { enemy, root, body, model, materials, bar, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
+    const view = { enemy, root, body, model, materials, bar, mark, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
     enemy.view = view;
     this.enemies.set(enemy.id, view);
     return view;
@@ -316,6 +375,7 @@ export class Actors {
     view.dying = 1;
     view.animator.play('die', true, 1.4);
     if (view.bar) view.bar.group.visible = false;
+    view.mark.visible = false;
   }
 
   removeEnemy(view) {
@@ -338,6 +398,9 @@ export class Actors {
       const p = run.player;
       hero.root.position.x = damp(hero.root.position.x, p.x, 30, dt);
       hero.root.position.z = damp(hero.root.position.z, p.z, 30, dt);
+      const blink = p.shadow?.blink;
+      const vanished = Boolean(blink && blink.phase !== 'strike');
+      hero.ring.visible = !vanished;
       const desired = Math.atan2(p.dirX, p.dirZ);
       hero.yaw += shortestAngle(hero.yaw, desired) * Math.min(1, dt * 16);
       hero.body.rotation.y = hero.yaw;
@@ -350,7 +413,7 @@ export class Actors {
       hero.bar.fillMaterial.color.setHex(share < 0.3 ? 0xff5a4a : 0x5fe06a);
       hero.bar.group.quaternion.copy(this.cameraQuaternion);
       // Blink while invulnerable after a hit.
-      hero.body.visible = !(p.invulnerable > 0 && p.invulnerable < 0.5 && Math.floor(time * 20) % 2 === 0);
+      hero.body.visible = !vanished && !(p.invulnerable > 0 && p.invulnerable < 0.5 && !p.shadow && Math.floor(time * 20) % 2 === 0);
       hero.ringMaterial.opacity = 0.45 + Math.sin(time * 5) * 0.12;
       hero.shieldMesh.visible = Boolean(p.shieldReady);
       if (hero.shieldMesh.visible) hero.shieldMesh.material.opacity = 0.18 + Math.sin(time * 6) * 0.06;
@@ -412,6 +475,12 @@ export class Actors {
         else if (e.frozen > 0) m.emissive.setHex(0x3a8fd6);
         else if (e.state === 'aim' || e.state === 'slam') m.emissive.copy(TMP.setHex(0xff2a1a).multiplyScalar(0.35 + Math.sin(time * 30) * 0.2));
         else m.emissive.setRGB(0, 0, 0);
+      }
+      const marks = e.marks ?? 0;
+      view.mark.visible = marks > 0;
+      if (marks > 0) {
+        view.mark.material = this.markMats[marks - 1];
+        view.mark.quaternion.copy(this.cameraQuaternion);
       }
       if (view.bar) {
         view.bar.group.visible = e.hp < e.maxHp;

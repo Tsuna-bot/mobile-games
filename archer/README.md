@@ -5,7 +5,7 @@ Roguelite d’archer en 3D pour mobile (Three.js), dans l’esprit d’Archero :
 Crédits :
 - Modèles 3D **KayKit** de Kay Lousberg (CC0) : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon, Forest Nature Pack ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).
 - Monstres animés **Ultimate Monsters** de Quaternius (CC0, [quaternius.com](https://quaternius.com)).
-- Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast et Zeromancer.
+- Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer et Darkzaitzev.
 
 ## Jouer
 
@@ -45,7 +45,8 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
   - Améliorer avec l’or, **fusionner 3 exemplaires identiques** pour passer à la rareté suivante, démonter pour récupérer de l’or.
 - **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
 - **Talents** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
-- **Héros** : Lyra (archère encapuchonnée), Kael (rôdeur), Iris (mage, flèches de foudre), Bran (chevalier), chacun avec son modèle, son arme et son bonus.
+- **Héros** : Lyra (archère encapuchonnée), **Kaze (assassin, gratuit)**, Kael (rôdeur), Iris (mage, flèches de foudre), Bran (chevalier), chacun avec son modèle, son arme et son bonus.
+- **Kaze l’assassin** : lance des éventails de 3 kunais (qui traversent un ennemi), se déplace 25 % plus vite. Chaque kunai pose une marque (3 au maximum). **Frappe de l’ombre** automatique : il disparaît, réapparaît derrière un monstre affaibli (moins de 20 % de vie, ou 3 marques et moins de 45 %), l’achève d’un coup, enchaîne jusqu’à 3 exécutions si d’autres sont à portée, puis revient à sa place. Intouchable pendant le saut et 1 s après. Sur un boss sous 30 % de vie : coup fatal (6 fois ses dégâts) au lieu d’une exécution. Recharge 5 s.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
 - Un objet est trouvé à chaque chapitre gagné (et parfois après une bonne partie).
 

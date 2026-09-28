@@ -2,7 +2,7 @@
 // upgrades, merges, talents, heroes, pets. Pure functions (no DOM), testable in Node.
 
 import { BASES, BASE_IDS, RARITIES, SLOTS, itemStats, upgradeCost } from '../data/gear.js';
-import { CHESTS, HEROES, PETS, TALENTS, petPower, talentCost } from '../data/meta.js';
+import { CHESTS, FREE_HEROES, HEROES, PETS, TALENTS, petPower, talentCost } from '../data/meta.js';
 
 const HOUR = 3600 * 1000;
 
@@ -29,7 +29,7 @@ export function ensureProfile(save) {
   for (const it of save.inventory) it.level = Math.max(1, Math.min(RARITIES[it.rarity].cap, Math.floor(it.level) || 1));
   for (const [slot, uid] of Object.entries(save.equipped)) if (!save.inventory.some((it) => it.uid === uid)) delete save.equipped[slot];
   save.heroes.owned = save.heroes.owned.filter((id) => HEROES[id]);
-  if (!save.heroes.owned.includes('archer')) save.heroes.owned.unshift('archer');
+  for (const id of [...FREE_HEROES].reverse()) if (!save.heroes.owned.includes(id)) save.heroes.owned.unshift(id);
   if (!save.heroes.owned.includes(save.heroes.selected)) save.heroes.selected = 'archer';
   if (!save.gifts || typeof save.gifts !== 'object') save.gifts = {};
   // Starting kit: a rare bow and armour, a ring and a pet, so the first runs feel good.

@@ -18,6 +18,7 @@ export const COLORS = {
   danger: new THREE.Color(0xff3a2a),
   heal: new THREE.Color(0x7dff9a),
   magic: new THREE.Color(0xd08cff),
+  shadow: new THREE.Color(0xa070ff),
 };
 
 const SHOT_COLORS = { orb: 0xff3a6a, arrow: 0xf4ecd8, bone: 0xf4f0e0, rock: 0xa07a50 };
@@ -55,6 +56,20 @@ export class Fx {
     this.arrowMesh = new THREE.InstancedMesh(arrowGeometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff6e0).multiplyScalar(1.25), toneMapped: false }), 240);
     this.arrowMesh.frustumCulled = false;
     scene.add(this.arrowMesh);
+
+    // Kunai: a dark steel blade with a ring pommel (the assassin's throws).
+    const blade = new THREE.OctahedronGeometry(0.08, 0);
+    blade.scale(0.7, 0.25, 2.6);
+    blade.translate(0, 0, 0.12);
+    const grip = new THREE.CylinderGeometry(0.018, 0.018, 0.16, 5);
+    grip.rotateX(Math.PI / 2);
+    grip.translate(0, 0, -0.08);
+    const pommel = new THREE.TorusGeometry(0.035, 0.012, 5, 10);
+    pommel.translate(0, 0, -0.19);
+    const kunai = mergeGeometries([blade, grip.toNonIndexed(), pommel.toNonIndexed()]);
+    this.kunaiMesh = new THREE.InstancedMesh(kunai, new THREE.MeshStandardMaterial({ color: 0x9aa4c0, metalness: 0.85, roughness: 0.25, emissive: 0x4a2a8a, emissiveIntensity: 0.6 }), 240);
+    this.kunaiMesh.frustumCulled = false;
+    scene.add(this.kunaiMesh);
 
     // Monster shots: a bright core and an additive halo.
     const sphere = new THREE.SphereGeometry(1, 12, 8);
@@ -125,6 +140,20 @@ export class Fx {
     const c = element === 'fire' ? COLORS.fire : element === 'ice' ? COLORS.ice : element === 'poison' ? COLORS.poison : COLORS.spark;
     this.sparks.burst(x, Y, z, this.count(crit ? 14 : 7), crit ? 4 : 2.6, c, crit ? 0.16 : 0.11, 0.3, { gravity: 5, brightness: 1.7 });
     if (crit) this.flash(x, Y, z, 0.9, COLORS.spark);
+  }
+
+  /** Assassin vanishing / appearing: a burst of violet smoke and sparks. */
+  shadowPuff(x, z) {
+    this.puffs.burst(x, 0.4, z, this.count(12), 1.6, COLORS.shadow, 0.35, 0.45, { upward: 0.8, drag: 3, endSize: 0.8 });
+    this.sparks.burst(x, 0.6, z, this.count(14), 3, COLORS.shadow, 0.1, 0.35, { gravity: 1, brightness: 2 });
+  }
+
+  /** Execution: a bright crossed slash on the monster and a ring. */
+  execute(x, z, boss) {
+    const c = boss ? COLORS.fire : COLORS.shadow;
+    this.flash(x, 0.7, z, boss ? 2.2 : 1.5, c);
+    this.sparks.burst(x, 0.6, z, this.count(boss ? 40 : 24), boss ? 6 : 4.5, c, 0.14, 0.45, { gravity: 3, brightness: 2.2 });
+    this.ring(x, z, boss ? 2.6 : 1.6, 0.45, c);
   }
 
   flash(x, y, z, size, c = COLORS.spark) {
@@ -288,13 +317,14 @@ export class Fx {
       b.line.material.opacity = Math.min(1, b.life * 10);
     }
     if (!run) {
-      this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
+      this.kunaiMesh.count = this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
       return;
     }
 
     // Arrows (+ a faint trail); staff and pet shots are glowing orbs, blades spin.
     let n = 0;
     let no = 0;
+    let nk = 0;
     for (const a of run.arrows) {
       if (a.kind === 'staff' || a.kind === 'pet') {
         if (no >= 120) continue;
@@ -307,6 +337,16 @@ export class Fx {
         color.setHex(a.kind === 'pet' ? a.color : 0xb890ff);
         this.heroOrbs.setColorAt(no++, hdrColor.copy(color).multiplyScalar(HDR.orb));
         this.sparks.emit(a.x, Y, a.z, 0, 0, 0, color, a.kind === 'pet' ? 0.2 : 0.3, 0.22, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.8 });
+        continue;
+      }
+      if (a.kind === 'kunai') {
+        if (nk >= 240) continue;
+        dummy.position.set(a.x, Y, a.z);
+        dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
+        dummy.scale.setScalar(1.1);
+        dummy.updateMatrix();
+        this.kunaiMesh.setMatrixAt(nk++, dummy.matrix);
+        if ((a.id + Math.floor(t * 60)) % 2 === 0) this.sparks.emit(a.x - a.dx * 0.2, Y, a.z - a.dz * 0.2, 0, 0, 0, COLORS.shadow, 0.1, 0.16, { endSize: 0.02, drag: 0, brightness: 1.4, opacity: 0.7 });
         continue;
       }
       if (n >= 240) break;
@@ -324,6 +364,8 @@ export class Fx {
     }
     this.arrowMesh.count = n;
     this.arrowMesh.instanceMatrix.needsUpdate = true;
+    this.kunaiMesh.count = nk;
+    this.kunaiMesh.instanceMatrix.needsUpdate = true;
     this.heroOrbs.count = no;
     this.heroOrbs.instanceMatrix.needsUpdate = true;
     if (this.heroOrbs.instanceColor) this.heroOrbs.instanceColor.needsUpdate = true;

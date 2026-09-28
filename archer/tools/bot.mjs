@@ -11,6 +11,8 @@ const CHAPTER = Number(args[1] ?? 1) - 1;
 const VERBOSE = ARGV.includes('--verbose');
 // --gear=mid / late: typical equipment after ~10 / ~30 runs.
 const GEAR = ARGV.find((a) => a.startsWith('--gear='))?.slice(7);
+// --hero=assassin: plays with another hero.
+const HERO = ARGV.find((a) => a.startsWith('--hero='))?.slice(7);
 
 function gearPreset(name) {
   if (!name) return {};
@@ -20,12 +22,17 @@ function gearPreset(name) {
   const late = name === 'late';
   const put = (base, rarity, level) => equip(save, addItem(save, base, rarity, level).uid);
   // The kit every new player starts with.
-  if (name === 'start') return runGear(ensureProfile(defaultSave()));
+  if (name === 'start') {
+    const fresh = ensureProfile(defaultSave());
+    if (HERO) fresh.heroes.selected = HERO;
+    return runGear(fresh);
+  }
   if (name === 'early') {
     put('bow', 0, 5);
     put('leather', 0, 5);
     put('bear', 0, 3);
     for (const id of ['strength', 'vigor', 'agility', 'luck', 'vigor']) save.talents[id] = (save.talents[id] ?? 0) + 1;
+    if (HERO) save.heroes.selected = HERO;
     return runGear(save);
   }
   put('bow', late ? 2 : 1, late ? 22 : 10);
@@ -37,6 +44,7 @@ function gearPreset(name) {
   const rolls = late ? 45 : 15;
   const ids = ['strength', 'vigor', 'agility', 'recovery', 'guard', 'looting', 'luck', 'swift'];
   for (let i = 0; i < rolls; i++) save.talents[ids[i % ids.length]] = (save.talents[ids[i % ids.length]] ?? 0) + 1;
+  if (HERO) save.heroes.selected = HERO;
   return runGear(save);
 }
 const DT = 1 / 60;
@@ -120,8 +128,9 @@ export function pick(run) {
 }
 
 export function play(chapter, gear = {}, seed = undefined) {
-  const events = { hits: 0, damageTaken: 0, by: {} };
+  const events = { hits: 0, damageTaken: 0, by: {}, executions: 0 };
   const run = new Run(chapter, gear, {
+    onExecute: () => { events.executions++; },
     onPlayerHit: (d, e) => { events.hits++; events.damageTaken += d; const k = e ? `touch:${e.def.id}` : 'shot/zone'; events.by[k] = (events.by[k] ?? 0) + d; },
   }, seed);
   run.begin(pick(run));
@@ -143,5 +152,6 @@ if (ARGV[1]?.endsWith('bot.mjs')) {
   const by = {};
   for (const r of results) for (const [k, v] of Object.entries(r.by)) by[k] = (by[k] ?? 0) + v;
   console.log('damage by source', JSON.stringify(Object.fromEntries(Object.entries(by).sort((a, b) => b[1] - a[1]))));
+  console.log(`executions per run ${(results.reduce((a, r) => a + r.executions, 0) / RUNS).toFixed(1)}`);
   console.log(`chapter ${CHAPTER + 1}: won ${won}/${RUNS}, reached rooms [${results.map((r) => r.room).join(',')}], levels [${results.map((r) => r.level).join(',')}], minutes [${results.map((r) => (r.time / 60).toFixed(1)).join(',')}]`);
 }

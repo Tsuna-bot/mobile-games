@@ -9,7 +9,7 @@ const TONES = {
   fire: ['fire', 'fireOrb', 'deathBlast', 'rage', 'salamander'],
   ice: ['ice', 'iceOrb', 'frostling', 'shield', 'guard', 'mail', 'slot-armor', 'hero-knight'],
   poison: ['poison', 'recovery', 'luck', 'serpent', 'heal', 'life'],
-  arcane: ['bolt', 'boltOrb', 'staff', 'robe', 'agility', 'bat', 'hero-mage', 'slot-amulet', 'chest-pet'],
+  arcane: ['bolt', 'boltOrb', 'staff', 'robe', 'agility', 'bat', 'hero-mage', 'hero-assassin', 'shuriken', 'slot-amulet', 'chest-pet'],
   blood: ['vitality', 'bloodthirst', 'vigor'],
   wind: ['dodge', 'haste', 'swift', 'falcon', 'owl', 'wolf', 'bear', 'leather', 'slot-pet', 'slot-ring', 'hero-ranger', 'hero-archer', 'chest-free'],
 };

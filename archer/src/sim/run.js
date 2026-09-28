@@ -21,6 +21,9 @@ export const STATE = Object.freeze({
 });
 
 const P = CONFIG.player;
+// Assassin tuning: kunai fans and the shadow strike.
+const KUNAI = { damage: 0.4, marks: 3 };
+const SHADOW = { share: 0.2, markedShare: 0.45, bossShare: 0.3, bossHit: 6, range: 6, chain: 3, cooldown: 5, vanish: 0.12, strike: 0.1, untouchable: 1 };
 const ROOMS = 10;
 const SPAWN_DELAY = 0.7;
 const ORB_RADIUS = 1.35;
@@ -88,6 +91,9 @@ export class Run {
       healOnRoom: gear.healOnRoom ?? 0,
       coinMul: gear.coinMul ?? 1,
       weapon: gear.weapon ?? 'bow',
+      // Assassin: kunai fans, marks and the shadow strike.
+      kunai: gear.kunai ?? 0,
+      shadow: gear.shadow ? { cooldown: 1.5, blink: null } : null,
     };
   }
 
@@ -277,6 +283,7 @@ export class Run {
         }
       }
     }
+    if (p.shadow && this.updateShadow(dt)) return;
     const len = Math.min(1, Math.hypot(input.x, input.z));
     p.moving = len > 0.12;
     if (p.moving) {
@@ -314,6 +321,110 @@ export class Run {
     if (p.multishot) p.volley = { timer: 0.12, left: p.multishot };
   }
 
+  // ------------------------------------------------------------ assassin
+
+  /** A monster the shadow strike can finish: low life, or marked three times and hurt. */
+  canExecute(e) {
+    if (e.dead || e.spawning > 0) return false;
+    const share = e.hp / e.maxHp;
+    if (e.def.boss) return share <= SHADOW.bossShare;
+    return share <= SHADOW.share || ((e.marks ?? 0) >= KUNAI.marks && share <= SHADOW.markedShare);
+  }
+
+  shadowTarget(x, z, exclude = null) {
+    let best = null;
+    let bestD = SHADOW.range * SHADOW.range;
+    for (const e of this.enemies) {
+      if (e === exclude || !this.canExecute(e)) continue;
+      const d = (e.x - x) ** 2 + (e.z - z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The shadow strike: vanish, appear behind a weak monster, finish it (bosses take a
+   * huge critical hit instead), chain to another weak one (up to 3), then come back.
+   * Untouchable during the whole move and one second after. Returns true while busy.
+   */
+  updateShadow(dt) {
+    const p = this.player;
+    const sh = p.shadow;
+    const b = sh.blink;
+    if (!b) {
+      sh.cooldown -= dt;
+      if (sh.cooldown > 0 || this.state !== STATE.FIGHT) return false;
+      const target = this.shadowTarget(p.x, p.z);
+      if (!target) return false;
+      sh.blink = { target, homeX: p.x, homeZ: p.z, timer: SHADOW.vanish, phase: 'out', chain: 0 };
+      p.volley = null;
+      p.invulnerable = Math.max(p.invulnerable, 2);
+      this.listener.onShadow?.('out', p.x, p.z, target);
+      return true;
+    }
+    p.invulnerable = Math.max(p.invulnerable, 0.5);
+    b.timer -= dt;
+    if (b.timer > 0) return true;
+    if (b.phase === 'out') {
+      const e = b.target;
+      if (e.dead) return this.shadowNext(b);
+      // Appear behind the monster (seen from where the hero came from).
+      const dx = e.x - p.x;
+      const dz = e.z - p.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const back = e.radius + 0.35;
+      p.x = Math.max(-this.arena.halfW + p.radius, Math.min(this.arena.halfW - p.radius, e.x + (dx / d) * back));
+      p.z = Math.max(-this.arena.halfH + p.radius, Math.min(this.arena.halfH - p.radius, e.z + (dz / d) * back));
+      p.dirX = -dx / d;
+      p.dirZ = -dz / d;
+      b.phase = 'strike';
+      b.timer = SHADOW.strike;
+      this.listener.onShadow?.('in', p.x, p.z, e);
+      return true;
+    }
+    if (b.phase === 'strike') {
+      const e = b.target;
+      if (!e.dead) {
+        e.marks = 0;
+        const boss = e.def.boss;
+        const damage = boss ? this.damage * SHADOW.bossHit * (1 + p.bossDamage) : e.hp + 1;
+        this.listener.onExecute?.(e, boss, damage);
+        this.damageEnemy(e, damage, true, { execute: true });
+      }
+      return this.shadowNext(b);
+    }
+    // phase 'back': reappear where the move started.
+    p.x = b.homeX;
+    p.z = b.homeZ;
+    sh.blink = null;
+    sh.cooldown = SHADOW.cooldown;
+    p.invulnerable = Math.max(p.invulnerable, SHADOW.untouchable);
+    p.cooldown = Math.min(p.cooldown, 0.1);
+    this.listener.onShadow?.('back', p.x, p.z, null);
+    return false;
+  }
+
+  /** After a strike: chain to another weak monster close by, else head back. */
+  shadowNext(b) {
+    const p = this.player;
+    const next = b.chain < SHADOW.chain - 1 && !b.target.def.boss && b.target.dead ? this.shadowTarget(p.x, p.z, b.target) : null;
+    if (next && this.state === STATE.FIGHT) {
+      b.chain++;
+      b.target = next;
+      b.phase = 'out';
+      b.timer = SHADOW.vanish * 0.7;
+      this.listener.onShadow?.('out', p.x, p.z, next);
+      return true;
+    }
+    b.phase = 'back';
+    b.timer = SHADOW.vanish;
+    this.listener.onShadow?.('out', p.x, p.z, null);
+    return true;
+  }
+
   /** Nearest monster in sight; otherwise the nearest one at all. */
   pickTarget() {
     const p = this.player;
@@ -344,10 +455,26 @@ export class Run {
     }
     for (let i = 0; i < p.side; i++) angles.push({ a: base + Math.PI / 2 + i * 0.25, offset: 0 }, { a: base - Math.PI / 2 - i * 0.25, offset: 0 });
     for (let i = 0; i < p.rear; i++) angles.push({ a: base + Math.PI + (i - (p.rear - 1) / 2) * 0.3, offset: 0 });
-    for (const { a, offset } of angles) {
+    // Kunai: every direction becomes a fan of three blades.
+    if (p.kunai) {
+      const fan = [];
+      for (const shot of angles) fan.push({ ...shot, fan: true }, { a: shot.a + 0.2, offset: shot.offset, fan: true }, { a: shot.a - 0.2, offset: shot.offset, fan: true });
+      angles.length = 0;
+      angles.push(...fan);
+    }
+    for (const { a, offset, fan } of angles) {
       const dx = Math.sin(a);
       const dz = Math.cos(a);
-      const w = p.weapon;
+      const w = fan ? 'kunai' : p.weapon;
+      if (fan) {
+        this.arrows.push({
+          id: this.nextId++, kind: 'kunai',
+          x: p.x + dx * 0.35 + dz * offset, z: p.z + dz * 0.35 - dx * offset,
+          dx, dz, speed: P.arrowSpeed * 1.3, damage: this.damage * KUNAI.damage, life: 1.6,
+          bounces: p.wallBounce, ricochets: p.ricochet, hits: new Set(), view: null, pierceLeft: 1, homing: 0, marks: true,
+        });
+        continue;
+      }
       this.arrows.push({
         id: this.nextId++, kind: w,
         x: p.x + dx * 0.35 + dz * offset, z: p.z + dz * 0.35 - dx * offset,
@@ -440,6 +567,7 @@ export class Run {
         arrow.dead = true;
         return true;
       }
+      if (arrow.marks && !e.dead) e.marks = Math.min(KUNAI.marks, (e.marks ?? 0) + 1);
       this.hitEnemy(e, arrow.damage, arrow);
       if (arrow.pierceLeft > 0) {
         arrow.pierceLeft--;

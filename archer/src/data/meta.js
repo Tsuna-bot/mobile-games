@@ -36,12 +36,19 @@ export function petPower(rarityMul, level) {
 /** Heroes: model, cape colour, passive, price in gems. */
 export const HEROES = {
   archer: { id: 'archer', name: 'Lyra', role: 'Archère', model: 'rogue_hooded', show: ['1H_Crossbow'], shoot: '1H_Ranged_Shoot', cape: 0x3fa9ff, price: 0, text: 'Équilibrée. Critique +5 %.', stats: { crit: 0.05 } },
+  assassin: {
+    id: 'assassin', name: 'Kaze', role: 'Assassin', model: 'rogue_hooded', show: ['Knife', 'Knife_Offhand'], shoot: 'Throw', tint: 0x6a5c96, cape: 0xa06bff, price: 0,
+    text: 'Kunais en éventail, très rapide. Se téléporte pour achever les ennemis affaiblis.',
+    stats: { speedMul: 0.25, dodge: 0.05, kunai: 1, shadow: 1 },
+  },
   ranger: { id: 'ranger', name: 'Kael', role: 'Rôdeur', model: 'rogue', show: ['2H_Crossbow'], shoot: '2H_Ranged_Shoot', cape: 0x5fe06a, price: 250, text: 'Vitesse +12 %, esquive +6 %.', stats: { speedMul: 0.12, dodge: 0.06 } },
   mage: { id: 'mage', name: 'Iris', role: 'Mage', model: 'mage', show: ['2H_Staff'], shoot: 'Spellcast_Shoot', cape: 0xc070ff, price: 450, text: 'Flèches de foudre dès le départ.', stats: { bolt: 1 } },
   knight: { id: 'knight', name: 'Bran', role: 'Chevalier', model: 'knight', show: ['Round_Shield'], attach: 'crossbow_1handed', shoot: '1H_Ranged_Shoot', cape: 0xff5a4a, price: 700, text: 'Vie +30 %, dégâts subis −10 %.', stats: { hpMul: 0.3, armor: 0.1 } },
 };
 
-export const HERO_ORDER = ['archer', 'ranger', 'mage', 'knight'];
+export const HERO_ORDER = ['archer', 'assassin', 'ranger', 'mage', 'knight'];
+/** Heroes every player owns from the start. */
+export const FREE_HEROES = ['archer', 'assassin'];
 
 /** Chest odds by rarity index [common, rare, epic, legendary]. */
 export const CHESTS = {
