@@ -6,17 +6,19 @@ export const CONFIG = {
   player: {
     radius: 0.32,
     speed: 3.3,
-    hp: 600,
+    hp: 750,
     damage: 85,
     rate: 1.25, // shots per second
     arrowSpeed: 13,
     // Time standing still before the first shot (Archero: stop to shoot).
     aimDelay: 0.12,
-    invulnerable: 0.55,
+    invulnerable: 0.75,
     crit: 0.05,
     critDamage: 2,
   },
   xp: { base: 26, growth: 1.22 },
+  // Global difficulty: monster damage and health multipliers.
+  difficulty: { damage: 0.8, health: 0.85, roomGrowth: 0.05 },
   pickupRadius: 1.4,
   camera: { fov: 40, pitchDeg: 57, distance: 17.5 },
   quality: {

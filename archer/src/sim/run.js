@@ -154,7 +154,7 @@ export class Run {
 
   spawn(type, x, z, delay = SPAWN_DELAY) {
     const def = ENEMIES[type];
-    const scale = this.chapter.hp * (1 + 0.07 * this.roomIndex);
+    const scale = this.chapter.hp * CONFIG.difficulty.health * (1 + CONFIG.difficulty.roomGrowth * this.roomIndex);
     const enemy = {
       id: this.nextId++, def, x, z, radius: def.radius, dirX: 0, dirZ: 1,
       hp: Math.round(def.hp * scale), maxHp: Math.round(def.hp * scale), power: Math.sqrt(scale),
@@ -766,7 +766,7 @@ export class Run {
       this.listener.onShieldBlock?.();
       return;
     }
-    const damage = Math.round(amount * (1 - Math.min(0.6, p.armor)));
+    const damage = Math.round(amount * CONFIG.difficulty.damage * (1 - Math.min(0.6, p.armor)));
     p.hp -= damage;
     this.listener.onPlayerHit?.(damage, enemy);
     if (p.hp <= 0) {

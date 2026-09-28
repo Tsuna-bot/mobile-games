@@ -30,8 +30,8 @@ export function loadSave() {
     const s = data.settings ?? {};
     for (const key of ['sound', 'music', 'haptics']) if (typeof s[key] === 'boolean') save.settings[key] = s[key];
     if (['auto', 'low', 'medium', 'high', 'ultra'].includes(s.quality)) save.settings.quality = s.quality;
-    // Later versions add their own fields; keep whatever they stored.
-    for (const key of ['gear', 'talents', 'pets', 'heroes', 'inventory']) if (data[key] !== undefined) save[key] = data[key];
+    // Progression fields (checked and repaired by ensureProfile).
+    for (const key of ['talents', 'heroes', 'inventory', 'equipped', 'nextUid', 'freeChestAt', 'talentRolls', 'gifts']) if (data[key] !== undefined) save[key] = data[key];
   } catch {
     // Corrupt save: start fresh rather than crash.
   }

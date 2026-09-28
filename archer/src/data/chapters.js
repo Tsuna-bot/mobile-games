@@ -99,7 +99,7 @@ export const CHAPTERS = [
     id: 'graveyard',
     name: 'Cimetière maudit',
     theme: 'graveyard',
-    hp: 3.8,
+    hp: 3.2,
     boss: 'count',
     rooms: [
       [['ghost', 3], ['zombie', 1]],

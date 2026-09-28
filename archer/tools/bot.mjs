@@ -19,6 +19,8 @@ function gearPreset(name) {
   save.equipped = {};
   const late = name === 'late';
   const put = (base, rarity, level) => equip(save, addItem(save, base, rarity, level).uid);
+  // The kit every new player starts with.
+  if (name === 'start') return runGear(ensureProfile(defaultSave()));
   if (name === 'early') {
     put('bow', 0, 5);
     put('leather', 0, 5);

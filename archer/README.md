@@ -37,6 +37,8 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 
 ## Progression (entre les parties)
 
+- **Départ** : arc et tunique rares, anneau du loup, chouette, 2 000 pièces d’or et 300 gemmes (les joueurs des versions précédentes reçoivent aussi l’or et les gemmes, une fois).
+
 - **Équipement** (6 emplacements) : arme, armure, 2 anneaux, amulette, familier.
   - 4 armes qui changent le tir : **Arc** (équilibré), **Arbalète** (lente, carreaux qui traversent un ennemi), **Bâton arcanique** (orbes à tête chercheuse), **Lames tournoyantes** (très rapides, rebondissent).
   - 4 raretés : Commun, Rare, Épique, Légendaire (niveau max 10 / 20 / 30 / 40).
@@ -53,17 +55,17 @@ Un bot joue les chapitres avec la vraie simulation (esquive les tirs, sort des c
 
 ```bash
 cd archer
-node tools/bot.mjs 20 1                # chapitre 1, sans équipement
-node tools/bot.mjs 16 2 --gear=early   # chapitre 2 avec l’équipement de ~5 parties
+node tools/bot.mjs 20 1 --gear=start   # chapitre 1 avec l’équipement de départ
+node tools/bot.mjs 16 2 --gear=start   # chapitre 2, équipement de départ jamais amélioré
 node tools/bot.mjs 16 3 --gear=mid     # chapitre 3 avec l’équipement de ~25 parties
 ```
 
+Réglage global dans `src/config.js` (`difficulty` : dégâts et vie des monstres, hausse par salle).
+
 | Équipement | Chapitre 1 | Chapitre 2 | Chapitre 3 |
 | --- | --- | --- | --- |
-| aucun | gagne ~60 % | — | — |
-| début (~5 parties) | — | atteint parfois le boss | bloqué tôt |
-| moyen (~25 parties) | — | gagne ~80 % | atteint le boss, gagne ~15 % |
-| avancé | — | gagne toujours | gagne toujours |
+| départ, jamais amélioré | gagne ~95 % | gagne ~60 % | atteint le boss, gagne ~20 % |
+| moyen (~25 parties) | — | — | gagne ~80 % |
 
 Un humain esquive mieux que le bot : c’est une borne basse.
 

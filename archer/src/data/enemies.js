@@ -56,7 +56,7 @@ export const ENEMIES = {
   },
   count: {
     id: 'count', name: 'Dragon spectral', model: 'q_dragon', height: 3, hover: true, ai: 'bossCount', boss: true,
-    hp: 8600, speed: 1.2, radius: 0.8, touch: 120, shot: 95, shotSpeed: 5.5, xp: 100, coins: 80, scale: 2.4,
+    hp: 7000, speed: 1.2, radius: 0.8, touch: 120, shot: 80, shotSpeed: 5.5, xp: 100, coins: 80, scale: 2.4,
     blurb: 'Se téléporte, lâche des chauves-souris et des éventails de flammes.',
   },
 };

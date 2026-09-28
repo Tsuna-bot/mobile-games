@@ -17,15 +17,42 @@ export function ensureProfile(save) {
   if (!Number.isFinite(save.freeChestAt)) save.freeChestAt = 0;
   // Drop anything the game no longer knows.
   save.inventory = save.inventory.filter((it) => it && (BASES[it.base] || PETS[it.base]) && RARITIES[it.rarity]);
+  // Older versions lost `nextUid` on reload and could hand out the same uid twice: renumber.
+  const seen = new Set();
+  let top = 0;
+  for (const it of save.inventory) if (Number.isFinite(it.uid)) top = Math.max(top, it.uid);
+  for (const it of save.inventory) {
+    if (!Number.isFinite(it.uid) || seen.has(it.uid)) it.uid = ++top;
+    seen.add(it.uid);
+  }
+  save.nextUid = Math.max(save.nextUid, top + 1);
   for (const it of save.inventory) it.level = Math.max(1, Math.min(RARITIES[it.rarity].cap, Math.floor(it.level) || 1));
   for (const [slot, uid] of Object.entries(save.equipped)) if (!save.inventory.some((it) => it.uid === uid)) delete save.equipped[slot];
   save.heroes.owned = save.heroes.owned.filter((id) => HEROES[id]);
   if (!save.heroes.owned.includes('archer')) save.heroes.owned.unshift('archer');
   if (!save.heroes.owned.includes(save.heroes.selected)) save.heroes.selected = 'archer';
-  // Starting kit.
+  if (!save.gifts || typeof save.gifts !== 'object') save.gifts = {};
+  // Starting kit: a rare bow and armour, a ring and a pet, so the first runs feel good.
   if (!save.inventory.length) {
-    equip(save, addItem(save, 'bow', 0).uid);
-    equip(save, addItem(save, 'leather', 0).uid);
+    equip(save, addItem(save, 'bow', 1, 5).uid);
+    equip(save, addItem(save, 'leather', 1, 5).uid);
+    equip(save, addItem(save, 'wolf', 0, 3).uid);
+    equip(save, addItem(save, 'owl', 0, 1).uid);
+  }
+  // Welcome purse, once per save (new players and players of earlier versions).
+  if (!save.gifts.welcome) {
+    save.gifts.welcome = true;
+    save.coins += 2000;
+    save.gems += 300;
+  }
+  // Older versions forgot what was equipped on reload: put the best item back in each empty slot.
+  for (const slot of SLOTS) {
+    if (save.equipped[slot.id]) continue;
+    const kind = slot.kind ?? slot.id;
+    const taken = new Set(Object.values(save.equipped));
+    const candidates = save.inventory.filter((it) => !taken.has(it.uid) && itemDef(it).slot === kind);
+    candidates.sort((a, b) => b.rarity - a.rarity || b.level - a.level);
+    if (candidates[0]) save.equipped[slot.id] = candidates[0].uid;
   }
   return save;
 }
