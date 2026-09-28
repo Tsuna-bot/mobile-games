@@ -39,6 +39,9 @@ const TUTORIAL = [
 ];
 
 /** Glue between the simulation, the 3D views, the UI, audio and input. */
+// Pixels around the hero on screen that still count as touching them.
+const HERO_TOUCH_RADIUS = 44;
+
 export class Game {
   constructor({ view, assets, audio, haptics, ui, save }) {
     this.view = view;
@@ -1145,8 +1148,9 @@ export class Game {
       }
       return;
     }
-    // The knight: tap him to select him, then tap the map to send him there.
-    if (this.sim.hero && this.heroView.pick(this.rig.raycaster)) {
+    // The hero: tap them to select them, then tap the map to send them there.
+    // A generous touch zone around them on screen: they are small on a phone.
+    if (this.sim.hero && (this.heroView.pick(this.rig.raycaster) || this.nearHeroOnScreen(clientX, clientY))) {
       this.toggleHero(true);
       return;
     }
@@ -1169,6 +1173,14 @@ export class Game {
     if (tower) this.selectTower(tower);
     else if (cell && this.sim.canBuild(cell)) this.selectBuildCell(cell);
     else this.deselect();
+  }
+
+  nearHeroOnScreen(clientX, clientY) {
+    const hero = this.sim.hero;
+    if (!hero || hero.respawn > 0 || this.selection?.kind === 'hero') return false;
+    const rect = this.view.canvas.getBoundingClientRect();
+    const p = this.rig.toScreen(this.tmp.set(hero.x, 0.5, hero.z), rect);
+    return p.visible && Math.hypot(p.x - clientX, p.y - clientY) < HERO_TOUCH_RADIUS;
   }
 
   selectBuildCell(cell) {
