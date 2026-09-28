@@ -180,6 +180,42 @@ export class Actors {
     return this.hero;
   }
 
+  // ------------------------------------------------------------ pet
+
+  /** A small glowing creature with flapping wings. */
+  createPet(color) {
+    this.removePet();
+    const gear = [];
+    const root = new THREE.Group();
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6, roughness: 0.4 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), bodyMaterial);
+    const eyes = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: 0x101018 }));
+    eyes.position.set(0.05, 0.03, 0.11);
+    const eye2 = eyes.clone();
+    eye2.position.x = -0.05;
+    const wingGeometry = new THREE.PlaneGeometry(0.22, 0.14);
+    wingGeometry.translate(0.11, 0, 0);
+    const wingMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const left = new THREE.Mesh(wingGeometry, wingMaterial);
+    const right = new THREE.Mesh(wingGeometry, wingMaterial);
+    right.scale.x = -1;
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const fly = new THREE.Group();
+    fly.add(body, eyes, eye2, left, right, halo);
+    root.add(fly);
+    root.add(blobShadow(0.12, gear, this.shadowTexture));
+    gear.push(body.geometry, bodyMaterial, eyes.geometry, eyes.material, wingGeometry, wingMaterial, halo.geometry, halo.material);
+    this.scene.add(root);
+    this.pet = { root, fly, left, right, halo, gear };
+  }
+
+  removePet() {
+    if (!this.pet) return;
+    this.pet.root.removeFromParent();
+    for (const item of this.pet.gear) item.dispose();
+    this.pet = null;
+  }
+
   removeHero() {
     const hero = this.hero;
     if (!hero) return;
@@ -296,6 +332,18 @@ export class Actors {
       hero.shieldMesh.visible = Boolean(p.shieldReady);
       if (hero.shieldMesh.visible) hero.shieldMesh.material.opacity = 0.18 + Math.sin(time * 6) * 0.06;
       hero.animator.mixer.update(dt);
+    }
+
+    const pet = this.pet;
+    if (pet && run?.pet) {
+      const p = run.pet;
+      pet.root.position.set(damp(pet.root.position.x, p.x, 20, dt), 0, damp(pet.root.position.z, p.z, 20, dt));
+      pet.fly.position.y = 0.95 + Math.sin(time * 3.2) * 0.12;
+      const flap = Math.sin(time * 22) * 0.9;
+      pet.left.rotation.z = flap;
+      pet.right.rotation.z = -flap;
+      pet.root.rotation.y = hero ? hero.yaw : 0;
+      pet.halo.material.opacity = 0.18 + Math.sin(time * 5) * 0.06;
     }
 
     for (const view of this.enemies.values()) {

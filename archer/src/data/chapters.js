@@ -80,7 +80,7 @@ export const CHAPTERS = [
     id: 'dungeon',
     name: 'Cachots oubliés',
     theme: 'dungeon',
-    hp: 1.7,
+    hp: 2.3,
     boss: 'skeletonKing',
     rooms: [
       [['skeleton', 3], ['zombie', 2]],
@@ -99,10 +99,10 @@ export const CHAPTERS = [
     id: 'graveyard',
     name: 'Cimetière maudit',
     theme: 'graveyard',
-    hp: 2.8,
+    hp: 3.8,
     boss: 'count',
     rooms: [
-      [['ghost', 4], ['zombie', 2]],
+      [['ghost', 3], ['zombie', 1]],
       [['vampire', 1], ['skeleton', 2]],
       [['ghost', 3], ['keeper', 1]],
       [['vampire', 2], ['wisp', 5]],

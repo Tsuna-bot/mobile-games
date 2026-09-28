@@ -76,6 +76,12 @@ export class Fx {
       scene.add(m);
     }
 
+    // Staff orbs and pet shots (the hero's glowing projectiles).
+    this.heroOrbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.1, 12, 8), new THREE.MeshBasicMaterial({ toneMapped: false }), 120);
+    this.heroOrbs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(120 * 3), 3);
+    this.heroOrbs.frustumCulled = false;
+    scene.add(this.heroOrbs);
+
     // Orbiting orbs.
     this.orbMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 14, 10), new THREE.MeshBasicMaterial({ toneMapped: false }), 8);
     this.orbMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(8 * 3), 3);
@@ -279,23 +285,45 @@ export class Fx {
       b.line.material.opacity = Math.min(1, b.life * 10);
     }
     if (!run) {
-      this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = 0;
+      this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
       return;
     }
 
-    // Arrows (+ a faint trail).
+    // Arrows (+ a faint trail); staff and pet shots are glowing orbs, blades spin.
     let n = 0;
+    let no = 0;
     for (const a of run.arrows) {
+      if (a.kind === 'staff' || a.kind === 'pet') {
+        if (no >= 120) continue;
+        const size = a.kind === 'pet' ? 0.9 : 1.3;
+        dummy.position.set(a.x, Y, a.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(size * (1 + Math.sin(t * 25 + a.id) * 0.12));
+        dummy.updateMatrix();
+        this.heroOrbs.setMatrixAt(no, dummy.matrix);
+        color.setHex(a.kind === 'pet' ? a.color : 0xb890ff);
+        this.heroOrbs.setColorAt(no++, color);
+        this.sparks.emit(a.x, Y, a.z, 0, 0, 0, color, a.kind === 'pet' ? 0.2 : 0.3, 0.22, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.8 });
+        continue;
+      }
       if (n >= 240) break;
       dummy.position.set(a.x, Y, a.z);
-      dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
-      dummy.scale.setScalar(1);
+      if (a.kind === 'blades') {
+        dummy.rotation.set(0, t * 25 + a.id, Math.PI / 2);
+        dummy.scale.set(1, 0.6, 0.6);
+      } else {
+        dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
+        dummy.scale.setScalar(a.kind === 'crossbow' ? 1.35 : 1);
+      }
       dummy.updateMatrix();
       this.arrowMesh.setMatrixAt(n++, dummy.matrix);
       if ((a.id + Math.floor(t * 60)) % 2 === 0) this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0, 0, COLORS.arrow, 0.08, 0.14, { endSize: 0.02, drag: 0, brightness: 1.1, opacity: 0.6 });
     }
     this.arrowMesh.count = n;
     this.arrowMesh.instanceMatrix.needsUpdate = true;
+    this.heroOrbs.count = no;
+    this.heroOrbs.instanceMatrix.needsUpdate = true;
+    if (this.heroOrbs.instanceColor) this.heroOrbs.instanceColor.needsUpdate = true;
 
     // Monster shots.
     n = 0;

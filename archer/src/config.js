@@ -7,8 +7,8 @@ export const CONFIG = {
     radius: 0.32,
     speed: 3.3,
     hp: 600,
-    damage: 60,
-    rate: 1.15, // shots per second
+    damage: 85,
+    rate: 1.25, // shots per second
     arrowSpeed: 13,
     // Time standing still before the first shot (Archero: stop to shoot).
     aimDelay: 0.12,

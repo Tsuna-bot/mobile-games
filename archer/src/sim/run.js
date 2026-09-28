@@ -49,6 +49,14 @@ export class Run {
     this.choices = [];
     this.pendingLevels = 0;
     this.player = this.createPlayer(gear);
+    // Weapons change the shot: rate, speed, piercing, homing, bounces.
+    const w = this.player.weapon;
+    if (w === 'crossbow') this.player.rateMul *= 0.72;
+    if (w === 'blades') {
+      this.player.rateMul *= 1.35;
+      this.player.ricochet += 1;
+    }
+    this.pet = this.createPet(gear.pet);
     this.enemies = [];
     this.arrows = [];
     this.shots = [];
@@ -78,7 +86,15 @@ export class Run {
       moving: false, still: 0, cooldown: 0, invulnerable: 0, volley: null, target: null,
       bossDamage: gear.bossDamage ?? 0,
       healOnRoom: gear.healOnRoom ?? 0,
+      coinMul: gear.coinMul ?? 1,
+      weapon: gear.weapon ?? 'bow',
     };
+  }
+
+  /** The pet flies behind the hero's shoulder and shoots on its own. */
+  createPet(def) {
+    if (!def) return null;
+    return { def, x: 0, z: 0, cooldown: 1, power: def.power ?? 1, bob: 0 };
   }
 
   get damage() {
@@ -116,6 +132,10 @@ export class Run {
     p.cooldown = 0;
     p.volley = null;
     p.invulnerable = 1;
+    if (this.pet) {
+      this.pet.x = p.x - 0.7;
+      this.pet.z = p.z;
+    }
     this.flowTimer = 0;
     this.doorOpen = false;
     const spec = this.chapter.rooms[index];
@@ -226,6 +246,7 @@ export class Run {
     this.updateShots(dt);
     this.updateHazards(dt);
     this.updateOrbs(dt);
+    this.updatePet(dt);
     this.updatePickups(dt);
     if (this.enemies.length && this.enemies.every((e) => e.dead)) this.enemies = [];
     if (this.state === STATE.FIGHT && !this.enemies.length) this.clearRoom();
@@ -326,11 +347,14 @@ export class Run {
     for (const { a, offset } of angles) {
       const dx = Math.sin(a);
       const dz = Math.cos(a);
+      const w = p.weapon;
       this.arrows.push({
-        id: this.nextId++,
+        id: this.nextId++, kind: w,
         x: p.x + dx * 0.35 + dz * offset, z: p.z + dz * 0.35 - dx * offset,
-        dx, dz, speed: P.arrowSpeed, damage: this.damage, life: 2.2,
+        dx, dz, speed: w === 'crossbow' ? P.arrowSpeed * 1.4 : w === 'staff' ? P.arrowSpeed * 0.75 : P.arrowSpeed,
+        damage: this.damage, life: 2.2,
         bounces: p.wallBounce, ricochets: p.ricochet, hits: new Set(), view: null,
+        pierceLeft: w === 'crossbow' ? 1 : 0, homing: w === 'staff' ? 7 : 0,
       });
     }
     this.listener.onShoot?.(angles.length);
@@ -347,11 +371,27 @@ export class Run {
         arrow.dead = true;
         continue;
       }
+      // Staff orbs curve toward the nearest monster in front of them.
+      if (arrow.homing) {
+        const target = this.nearestEnemy(arrow.x, arrow.z, 5, arrow.hits);
+        if (target) {
+          const want = Math.atan2(target.x - arrow.x, target.z - arrow.z);
+          let a = Math.atan2(arrow.dx, arrow.dz);
+          let d = want - a;
+          while (d > Math.PI) d -= Math.PI * 2;
+          while (d < -Math.PI) d += Math.PI * 2;
+          a += Math.max(-arrow.homing * dt, Math.min(arrow.homing * dt, d));
+          arrow.dx = Math.sin(a);
+          arrow.dz = Math.cos(a);
+        }
+      }
       // Sub-steps so fast arrows never skip a thin monster.
       const n = 3;
       for (let s = 0; s < n && !arrow.dead; s++) {
         const nx = arrow.x + (arrow.dx * arrow.speed * dt) / n;
         const nz = arrow.z + (arrow.dz * arrow.speed * dt) / n;
+        // Monsters first: a ghost floating over a block can still be hit.
+        if (this.arrowHits(arrow, nx, nz)) continue;
         if (arena.wall(nx, nz)) {
           if (arrow.bounces > 0) {
             arrow.bounces--;
@@ -372,37 +412,61 @@ export class Run {
         }
         arrow.x = nx;
         arrow.z = nz;
-        for (const e of this.enemies) {
-          if (e.dead || e.spawning > 0 || arrow.hits.has(e.id)) continue;
-          const r = e.radius + 0.12;
-          if ((e.x - arrow.x) ** 2 + (e.z - arrow.z) ** 2 > r * r) continue;
-          arrow.hits.add(e.id);
-          this.hitEnemy(e, arrow.damage, arrow);
-          const p = this.player;
-          if (arrow.ricochets > 0) {
-            const next = this.nearestEnemy(e.x, e.z, 4, arrow.hits);
-            if (next) {
-              arrow.ricochets--;
-              const d = Math.hypot(next.x - e.x, next.z - e.z) || 1;
-              arrow.dx = (next.x - e.x) / d;
-              arrow.dz = (next.z - e.z) / d;
-              arrow.x = e.x;
-              arrow.z = e.z;
-              arrow.damage *= 0.7;
-              arrow.life = 1;
-              continue;
-            }
-          }
-          if (p.pierce) arrow.damage *= 0.67;
-          else arrow.dead = true;
-          break;
-        }
       }
     }
     this.arrows = this.arrows.filter((a) => {
       if (a.dead) this.listener.onArrowGone?.(a);
       return !a.dead;
     });
+  }
+
+  /** Arrow at (x, z) touching a monster: damage, then ricochet, pierce or stop. Returns true when it redirected or stopped. */
+  arrowHits(arrow, x, z) {
+    for (const e of this.enemies) {
+      if (e.dead || e.spawning > 0 || arrow.hits.has(e.id)) continue;
+      const r = e.radius + 0.12;
+      if ((e.x - x) ** 2 + (e.z - z) ** 2 > r * r) continue;
+      arrow.hits.add(e.id);
+      if (arrow.pet) {
+        // Pet shots carry their own element, not the hero's.
+        if (arrow.element === 'fire') {
+          e.burn = Math.max(e.burn, arrow.damage * 0.6);
+          e.burnTimer = 2;
+        } else if (arrow.element === 'ice') {
+          e.slow = Math.max(e.slow, 0.3);
+          e.slowTimer = 1.2;
+        }
+        this.damageEnemy(e, arrow.damage, false, arrow);
+        arrow.dead = true;
+        return true;
+      }
+      this.hitEnemy(e, arrow.damage, arrow);
+      if (arrow.pierceLeft > 0) {
+        arrow.pierceLeft--;
+        return false;
+      }
+      if (arrow.ricochets > 0) {
+        const next = this.nearestEnemy(e.x, e.z, 4, arrow.hits);
+        if (next) {
+          arrow.ricochets--;
+          const d = Math.hypot(next.x - e.x, next.z - e.z) || 1;
+          arrow.dx = (next.x - e.x) / d;
+          arrow.dz = (next.z - e.z) / d;
+          arrow.x = e.x;
+          arrow.z = e.z;
+          arrow.damage *= 0.7;
+          arrow.life = 1;
+          return true;
+        }
+      }
+      if (this.player.pierce) {
+        arrow.damage *= 0.67;
+        return false;
+      }
+      arrow.dead = true;
+      return true;
+    }
+    return false;
   }
 
   nearestEnemy(x, z, range, exclude) {
@@ -484,7 +548,7 @@ export class Run {
     const drop = (kind, value) => this.pickups.push({ id: this.nextId++, kind, value, x: enemy.x + (this.random() - 0.5) * 0.8, z: enemy.z + (this.random() - 0.5) * 0.8, magnet: this.state === STATE.CLEARED, view: null });
     const orbs = Math.min(6, Math.ceil(enemy.def.xp / 3));
     for (let i = 0; i < orbs; i++) drop('xp', enemy.def.xp / orbs);
-    const coins = Math.max(1, Math.round(enemy.def.coins * (1 + this.chapterIndex * 0.5)));
+    const coins = Math.max(1, Math.round(enemy.def.coins * (1 + this.chapterIndex * 0.5) * p.coinMul));
     for (let i = 0; i < Math.min(5, coins); i++) drop('coin', coins / Math.min(5, coins));
     if (this.random() < HEART_CHANCE) drop('heart', 0.12);
   }
@@ -622,6 +686,33 @@ export class Run {
         if (kind === 'bolt') this.lightning(e, 2, this.damage * 0.3);
       }
     }
+  }
+
+  updatePet(dt) {
+    const pet = this.pet;
+    if (!pet) return;
+    const p = this.player;
+    pet.bob += dt;
+    // Floats beside the hero, a little behind.
+    const tx = p.x - p.dirZ * 0.7 - p.dirX * 0.4;
+    const tz = p.z + p.dirX * 0.7 - p.dirZ * 0.4;
+    const k = Math.min(1, dt * 6);
+    pet.x += (tx - pet.x) * k;
+    pet.z += (tz - pet.z) * k;
+    if (this.state !== STATE.FIGHT) return;
+    pet.cooldown -= dt;
+    if (pet.cooldown > 0) return;
+    const target = this.nearestEnemy(pet.x, pet.z, 9);
+    if (!target) return;
+    pet.cooldown = pet.def.rate;
+    const d = Math.hypot(target.x - pet.x, target.z - pet.z) || 1;
+    this.arrows.push({
+      id: this.nextId++, kind: 'pet', pet: true, element: pet.def.element ?? null, color: pet.def.color,
+      x: pet.x, z: pet.z, dx: (target.x - pet.x) / d, dz: (target.z - pet.z) / d, speed: 11,
+      damage: this.player.baseDamage * pet.def.damage * pet.power, life: 1.6,
+      bounces: 0, ricochets: 0, hits: new Set(), pierceLeft: 0, homing: 4,
+    });
+    this.listener.onPetShot?.(pet);
   }
 
   orbPositions(out = []) {

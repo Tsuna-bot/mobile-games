@@ -1,11 +1,41 @@
 // Balance bot: plays chapters with the real simulation.
 //   node tools/bot.mjs [runs] [chapter 1..3] [--verbose]
 import { Run, STATE } from '../src/sim/run.js';
+import { defaultSave } from '../src/core/storage.js';
+import { addItem, ensureProfile, equip, runGear } from '../src/meta/profile.js';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const RUNS = Number(args[0] ?? 5);
 const CHAPTER = Number(args[1] ?? 1) - 1;
 const VERBOSE = process.argv.includes('--verbose');
+// --gear=mid / late: typical equipment after ~10 / ~30 runs.
+const GEAR = process.argv.find((a) => a.startsWith('--gear='))?.slice(7);
+
+function gearPreset(name) {
+  if (!name) return {};
+  const save = ensureProfile(defaultSave());
+  save.inventory = [];
+  save.equipped = {};
+  const late = name === 'late';
+  const put = (base, rarity, level) => equip(save, addItem(save, base, rarity, level).uid);
+  if (name === 'early') {
+    put('bow', 0, 5);
+    put('leather', 0, 5);
+    put('bear', 0, 3);
+    for (const id of ['strength', 'vigor', 'agility', 'luck', 'vigor']) save.talents[id] = (save.talents[id] ?? 0) + 1;
+    return runGear(save);
+  }
+  put('bow', late ? 2 : 1, late ? 22 : 10);
+  put('mail', late ? 2 : 1, late ? 20 : 9);
+  put('wolf', late ? 2 : 1, late ? 18 : 8);
+  put('falcon', late ? 1 : 0, late ? 15 : 8);
+  put('rage', late ? 2 : 1, late ? 18 : 7);
+  put('owl', late ? 2 : 1, late ? 15 : 5);
+  const rolls = late ? 45 : 15;
+  const ids = ['strength', 'vigor', 'agility', 'recovery', 'guard', 'looting', 'luck', 'swift'];
+  for (let i = 0; i < rolls; i++) save.talents[ids[i % ids.length]] = (save.talents[ids[i % ids.length]] ?? 0) + 1;
+  return runGear(save);
+}
 const DT = 1 / 60;
 const PREFER = ['attack', 'front', 'multishot', 'speed', 'crit', 'ricochet', 'diagonal', 'vitality', 'bolt', 'fire', 'heal'];
 
@@ -38,6 +68,16 @@ function botInput(run) {
     const dx = p.x - e.x;
     const dz = p.z - e.z;
     const d = Math.hypot(dx, dz) || 0.01;
+    // A charge is coming (red lane): step out of its line.
+    if ((e.state === 'aim' || e.state === 'dash') && (e.def.ai === 'charger' || e.def.ai === 'bossOgre')) {
+      const along = dx * e.aimX + dz * e.aimZ;
+      const across = dx * e.aimZ - dz * e.aimX;
+      if (along > -0.5 && Math.abs(across) < e.radius + 1.2) {
+        const side = Math.sign(across) || 1;
+        fx += e.aimZ * side * 3;
+        fz += -e.aimX * side * 3;
+      }
+    }
     const safe = e.def.boss ? 3.2 : e.state === 'dash' || e.state === 'aim' ? 2.8 : 2.2;
     if (d < safe) {
       fx += (dx / d) * (safe - d) * 1.5;
@@ -77,9 +117,9 @@ function pick(run) {
 }
 
 export function play(chapter, gear = {}, seed = undefined) {
-  const events = { hits: 0, damageTaken: 0 };
+  const events = { hits: 0, damageTaken: 0, by: {} };
   const run = new Run(chapter, gear, {
-    onPlayerHit: (d) => { events.hits++; events.damageTaken += d; },
+    onPlayerHit: (d, e) => { events.hits++; events.damageTaken += d; const k = e ? `touch:${e.def.id}` : 'shot/zone'; events.by[k] = (events.by[k] ?? 0) + d; },
   }, seed);
   run.begin(pick(run));
   let t = 0;
@@ -93,8 +133,12 @@ export function play(chapter, gear = {}, seed = undefined) {
 }
 
 if (process.argv[1].endsWith('bot.mjs')) {
-  const results = Array.from({ length: RUNS }, (_, i) => play(CHAPTER, {}, 1000 + i));
+  const gear = gearPreset(GEAR);
+  const results = Array.from({ length: RUNS }, (_, i) => play(CHAPTER, gear, 1000 + i));
   for (const r of results) if (VERBOSE) console.log(JSON.stringify(r));
   const won = results.filter((r) => r.state === STATE.WON).length;
+  const by = {};
+  for (const r of results) for (const [k, v] of Object.entries(r.by)) by[k] = (by[k] ?? 0) + v;
+  console.log('damage by source', JSON.stringify(Object.fromEntries(Object.entries(by).sort((a, b) => b[1] - a[1]))));
   console.log(`chapter ${CHAPTER + 1}: won ${won}/${RUNS}, reached rooms [${results.map((r) => r.room).join(',')}], levels [${results.map((r) => r.level).join(',')}], minutes [${results.map((r) => (r.time / 60).toFixed(1)).join(',')}]`);
 }

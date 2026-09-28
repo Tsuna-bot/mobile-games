@@ -10,7 +10,10 @@ import { Actors } from '../render/actors.js';
 import { ArenaView } from '../render/arenaView.js';
 import { COLORS, Fx } from '../render/fx.js';
 import { ResolutionScaler, detectInitialQuality, lowerQuality } from '../render/view.js';
+import { HEROES } from '../data/meta.js';
+import { ensureProfile, runDrop, runGear } from '../meta/profile.js';
 import { Arena } from '../sim/arena.js';
+import { Menu } from './menu.js';
 import { Run, STATE } from '../sim/run.js';
 
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
@@ -28,7 +31,7 @@ export class Game {
     this.ui = ui;
     this.audio = audio;
     this.haptics = haptics;
-    this.save = save;
+    this.save = ensureProfile(save);
     const scene = view.scene;
     this.arenaView = new ArenaView(scene, assets);
     this.actors = new Actors(scene, assets);
@@ -63,6 +66,7 @@ export class Game {
       render: (_, dt) => this.render(dt),
     });
     this.bindUi();
+    this.menu = new Menu(this);
     view.onResize = () => this.fitCamera();
     this.applyQuality();
     this.fitCamera();
@@ -80,7 +84,15 @@ export class Game {
     ui.on('btn-quit', () => this.giveUp());
     ui.on('btn-revive', () => this.revive());
     ui.on('btn-giveup', () => this.giveUp());
-    ui.on('btn-end', () => this.showMenu());
+    ui.on('btn-end', () => {
+      this.showMenu();
+      // The item found during the run is revealed in the menu.
+      if (this.pendingDrop) {
+        const item = this.pendingDrop;
+        this.pendingDrop = null;
+        setTimeout(() => this.menu.revealItem(item, 'Butin de l’expédition'), 400);
+      }
+    });
     ui.on('setting', (key) => this.toggleSetting(key));
     ui.renderSettings(this.save.settings, this.haptics.supported);
     document.addEventListener('visibilitychange', () => {
@@ -148,7 +160,7 @@ export class Game {
     const arena = new Arena(LAYOUTS[0]);
     this.arenaView.build(arena, chapter.theme, 7);
     this.arenaView.openDoor(true);
-    if (!this.actors.hero) this.actors.createHero();
+    this.refreshMenuHero();
     this.menuHero = { x: 0, z: 6.2, dirX: 0, dirZ: 1, moving: false, hp: 1, maxHp: 1, invulnerable: 0 };
     this.refreshMenu();
     this.ui.showScreen('menu');
@@ -156,8 +168,17 @@ export class Game {
     this.loop.start();
   }
 
+  /** The chosen hero stands in the menu scene. */
+  refreshMenuHero() {
+    const hero = HEROES[this.save.heroes.selected] ?? HEROES.archer;
+    this.actors.createHero(hero.model, hero.cape);
+    this.actors.removePet();
+  }
+
   refreshMenu() {
     const save = this.save;
+    this.menu.refreshWallet();
+    this.menu.refreshBadges();
     const chapter = CHAPTERS[save.chapter];
     const best = save.best[chapter.id];
     this.ui.setMenu({
@@ -187,7 +208,7 @@ export class Game {
 
   /** Player stats from the save (equipment, talents: filled in later). */
   gearStats() {
-    return {};
+    return runGear(this.save);
   }
 
   startRun(chapterIndex) {
@@ -196,8 +217,11 @@ export class Game {
     this.audio.click();
     this.fx.clear();
     this.actors.clearEnemies();
-    this.run = new Run(chapterIndex, this.gearStats(), this.createListener());
-    this.actors.createHero();
+    const gear = this.gearStats();
+    this.run = new Run(chapterIndex, gear, this.createListener());
+    this.actors.createHero(gear.hero.model, gear.hero.cape);
+    if (this.run.pet) this.actors.createPet(this.run.pet.def.color);
+    else this.actors.removePet();
     this.buildRoom();
     this.mode = MODE.CHOOSING;
     this.ui.showScreen(null);
@@ -301,8 +325,11 @@ export class Game {
       unlocked = true;
     }
     save.tutorial = false;
+    const drop = runDrop(save, run.chapterIndex, won, run.room);
+    this.pendingDrop = drop;
     writeSave(save);
     const loot = [`<span class="pill"><i class="coin-icon"></i><b>+${coins}</b></span>`];
+    if (drop) loot.push('<span class="pill">🎁 Objet trouvé</span>');
     if (gems) loot.push(`<span class="pill"><i class="gem-icon"></i><b>+${gems}</b></span>`);
     this.ui.showEnd(
       `Chapitre ${run.chapterIndex + 1} · ${run.chapter.name}`,

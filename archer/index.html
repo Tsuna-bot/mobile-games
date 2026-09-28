@@ -59,31 +59,74 @@
     <div id="banner" class="banner" aria-live="polite"></div>
     <div id="hint" class="hint">Glisse pour courir · lâche pour tirer</div>
 
-    <section id="screen-menu" class="screen screen--menu" aria-labelledby="title">
-      <div class="brand">
-        <p class="brand__kicker">Roguelite d’archer</p>
-        <h1 id="title" class="brand__title">Sagittaire</h1>
+    <section id="screen-menu" class="screen screen--menu" aria-label="Menu">
+      <div class="menu-top">
+        <span class="pill pill--power" title="Puissance">⚔️ <b id="menu-power">0</b></span>
+        <span class="pill"><i class="coin-icon" aria-hidden="true"></i><b id="menu-coins">0</b></span>
+        <span class="pill"><i class="gem-icon" aria-hidden="true"></i><b id="menu-gems">0</b></span>
       </div>
-      <div class="wallet"><span class="pill"><i class="coin-icon" aria-hidden="true"></i><b id="menu-coins">0</b></span><span class="pill"><i class="gem-icon" aria-hidden="true"></i><b id="menu-gems">0</b></span></div>
-      <div class="chapter-card" id="chapter-card">
-        <button id="btn-prev" class="chapter-card__nav" type="button" aria-label="Chapitre précédent">‹</button>
-        <div class="chapter-card__body">
-          <span class="chapter-card__kicker" id="chapter-kicker">Chapitre 1</span>
-          <b id="chapter-name">Forêt des murmures</b>
-          <span id="chapter-best">Record : —</span>
+
+      <div class="panel-view is-active" id="panel-play">
+        <div class="brand">
+          <p class="brand__kicker">Roguelite d’archer</p>
+          <h1 id="title" class="brand__title">Sagittaire</h1>
         </div>
-        <button id="btn-next" class="chapter-card__nav" type="button" aria-label="Chapitre suivant">›</button>
+        <div class="chapter-card" id="chapter-card">
+          <button id="btn-prev" class="chapter-card__nav" type="button" aria-label="Chapitre précédent">‹</button>
+          <div class="chapter-card__body">
+            <span class="chapter-card__kicker" id="chapter-kicker">Chapitre 1</span>
+            <b id="chapter-name">Forêt des murmures</b>
+            <span id="chapter-best">Record : —</span>
+          </div>
+          <button id="btn-next" class="chapter-card__nav" type="button" aria-label="Chapitre suivant">›</button>
+        </div>
+        <button id="btn-play" class="btn btn--play" type="button">Jouer</button>
+        <div class="settings" role="group" aria-label="Réglages">
+          <button class="chip" type="button" data-setting="sound">Sons <span class="chip__value">On</span></button>
+          <button class="chip" type="button" data-setting="music">Musique <span class="chip__value">On</span></button>
+          <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
+          <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+        </div>
+        <p class="credits">Version 1 · Modèles 3D de Kenney (CC0)</p>
       </div>
-      <button id="btn-play" class="btn btn--play" type="button">Jouer</button>
-      <div class="menu-tabs" id="menu-tabs"></div>
-      <div class="settings" role="group" aria-label="Réglages">
-        <button class="chip" type="button" data-setting="sound">Sons <span class="chip__value">On</span></button>
-        <button class="chip" type="button" data-setting="music">Musique <span class="chip__value">On</span></button>
-        <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
-        <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+
+      <div class="panel-view" id="panel-gear">
+        <h2 class="panel-title">Équipement</h2>
+        <div class="slots" id="slots"></div>
+        <div class="stat-line" id="gear-stats"></div>
+        <h3 class="panel-subtitle">Inventaire <span id="inventory-count"></span></h3>
+        <div class="inventory" id="inventory"></div>
       </div>
-      <p class="credits">Version 1 · Modèles 3D de Kenney (CC0)</p>
+
+      <div class="panel-view" id="panel-talents">
+        <h2 class="panel-title">Talents</h2>
+        <p class="panel-text">Chaque achat améliore un talent au hasard.</p>
+        <div class="talents" id="talents"></div>
+        <button id="btn-talent" class="btn btn--gold btn--wide" type="button">Améliorer</button>
+      </div>
+
+      <div class="panel-view" id="panel-heroes">
+        <h2 class="panel-title">Héros</h2>
+        <div class="heroes" id="heroes"></div>
+      </div>
+
+      <div class="panel-view" id="panel-shop">
+        <h2 class="panel-title">Boutique</h2>
+        <div class="shop" id="shop"></div>
+      </div>
+
+      <nav class="nav" id="nav" aria-label="Menu">
+        <button type="button" data-tab="shop"><span aria-hidden="true">🛒</span>Boutique</button>
+        <button type="button" data-tab="gear"><span aria-hidden="true">🛡️</span>Équipement</button>
+        <button type="button" data-tab="play" class="is-active"><span aria-hidden="true">⚔️</span>Jouer</button>
+        <button type="button" data-tab="talents"><span aria-hidden="true">✨</span>Talents</button>
+        <button type="button" data-tab="heroes"><span aria-hidden="true">🧝</span>Héros</button>
+      </nav>
     </section>
+
+    <div id="popup" class="popup" hidden>
+      <div class="popup__card" id="popup-card"></div>
+    </div>
 
     <section id="screen-choose" class="screen screen--choose" aria-labelledby="choose-title">
       <p class="choose__kicker" id="choose-kicker">Niveau 2</p>
