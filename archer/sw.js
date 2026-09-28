@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'sagittaire-v5';
+const VERSION = 'sagittaire-v6';
 
 const APP_SHELL = [
   './',

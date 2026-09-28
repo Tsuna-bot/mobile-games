@@ -4,10 +4,10 @@
 
 import { CONFIG } from '../config.js';
 import { ABILITIES, rollAbilities } from '../data/abilities.js';
-import { ANGEL_AFTER, BOSS_LAYOUT, CHAPTERS, LAYOUTS } from '../data/chapters.js';
+import { ALL_CHAPTERS, ANGEL_AFTER, BOSS_LAYOUT, LAYOUTS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
 import { seededRandom } from '../core/random.js';
-import { Arena } from './arena.js';
+import { Arena, CELL } from './arena.js';
 import { updateEnemy } from './enemies.js';
 
 export const STATE = Object.freeze({
@@ -39,7 +39,7 @@ const HEART_CHANCE = 0.06;
 export class Run {
   constructor(chapterIndex = 0, gear = {}, listener = {}, seed = (Math.random() * 2 ** 31) >>> 0) {
     this.chapterIndex = chapterIndex;
-    this.chapter = CHAPTERS[chapterIndex];
+    this.chapter = ALL_CHAPTERS[chapterIndex];
     this.listener = listener;
     this.random = seededRandom(seed);
     this.time = 0;
@@ -160,6 +160,8 @@ export class Run {
 
   spawn(type, x, z, delay = SPAWN_DELAY) {
     const def = ENEMIES[type];
+    // Summons and split blobs must not appear inside a block or a pit (they would be stuck).
+    if (!def.flying) ({ x, z } = this.freeSpotNear(x, z, def.radius));
     const scale = this.chapter.hp * CONFIG.difficulty.health * (1 + CONFIG.difficulty.roomGrowth * this.roomIndex);
     const enemy = {
       id: this.nextId++, def, x, z, radius: def.radius, dirX: 0, dirZ: 1,
@@ -172,6 +174,26 @@ export class Run {
     this.enemies.push(enemy);
     this.listener.onEnemySpawn?.(enemy);
     return enemy;
+  }
+
+  /** (x, z) if a walker of radius `r` fits there, else the centre of the nearest free floor cell. */
+  freeSpotNear(x, z, r) {
+    const arena = this.arena;
+    x = Math.max(-arena.halfW + r, Math.min(arena.halfW - r, x));
+    z = Math.max(-arena.halfH + r, Math.min(arena.halfH - r, z));
+    if (!arena.overlaps(x, z, r)) return { x, z };
+    let best = null;
+    let bestD = Infinity;
+    for (let i = 0; i < arena.cells.length; i++) {
+      if (arena.cells[i] !== CELL.FLOOR) continue;
+      const c = arena.centerOf(i);
+      const d = (c.x - x) ** 2 + (c.z - z) ** 2;
+      if (d < bestD && !arena.overlaps(c.x, c.z, r)) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best ?? { x, z };
   }
 
   /** The hero walks through the open door at the top. */
@@ -211,7 +233,8 @@ export class Run {
       this.offerLevel();
       return true;
     }
-    this.state = this.enemies.some((e) => !e.dead) ? STATE.FIGHT : STATE.CLEARED;
+    // Back to the fight; a room emptied during the choice gets cleared (or won) on the next step.
+    this.state = this.enemies.some((e) => !e.dead) || !this.doorOpen ? STATE.FIGHT : STATE.CLEARED;
     return true;
   }
 
@@ -263,6 +286,17 @@ export class Run {
   }
 
   clearRoom() {
+    // The boss is down: the chapter is won right away (no door, no last ability).
+    if (this.isBossRoom) {
+      for (const item of this.pickups) if (item.kind === 'coin') this.coins += item.value;
+      this.pickups = [];
+      this.shots = [];
+      this.hazards = [];
+      this.pendingLevels = 0;
+      this.state = STATE.WON;
+      this.listener.onWin?.();
+      return;
+    }
     this.state = STATE.CLEARED;
     this.doorOpen = true;
     this.shots = [];
@@ -679,6 +713,13 @@ export class Run {
     const coins = Math.max(1, Math.round(enemy.def.coins * (1 + this.chapterIndex * 0.5) * p.coinMul));
     for (let i = 0; i < Math.min(5, coins); i++) drop('coin', coins / Math.min(5, coins));
     if (this.random() < HEART_CHANCE) drop('heart', 0.12);
+    // Blobs split in two when they die.
+    if (enemy.def.split) {
+      for (const side of [-1, 1]) {
+        const child = this.spawn(enemy.def.split, enemy.x + side * 0.4, enemy.z, 0.15);
+        child.minion = true;
+      }
+    }
   }
 
   // ------------------------------------------------------------ monsters

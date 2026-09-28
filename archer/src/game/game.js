@@ -468,7 +468,14 @@ export class Game {
         setTimeout(() => this.offerChoices('Un ange apparaît', 'Soin ou capacité ?'), 200);
       },
       onWin: () => {
-        this.fade(() => this.finishRun(true));
+        // Let the boss fall in slow motion, then straight to the rewards.
+        this.joystick.release();
+        ui.banner('Victoire !', `${this.run.chapter.name} est libéré`);
+        audio.waveCleared();
+        const run = this.run;
+        setTimeout(() => {
+          if (this.run === run && this.mode === MODE.PLAYING) this.fade(() => this.finishRun(true));
+        }, 1700);
       },
       onDeath: () => {
         this.mode = MODE.DEAD;

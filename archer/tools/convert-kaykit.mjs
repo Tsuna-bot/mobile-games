@@ -27,6 +27,8 @@ const MONSTERS = {
   q_mushnub: 'Blob/Mushnub', q_mushnub_evolved: 'Blob/Mushnub_Evolved', q_wizard: 'Blob/Wizard', q_spiky: 'Blob/GreenSpikyBlob', q_pinkblob: 'Blob/PinkBlob',
   q_orc: 'Big/Orc', q_orc_skull: 'Big/Orc_Skull', q_demon: 'Big/Demon', q_bluedemon: 'Big/BlueDemon', q_mushroomking: 'Big/MushroomKing', q_tribal: 'Big/Tribal', q_yeti: 'Big/Yeti',
   q_ghost: 'Flying/Ghost', q_ghost_skull: 'Flying/Ghost_Skull', q_bee: 'Flying/Armabee', q_glub: 'Flying/Glub', q_hywirl: 'Flying/Hywirl', q_dragon: 'Flying/Dragon_Evolved', q_bat: 'Flying/Goleling',
+  q_alien: 'Big/Alien', q_yeti: 'Big/Yeti', q_dino: 'Big/Dino', q_ninja: 'Big/Ninja', q_alien_blob: 'Blob/Alien', q_greenblob: 'Blob/GreenBlob', q_pinkblob: 'Blob/PinkBlob',
+  q_squidle: 'Flying/Squidle', q_glub_evolved: 'Flying/Glub_Evolved', q_bee_evolved: 'Flying/Armabee_Evolved', q_dragon_small: 'Flying/Dragon',
 };
 const KEEP_MONSTER = new Set(['Death', 'HitReact', 'HitRecieve', 'Idle', 'Run', 'Walk', 'Punch', 'Weapon', 'Bite_Front', 'Flying_Idle', 'Fast_Flying', 'Headbutt', 'Jump']);
 

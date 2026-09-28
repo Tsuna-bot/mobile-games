@@ -350,7 +350,7 @@ const AI = {
       const count = rage ? 3 : 2;
       for (let i = 0; i < count; i++) {
         const a = (i / count) * Math.PI * 2 + run.random();
-        const s = run.spawn('skeleton', enemy.x + Math.sin(a) * 1.6, enemy.z + Math.cos(a) * 1.6, 0.6);
+        const s = run.spawn(def.summon ?? 'skeleton', enemy.x + Math.sin(a) * 1.6, enemy.z + Math.cos(a) * 1.6, 0.6);
         s.minion = true;
       }
       run.listener.onSummon?.(enemy);
@@ -410,13 +410,29 @@ const AI = {
       const count = rage ? 6 : 4;
       for (let i = 0; i < count; i++) {
         const a = (i / count) * Math.PI * 2;
-        const bat = run.spawn('wisp', enemy.x + Math.sin(a), enemy.z + Math.cos(a), 0.4);
+        const bat = run.spawn(def.summon ?? 'wisp', enemy.x + Math.sin(a), enemy.z + Math.cos(a), 0.4);
         bat.minion = true;
       }
       run.listener.onSummon?.(enemy);
       enemy.timer = 1.4;
     }
   },
+};
+
+// The final boss switches between the three boss styles every few seconds,
+// only between attacks (their states would clash otherwise).
+AI.bossFinal = (run, enemy, dt, realDt) => {
+  const idle = !['aim', 'dash', 'slam', 'spiral', 'burst', 'fan'].includes(enemy.state);
+  enemy.modeTimer = (enemy.modeTimer ?? 7) - dt;
+  if (idle && enemy.modeTimer <= 0) {
+    const modes = ['bossOgre', 'bossKing', 'bossCount'];
+    enemy.mode = modes[(modes.indexOf(enemy.mode ?? 'bossOgre') + 1) % modes.length];
+    enemy.modeTimer = enemy.hp < enemy.maxHp * 0.5 ? 6 : 8;
+    enemy.state = 'walk';
+    enemy.timer = 0.6;
+    run.listener.onTelegraph?.(enemy, 'glow', 0.6);
+  }
+  AI[enemy.mode ?? 'bossOgre'](run, enemy, dt, realDt);
 };
 
 export function updateEnemy(run, enemy, dt, realDt) {
