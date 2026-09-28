@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Sagittaire</title>
+  <meta name="theme-color" content="#1c2446">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Sagittaire — roguelite d'archer en 3D pour mobile : cours pour esquiver, arrête-toi pour tirer.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Sagittaire">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/build/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+  <link rel="modulepreload" href="vendor/three/build/three.module.js">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <main id="app">
+    <canvas id="scene" aria-label="Sagittaire, arène 3D"></canvas>
+    <div id="touch" class="touch" aria-hidden="true"></div>
+    <div id="joy" class="joy" aria-hidden="true"><i id="joy-knob"></i></div>
+    <div id="hurt" class="hurt" aria-hidden="true"></div>
+
+    <header id="hud" class="hud">
+      <div class="hud__top">
+        <button id="btn-pause" class="round-btn" type="button" aria-label="Pause">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+        </button>
+        <div class="hud__room"><span id="hud-chapter">Chapitre 1</span><b id="hud-room">Salle 1/10</b></div>
+        <div class="hud__coins"><i class="coin-icon" aria-hidden="true"></i><b id="hud-coins">0</b></div>
+      </div>
+      <div class="xp" aria-label="Expérience">
+        <span class="xp__level" id="hud-level">1</span>
+        <span class="xp__bar"><i id="hud-xp"></i></span>
+      </div>
+      <div id="boss" class="boss" hidden>
+        <span class="boss__name" id="boss-name">Boss</span>
+        <span class="boss__track"><i id="boss-fill"></i></span>
+      </div>
+    </header>
+
+    <div id="floaters" class="floaters" aria-hidden="true"></div>
+    <div id="banner" class="banner" aria-live="polite"></div>
+    <div id="hint" class="hint">Glisse pour courir · lâche pour tirer</div>
+
+    <section id="screen-menu" class="screen screen--menu" aria-labelledby="title">
+      <div class="brand">
+        <p class="brand__kicker">Roguelite d’archer</p>
+        <h1 id="title" class="brand__title">Sagittaire</h1>
+      </div>
+      <div class="wallet"><span class="pill"><i class="coin-icon" aria-hidden="true"></i><b id="menu-coins">0</b></span><span class="pill"><i class="gem-icon" aria-hidden="true"></i><b id="menu-gems">0</b></span></div>
+      <div class="chapter-card" id="chapter-card">
+        <button id="btn-prev" class="chapter-card__nav" type="button" aria-label="Chapitre précédent">‹</button>
+        <div class="chapter-card__body">
+          <span class="chapter-card__kicker" id="chapter-kicker">Chapitre 1</span>
+          <b id="chapter-name">Forêt des murmures</b>
+          <span id="chapter-best">Record : —</span>
+        </div>
+        <button id="btn-next" class="chapter-card__nav" type="button" aria-label="Chapitre suivant">›</button>
+      </div>
+      <button id="btn-play" class="btn btn--play" type="button">Jouer</button>
+      <div class="menu-tabs" id="menu-tabs"></div>
+      <div class="settings" role="group" aria-label="Réglages">
+        <button class="chip" type="button" data-setting="sound">Sons <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="music">Musique <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
+        <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
+      </div>
+      <p class="credits">Version 1 · Modèles 3D de Kenney (CC0)</p>
+    </section>
+
+    <section id="screen-choose" class="screen screen--choose" aria-labelledby="choose-title">
+      <p class="choose__kicker" id="choose-kicker">Niveau 2</p>
+      <h2 id="choose-title" class="choose__title">Choisis une capacité</h2>
+      <div class="cards" id="cards"></div>
+      <div class="taken" id="taken"></div>
+    </section>
+
+    <section id="screen-pause" class="screen" aria-labelledby="pause-title">
+      <h2 id="pause-title" class="screen__title">Pause</h2>
+      <div class="taken taken--big" id="pause-taken"></div>
+      <div class="panel">
+        <button id="btn-resume" class="btn btn--primary" type="button">Reprendre</button>
+        <button id="btn-quit" class="btn btn--ghost" type="button">Abandonner</button>
+      </div>
+    </section>
+
+    <section id="screen-dead" class="screen" aria-labelledby="dead-title">
+      <h2 id="dead-title" class="screen__title">K.O.</h2>
+      <p class="screen__text">Une seconde chance ? Tu repars avec la moitié de ta vie.</p>
+      <div class="panel">
+        <button id="btn-revive" class="btn btn--primary" type="button">Revivre</button>
+        <button id="btn-giveup" class="btn btn--ghost" type="button">Abandonner</button>
+      </div>
+    </section>
+
+    <section id="screen-end" class="screen" aria-labelledby="end-title">
+      <p class="choose__kicker" id="end-kicker">Chapitre 1</p>
+      <h2 id="end-title" class="screen__title">Victoire !</h2>
+      <dl class="end-stats" id="end-stats"></dl>
+      <div class="loot" id="end-loot"></div>
+      <div class="panel">
+        <button id="btn-end" class="btn btn--primary" type="button">Continuer</button>
+      </div>
+    </section>
+
+    <div id="loading" class="overlay is-visible" role="status">
+      <p class="overlay__brand">Sagittaire</p>
+      <div class="progress"><span id="loading-bar"></span></div>
+      <p id="loading-text">Chargement…</p>
+    </div>
+    <div id="fatal" class="overlay" role="alert">
+      <p class="overlay__brand">Oups</p>
+      <p id="fatal-message">Le jeu n'a pas pu se charger.</p>
+      <button id="btn-reload" class="btn btn--primary" type="button">Réessayer</button>
+    </div>
+  </main>
+  <script>
+    document.getElementById('btn-reload').addEventListener('click', function () { location.reload(); });
+    setTimeout(function () {
+      if (window.__archerBooted) return;
+      document.getElementById('loading').classList.remove('is-visible');
+      document.getElementById('fatal').classList.add('is-visible');
+    }, 25000);
+  </script>
+</body>
+</html>
