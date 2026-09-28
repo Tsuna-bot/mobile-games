@@ -621,7 +621,14 @@ button:disabled {
 }
 
 .chapter-card.is-locked .chapter-card__body b::after {
-  content: ' 🔒';
+  content: '';
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.3em;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cpath%20d%3D%22M254.28%2017.313c-81.048%200-146.624%2065.484-146.624%20146.406V236h49.594v-69.094c0-53.658%2043.47-97.187%2097.03-97.187%2053.563%200%2097.032%2044.744%2097.032%2097.186V236h49.594v-72.28c0-78.856-65.717-146.407-146.625-146.407zM85.157%20254.688c-14.61%2022.827-22.844%2049.148-22.844%2076.78%200%2088.358%2084.97%20161.5%20191.97%20161.5%20106.998%200%20191.968-73.142%20191.968-161.5%200-27.635-8.26-53.95-22.875-76.78H85.155zM254%20278.625c22.34%200%2040.875%2017.94%2040.875%2040.28%200%2016.756-10.6%2031.23-25.125%2037.376l32.72%2098.126h-96.376l32.125-98.125c-14.526-6.145-24.532-20.62-24.532-37.374%200-22.338%2017.972-40.28%2040.312-40.28z%22/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cpath%20d%3D%22M254.28%2017.313c-81.048%200-146.624%2065.484-146.624%20146.406V236h49.594v-69.094c0-53.658%2043.47-97.187%2097.03-97.187%2053.563%200%2097.032%2044.744%2097.032%2097.186V236h49.594v-72.28c0-78.856-65.717-146.407-146.625-146.407zM85.157%20254.688c-14.61%2022.827-22.844%2049.148-22.844%2076.78%200%2088.358%2084.97%20161.5%20191.97%20161.5%20106.998%200%20191.968-73.142%20191.968-161.5%200-27.635-8.26-53.95-22.875-76.78H85.155zM254%20278.625c22.34%200%2040.875%2017.94%2040.875%2040.28%200%2016.756-10.6%2031.23-25.125%2037.376l32.72%2098.126h-96.376l32.125-98.125c-14.526-6.145-24.532-20.62-24.532-37.374%200-22.338%2017.972-40.28%2040.312-40.28z%22/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .menu-tabs {
@@ -1368,4 +1375,255 @@ button:disabled {
 
 .popup__actions .btn--full {
   grid-column: 1 / -1;
+}
+
+/* ================================================================ premium skin (v2)
+   Vector icons, lit badges, framed panels and glossy buttons. */
+
+:root {
+  --ink: #121833;
+  --frame: rgba(255, 226, 150, 0.55);
+  --frame-soft: rgba(255, 255, 255, 0.12);
+  --glass: linear-gradient(180deg, rgba(40, 52, 104, 0.94), rgba(18, 24, 52, 0.96));
+}
+
+.ico {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  vertical-align: -0.14em;
+  flex: none;
+}
+
+/* Round badge: coloured light from the top, dark rim, glossy highlight. */
+.badge {
+  --a: #ffe28a;
+  --b: #d98a12;
+  --c: #5a2f00;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, var(--a), var(--b) 62%, var(--c));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.28), inset 0 -4px 6px rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.45);
+  color: #fffdf6;
+  font-size: 26px;
+  flex: none;
+}
+
+.badge::after {
+  content: '';
+  position: absolute;
+  inset: 3px 8px auto;
+  height: 38%;
+  border-radius: 50% / 60% 60% 40% 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.badge .ico {
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.45));
+}
+
+.badge--gold { --a: #ffe9a0; --b: #e2a126; --c: #5c3200; }
+.badge--fire { --a: #ffc27a; --b: #f0561e; --c: #5a1000; }
+.badge--ice { --a: #bff0ff; --b: #2f9be0; --c: #0b2d5c; }
+.badge--poison { --a: #c6ff9a; --b: #3fae3a; --c: #0d3b12; }
+.badge--arcane { --a: #e6c8ff; --b: #8a4fe0; --c: #2a0f5a; }
+.badge--blood { --a: #ffb0bc; --b: #e0304e; --c: #54081a; }
+.badge--wind { --a: #d4fff0; --b: #2fb79a; --c: #08403a; }
+.badge--lg { width: 60px; height: 60px; font-size: 36px; }
+.badge--xl { width: 92px; height: 92px; font-size: 56px; }
+
+/* Framed panels. */
+.panel-view,
+.chapter-card,
+.shop-card,
+.hero-card,
+.talent {
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--frame-soft), inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 26px rgba(0, 0, 0, 0.38);
+}
+
+.chapter-card {
+  background: linear-gradient(160deg, rgba(95, 224, 106, 0.3), rgba(24, 32, 66, 0.96) 55%);
+  box-shadow: inset 0 0 0 1.5px var(--frame), inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.panel-title,
+.brand__title,
+.choose__title,
+.screen__title {
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35), 0 0 22px rgba(255, 210, 120, 0.25);
+}
+
+/* Buttons: gloss on top, darker lip at the bottom, pressed state. */
+.btn {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #3a4786, #232c5c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 -4px 0 rgba(0, 0, 0, 0.3), 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 3px;
+  height: 42%;
+  border-radius: 12px 12px 40% 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.btn:disabled::before {
+  opacity: 0.3;
+}
+
+.btn:not(:disabled):active {
+  transform: translateY(2px) scale(0.98);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -2px 0 rgba(0, 0, 0, 0.3), 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.btn--primary { background: linear-gradient(180deg, #8af0a0, #2fa04f 55%, #1f7a3a); }
+.btn--gold { background: linear-gradient(180deg, #ffe88a, #f0a526 55%, #c47510); }
+.btn--ghost {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.22);
+}
+
+.btn--play {
+  background: linear-gradient(180deg, #fff09a, #f5b12e 50%, #d0800f);
+  color: #3a2300;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -6px 0 rgba(0, 0, 0, 0.25), 0 0 0 3px rgba(255, 236, 170, 0.35), 0 10px 26px rgba(240, 165, 38, 0.45);
+}
+
+/* Bottom navigation: glass bar, active tab lifted into a gold medallion. */
+.nav {
+  background: linear-gradient(180deg, rgba(32, 42, 92, 0.96), rgba(12, 16, 36, 0.98));
+  box-shadow: inset 0 1px 0 var(--frame), 0 -6px 20px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.nav button .ico {
+  font-size: 26px;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4));
+}
+
+.nav button.is-active {
+  background: radial-gradient(circle at 50% 25%, #fff0b0, #f0a526 60%, #b86a0c);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.5), 0 8px 18px rgba(240, 165, 38, 0.45);
+}
+
+.pill .ico {
+  font-size: 18px;
+  color: #ffd57a;
+}
+
+/* Ability cards: dark framed cards, lit badge, gold rim. */
+.card {
+  position: relative;
+  padding: 16px 8px 14px;
+  background: linear-gradient(180deg, #34427f, #1a2148 70%);
+  color: var(--cream);
+  box-shadow: inset 0 0 0 2px rgba(255, 214, 120, 0.7), inset 0 2px 0 rgba(255, 255, 255, 0.25), 0 14px 30px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 200, 90, 0.12);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 18%, rgba(255, 225, 150, 0.28), transparent 55%);
+  pointer-events: none;
+}
+
+.card .card__icon {
+  width: 68px;
+  height: 68px;
+  font-size: 40px;
+  border-radius: 50%;
+}
+
+.card b {
+  color: #ffe9b0;
+}
+
+.card small {
+  color: rgba(236, 240, 255, 0.82);
+}
+
+.taken span {
+  background: none;
+  min-width: 0;
+  padding: 0;
+}
+
+.taken .badge {
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+}
+
+/* Items and talents. */
+.item {
+  font-size: 34px;
+  color: #fff8ea;
+}
+
+.item .item__ico {
+  font-size: 38px;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 10px color-mix(in srgb, var(--rarity) 60%, transparent));
+}
+
+.item--empty .item__ico {
+  opacity: 0.35;
+  filter: none;
+}
+
+.item__equipped .ico,
+.item__merge .ico {
+  font-size: 13px;
+  vertical-align: 0;
+}
+
+.talent .badge {
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+  margin-bottom: 2px;
+}
+
+.shop-card__icon {
+  display: grid;
+  place-items: center;
+}
+
+.hero-card__face {
+  background: none;
+  box-shadow: none;
+}
+
+.hero-card__face .badge {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.3), 0 0 0 3px var(--hero), 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+.popup__icon {
+  filter: none;
+}
+
+.popup__stats .next .ico,
+.loot .ico {
+  color: #ffd57a;
+}
+
+/* The play tab floats over the 3D scene: no panel behind it. */
+#panel-play.panel-view {
+  background: none;
+  box-shadow: none;
 }

@@ -2,7 +2,10 @@
 
 Roguelite d’archer en 3D pour mobile (Three.js), dans l’esprit d’Archero : **cours pour esquiver, arrête-toi pour tirer.** Chaque salle nettoyée ouvre la porte suivante ; à chaque niveau, tu choisis 1 capacité parmi 3 et ton archère devient de plus en plus folle.
 
-Modèles 3D arrondis **KayKit** de Kay Lousberg, licence CC0 : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).
+Crédits :
+- Modèles 3D **KayKit** de Kay Lousberg (CC0) : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon, Forest Nature Pack ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).
+- Monstres animés **Ultimate Monsters** de Quaternius (CC0, [quaternius.com](https://quaternius.com)).
+- Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast et Zeromancer.
 
 ## Jouer
 
@@ -17,18 +20,18 @@ Flèche frontale, tir multiple, flèches diagonales / latérales / arrière, reb
 
 ### Monstres
 
-| Monstre | Comportement |
-| --- | --- |
-| Squelette | fonce sur toi |
-| Squelette archer | vise (ligne rouge) puis tire à l’arbalète |
-| Guerrier squelette | se prépare puis charge en ligne droite |
-| Fantôme, feu follet | traversent les obstacles |
-| Mage de sang | éventail de 3 orbes, se téléporte |
-| Nécromancien | cercle d’orbes lentes |
-| Bandit grenadier | bombes : sors du cercle rouge |
-| **Ogre des bois** (boss) | charges, frappe au sol, rochers |
-| **Roi squelette** (boss) | spirales d’os, cercles, invocations |
-| **Liche pourpre** (boss) | téléportation, éventails, chauves-souris |
+Chaque chapitre a ses propres monstres (même comportement, autre apparence) :
+
+| Comportement | Forêt | Cachots | Cimetière |
+| --- | --- | --- | --- |
+| fonce sur toi | champignon | squelette | squelette |
+| vise (ligne rouge) puis tire | champignon cracheur | squelette archer | squelette archer |
+| se prépare puis charge | orc | orc au crâne | orc au crâne |
+| traverse les obstacles | glouton volant, abeilles | fantôme au crâne, chauves-souris | fantôme, feux follets |
+| éventail de 3 orbes, téléportation | démon bleu | diablotin | diablotin |
+| cercle d’orbes lentes | sorcier | sorcier | mage squelette |
+| bombes (sors du cercle rouge) | guerrier tribal | bandit | bandit |
+| **Boss** | **Roi Champignon** : charges, frappe au sol, rochers | **Roi squelette** : spirales d’os, cercles, invocations | **Dragon spectral** : téléportation, éventails, chauves-souris |
 
 Les boss deviennent plus agressifs sous la moitié de leur vie.
 
@@ -67,15 +70,18 @@ Un humain esquive mieux que le bot : c’est une borne basse.
 ## Technique
 
 - Simulation pure à pas fixe (60 Hz), sans Three.js ni DOM (`src/sim/`), testable dans Node.
-- Rendu : personnages KayKit animés (un seul squelette partagé : les animations sont stockées une fois), leurs morceaux fusionnés en un seul maillage ; décors d’une salle fusionnés en quelques maillages ; projectiles et bonus en InstancedMesh ; sol en dalles arrondies. Environ 50 à 95 appels de dessin par image (salle de boss chargée comprise).
-- Modèles compressés (meshopt + quantification) : 3,2 Mo pour tout le jeu. `tools/convert-kaykit.mjs` refait la conversion depuis les packs KayKit.
+- Rendu : personnages KayKit (animations partagées) et monstres Quaternius, leurs morceaux fusionnés en un seul maillage ; décors d’une salle fusionnés en quelques maillages ; projectiles et bonus en InstancedMesh. Environ 65 à 95 appels de dessin par image dans une salle de boss chargée.
+- Image : éclairage d’environnement, lumière de contre-jour colorée, contour lumineux sur les personnages, sols peints dans le shader (herbe, pierre, dalles moussues, fissures) avec ombrage doux autour des obstacles, particules d’ambiance (pollen, braises, feux follets), rayons de lumière, brume au cimetière, halo lumineux (bloom) sur les projectiles, étalonnage des couleurs par chapitre.
+- Sensations : arrêt sur image quand un monstre meurt, écrasement des monstres à l’impact, tremblement de caméra.
+- Interface : icônes vectorielles (plus aucun emoji), badges colorés, boutons et panneaux en relief.
+- Modèles compressés (meshopt + quantification) : 5,6 Mo pour tout le jeu. `tools/convert-kaykit.mjs` refait la conversion depuis les packs.
 - Résolution dynamique (baisse la netteté avant de couper des effets) et qualité automatique, comme Bastion.
 - Hors ligne après la première visite (service worker, cache d’abord) ; installable sur l’écran d’accueil.
 
 ```
 archer/
 ├── index.html, styles.css, manifest.webmanifest, sw.js
-├── assets/kk/              # Modèles KayKit convertis (CC0)
+├── assets/kk/              # Modèles KayKit et Quaternius convertis (CC0)
 ├── tools/bot.mjs           # Bot d'équilibrage
 ├── tools/convert-kaykit.mjs # Conversion des packs KayKit
 └── src/

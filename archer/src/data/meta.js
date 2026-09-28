@@ -2,14 +2,14 @@
 
 /** Talents: gold buys a random level-up among them (like the original). */
 export const TALENTS = [
-  { id: 'strength', icon: '💪', name: 'Force', text: (n) => `Attaque +${n * 6}`, max: 20, stats: (n) => ({ damage: n * 6 }) },
-  { id: 'vigor', icon: '❤️', name: 'Vigueur', text: (n) => `Vie +${n * 45}`, max: 20, stats: (n) => ({ hp: n * 45 }) },
-  { id: 'agility', icon: '⚡', name: 'Agilité', text: (n) => `Cadence +${n * 2} %`, max: 15, stats: (n) => ({ rateMul: n * 0.02 }) },
-  { id: 'recovery', icon: '🌿', name: 'Récupération', text: (n) => `Soin par salle +${n} %`, max: 10, stats: (n) => ({ healOnRoom: n * 0.01 }) },
-  { id: 'guard', icon: '🛡️', name: 'Garde', text: (n) => `Dégâts subis −${n * 1.5} %`, max: 12, stats: (n) => ({ armor: n * 0.015 }) },
-  { id: 'looting', icon: '🪙', name: 'Pillage', text: (n) => `Or +${n * 5} %`, max: 12, stats: (n) => ({ coinMul: n * 0.05 }) },
-  { id: 'luck', icon: '🍀', name: 'Chance', text: (n) => `Critique +${n} %`, max: 12, stats: (n) => ({ crit: n * 0.01 }) },
-  { id: 'swift', icon: '👟', name: 'Célérité', text: (n) => `Vitesse +${n * 2} %`, max: 8, stats: (n) => ({ speedMul: n * 0.02 }) },
+  { id: 'strength', icon: 'strength', name: 'Force', text: (n) => `Attaque +${n * 6}`, max: 20, stats: (n) => ({ damage: n * 6 }) },
+  { id: 'vigor', icon: 'vigor', name: 'Vigueur', text: (n) => `Vie +${n * 45}`, max: 20, stats: (n) => ({ hp: n * 45 }) },
+  { id: 'agility', icon: 'agility', name: 'Agilité', text: (n) => `Cadence +${n * 2} %`, max: 15, stats: (n) => ({ rateMul: n * 0.02 }) },
+  { id: 'recovery', icon: 'recovery', name: 'Récupération', text: (n) => `Soin par salle +${n} %`, max: 10, stats: (n) => ({ healOnRoom: n * 0.01 }) },
+  { id: 'guard', icon: 'guard', name: 'Garde', text: (n) => `Dégâts subis −${n * 1.5} %`, max: 12, stats: (n) => ({ armor: n * 0.015 }) },
+  { id: 'looting', icon: 'looting', name: 'Pillage', text: (n) => `Or +${n * 5} %`, max: 12, stats: (n) => ({ coinMul: n * 0.05 }) },
+  { id: 'luck', icon: 'luck', name: 'Chance', text: (n) => `Critique +${n} %`, max: 12, stats: (n) => ({ crit: n * 0.01 }) },
+  { id: 'swift', icon: 'swift', name: 'Célérité', text: (n) => `Vitesse +${n * 2} %`, max: 8, stats: (n) => ({ speedMul: n * 0.02 }) },
 ];
 
 /** Gold for the next talent roll (n = rolls already made). */
@@ -22,10 +22,10 @@ export function talentCost(n) {
  * `damage` = share of the hero's attack, `element` added to their hits.
  */
 export const PETS = {
-  bat: { id: 'bat', name: 'Chauve-souris', icon: '🦇', color: 0x9a7aff, text: 'Petits tirs très rapides.', rate: 0.55, damage: 0.18 },
-  owl: { id: 'owl', name: 'Chouette', icon: '🦉', color: 0xffe08a, text: 'Tirs puissants et précis.', rate: 1.3, damage: 0.55 },
-  frostling: { id: 'frostling', name: 'Esprit du givre', icon: '❄️', color: 0x8fe0ff, text: 'Ses tirs ralentissent.', rate: 0.9, damage: 0.28, element: 'ice' },
-  salamander: { id: 'salamander', name: 'Salamandre', icon: '🦎', color: 0xff8a3a, text: 'Ses tirs enflamment.', rate: 0.9, damage: 0.28, element: 'fire' },
+  bat: { id: 'bat', name: 'Chauve-souris', icon: 'bat', color: 0x9a7aff, text: 'Petits tirs très rapides.', rate: 0.55, damage: 0.18 },
+  owl: { id: 'owl', name: 'Chouette', icon: 'owl', color: 0xffe08a, text: 'Tirs puissants et précis.', rate: 1.3, damage: 0.55 },
+  frostling: { id: 'frostling', name: 'Esprit du givre', icon: 'frostling', color: 0x8fe0ff, text: 'Ses tirs ralentissent.', rate: 0.9, damage: 0.28, element: 'ice' },
+  salamander: { id: 'salamander', name: 'Salamandre', icon: 'salamander', color: 0xff8a3a, text: 'Ses tirs enflamment.', rate: 0.9, damage: 0.28, element: 'fire' },
 };
 
 /** Pet damage multiplier at rarity/level (same growth as items). */
@@ -45,7 +45,7 @@ export const HERO_ORDER = ['archer', 'ranger', 'mage', 'knight'];
 
 /** Chest odds by rarity index [common, rare, epic, legendary]. */
 export const CHESTS = {
-  free: { id: 'free', name: 'Coffre en bois', icon: '📦', odds: [0.8, 0.2, 0, 0], cooldownHours: 4 },
-  gold: { id: 'gold', name: 'Coffre doré', icon: '🎁', odds: [0, 0.72, 0.24, 0.04], gems: 80 },
-  hero: { id: 'hero', name: 'Coffre du familier', icon: '🥚', odds: [0.2, 0.55, 0.2, 0.05], gems: 120, pet: true },
+  free: { id: 'free', name: 'Coffre en bois', icon: 'chest-free', odds: [0.8, 0.2, 0, 0], cooldownHours: 4 },
+  gold: { id: 'gold', name: 'Coffre doré', icon: 'chest-gold', odds: [0, 0.72, 0.24, 0.04], gems: 80 },
+  hero: { id: 'hero', name: 'Coffre du familier', icon: 'chest-pet', odds: [0.2, 0.55, 0.2, 0.05], gems: 120, pet: true },
 };

@@ -1,4 +1,5 @@
 import { writeSave } from '../core/storage.js';
+import { badge, icon } from '../ui/icons.js';
 import { RARITIES, SLOTS, itemStats, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
 import {
@@ -83,7 +84,7 @@ export class Menu {
     const equipped = showEquipped && equippedSlotOf(this.save, item.uid);
     const canMerge = mergePartners(this.save, item.uid).length >= 2;
     return `<button type="button" class="item${item.rarity === 3 ? ' is-legendary' : ''}" data-uid="${item.uid}" style="--rarity:${rarity.color}" aria-label="${esc(def.name)}">
-      ${slotLabel ? `<span class="item__slot">${slotLabel}</span>` : ''}${def.icon}<span class="item__level">Niv. ${item.level}</span>${equipped ? '<span class="item__equipped">✔</span>' : ''}${canMerge ? '<span class="item__merge">⬆</span>' : ''}</button>`;
+      ${slotLabel ? `<span class="item__slot">${slotLabel}</span>` : ''}${icon(def.icon, 'item__ico')}<span class="item__level">Niv. ${item.level}</span>${equipped ? `<span class="item__equipped">${icon('check')}</span>` : ''}${canMerge ? `<span class="item__merge">${icon('upgrade')}</span>` : ''}</button>`;
   }
 
   renderGear() {
@@ -91,7 +92,7 @@ export class Menu {
     const byUid = (uid) => save.inventory.find((it) => it.uid === uid);
     this.$('slots').innerHTML = SLOTS.map((slot) => {
       const item = byUid(save.equipped[slot.id]);
-      return item ? this.itemTile(item, { slotLabel: slot.name, showEquipped: false }) : `<div class="item item--empty"><span class="item__slot">${slot.name}</span>${slot.icon}</div>`;
+      return item ? this.itemTile(item, { slotLabel: slot.name, showEquipped: false }) : `<div class="item item--empty"><span class="item__slot">${slot.name}</span>${icon(slot.icon, 'item__ico')}</div>`;
     }).join('');
     const g = runGear(save);
     const pct = (v) => `${Math.round(v * 100)} %`;
@@ -134,7 +135,7 @@ export class Menu {
     if (item.rarity < RARITIES.length - 1) actions.push(`<button type="button" class="btn ${partners.length >= 2 ? 'btn--gold' : ''} btn--full" data-act="merge" ${partners.length >= 2 ? '' : 'disabled'}>Fusionner → ${RARITIES[item.rarity + 1].name} (${Math.min(2, partners.length) + 1}/3)</button>`);
     if (equippedSlot !== 'weapon') actions.push(`<button type="button" class="btn btn--ghost btn--full" data-act="salvage">Démonter · +${salvageValue(item)} <i class="coin-icon"></i></button>`);
     this.openPopup(`
-      <span class="popup__icon">${def.icon}</span>
+      <span class="popup__icon">${badge(def.icon, 'badge--xl')}</span>
       <span class="popup__rarity">${rarity.name} · niveau ${item.level}/${rarity.cap}</span>
       <h3 class="popup__name">${esc(def.name)}</h3>
       <p class="popup__text">${esc(def.text)}</p>
@@ -177,7 +178,7 @@ export class Menu {
     const save = this.save;
     this.$('talents').innerHTML = TALENTS.map((t) => {
       const n = save.talents[t.id] ?? 0;
-      return `<div class="talent${highlight === t.id ? ' is-new' : ''}"><span>${t.icon}</span><b>${t.name}</b><small>${n ? t.text(n) : '—'}</small><em>${n}/${t.max}</em></div>`;
+      return `<div class="talent${highlight === t.id ? ' is-new' : ''}">${badge(t.icon)}<b>${t.name}</b><small>${n ? t.text(n) : '—'}</small><em>${n}/${t.max}</em></div>`;
     }).join('');
     const cost = nextTalentCost(save);
     const done = TALENTS.every((t) => (save.talents[t.id] ?? 0) >= t.max);
@@ -206,9 +207,9 @@ export class Menu {
       const hero = HEROES[id];
       const owned = save.heroes.owned.includes(id);
       const selected = save.heroes.selected === id;
-      const face = { archer: '🏹', ranger: '🗡️', mage: '⚡', knight: '🛡️' }[id];
+      const face = badge(`hero-${id}`, 'badge--lg');
       const button = selected
-        ? '<button type="button" class="btn" disabled>✔ Choisi</button>'
+        ? `<button type="button" class="btn" disabled>${icon('check')} Choisi</button>`
         : owned
           ? `<button type="button" class="btn btn--primary" data-hero="${id}">Choisir</button>`
           : `<button type="button" class="btn btn--gold" data-hero="${id}" ${save.gems < hero.price ? 'disabled' : ''}><i class="gem-icon"></i> ${hero.price}</button>`;
@@ -248,9 +249,9 @@ export class Menu {
         button = ready ? `<button type="button" class="btn btn--primary" data-chest="${chest.id}">Gratuit</button>` : `<button type="button" class="btn" disabled>${timeLeft(save.freeChestAt - now)}</button>`;
       } else button = `<button type="button" class="btn btn--gold" data-chest="${chest.id}" ${save.gems < chest.gems ? 'disabled' : ''}><i class="gem-icon"></i> ${chest.gems}</button>`;
       const odds = chest.odds.map((p, i) => (p ? `${RARITIES[i].name} ${Math.round(p * 100)} %` : null)).filter(Boolean).join(' · ');
-      return `<div class="shop-card"><span class="shop-card__icon">${chest.icon}</span><div><b>${chest.name}</b><small>${chest.pet ? 'Un familier · ' : ''}${odds}</small></div>${button}</div>`;
+      return `<div class="shop-card"><span class="shop-card__icon">${badge(chest.icon, 'badge--lg')}</span><div><b>${chest.name}</b><small>${chest.pet ? 'Un familier · ' : ''}${odds}</small></div>${button}</div>`;
     });
-    cards.push(`<div class="shop-card"><span class="shop-card__icon">💰</span><div><b>Sac d’or</b><small>600 pièces d’or</small></div><button type="button" class="btn btn--gold" data-gold="1" ${save.gems < 50 ? 'disabled' : ''}><i class="gem-icon"></i> 50</button></div>`);
+    cards.push(`<div class="shop-card"><span class="shop-card__icon">${badge('gold-bag', 'badge--lg')}</span><div><b>Sac d’or</b><small>600 pièces d’or</small></div><button type="button" class="btn btn--gold" data-gold="1" ${save.gems < 50 ? 'disabled' : ''}><i class="gem-icon"></i> 50</button></div>`);
     this.$('shop').innerHTML = cards.join('') + '<p class="panel-text" style="margin:4px 0 0;text-align:center">Les gemmes se gagnent en finissant les chapitres. Pas d’achats avec de l’argent réel.</p>';
     for (const button of this.$('shop').querySelectorAll('[data-chest]')) button.addEventListener('click', () => this.buyChest(button.dataset.chest));
     this.$('shop').querySelector('[data-gold]')?.addEventListener('click', () => {
@@ -283,10 +284,10 @@ export class Menu {
     const canMerge = mergePartners(this.save, item.uid).length >= 2;
     this.openPopup(`
       <span class="popup__rarity">${title}</span>
-      <span class="popup__icon">${def.icon}</span>
+      <span class="popup__icon">${badge(def.icon, 'badge--xl')}</span>
       <span class="popup__rarity">${rarity.name}</span>
       <h3 class="popup__name">${esc(def.name)}</h3>
-      <div class="popup__stats">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}${canMerge ? '<span class="next">⬆ Tu peux fusionner 3 exemplaires !</span>' : ''}</div>
+      <div class="popup__stats">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}${canMerge ? `<span class="next">${icon('upgrade')} Tu peux fusionner 3 exemplaires !</span>` : ''}</div>
       <div class="popup__actions"><button type="button" class="btn btn--ghost" data-close>OK</button><button type="button" class="btn btn--primary" data-see>Voir</button></div>`, rarity.color, true);
     this.$('popup-card').querySelector('[data-close]').addEventListener('click', () => this.closePopup());
     this.$('popup-card').querySelector('[data-see]').addEventListener('click', () => {

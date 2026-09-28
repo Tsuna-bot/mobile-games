@@ -4,12 +4,13 @@ import { Run, STATE } from '../src/sim/run.js';
 import { defaultSave } from '../src/core/storage.js';
 import { addItem, ensureProfile, equip, runGear } from '../src/meta/profile.js';
 
-const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const ARGV = typeof process !== 'undefined' ? process.argv : [];
+const args = ARGV.slice(2).filter((a) => !a.startsWith('--'));
 const RUNS = Number(args[0] ?? 5);
 const CHAPTER = Number(args[1] ?? 1) - 1;
-const VERBOSE = process.argv.includes('--verbose');
+const VERBOSE = ARGV.includes('--verbose');
 // --gear=mid / late: typical equipment after ~10 / ~30 runs.
-const GEAR = process.argv.find((a) => a.startsWith('--gear='))?.slice(7);
+const GEAR = ARGV.find((a) => a.startsWith('--gear='))?.slice(7);
 
 function gearPreset(name) {
   if (!name) return {};
@@ -40,7 +41,7 @@ const DT = 1 / 60;
 const PREFER = ['attack', 'front', 'multishot', 'speed', 'crit', 'ricochet', 'diagonal', 'vitality', 'bolt', 'fire', 'heal'];
 
 /** Dodges shots and hazards, keeps away from contact, otherwise stands and shoots. */
-function botInput(run) {
+export function botInput(run) {
   const p = run.player;
   let fx = 0;
   let fz = 0;
@@ -112,7 +113,7 @@ function walkTo(run, x, z) {
   return dir ? { x: dir.x, z: dir.z } : { x: x - p.x, z: z - p.z };
 }
 
-function pick(run) {
+export function pick(run) {
   return [...run.choices].sort((a, b) => (PREFER.indexOf(a) + 99) % 99 - (PREFER.indexOf(b) + 99) % 99)[0];
 }
 
@@ -132,7 +133,7 @@ export function play(chapter, gear = {}, seed = undefined) {
   return { state: run.state, room: run.room, level: run.level, coins: Math.round(run.coins), kills: run.kills, time: Math.round(t), hp: Math.round(run.player.hp), ...events, abilities: Object.keys(run.taken).join(',') };
 }
 
-if (process.argv[1].endsWith('bot.mjs')) {
+if (ARGV[1]?.endsWith('bot.mjs')) {
   const gear = gearPreset(GEAR);
   const results = Array.from({ length: RUNS }, (_, i) => play(CHAPTER, gear, 1000 + i));
   for (const r of results) if (VERBOSE) console.log(JSON.stringify(r));

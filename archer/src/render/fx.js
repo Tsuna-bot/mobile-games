@@ -24,9 +24,12 @@ const SHOT_COLORS = { orb: 0xff3a6a, arrow: 0xf4ecd8, bone: 0xf4f0e0, rock: 0xa0
 const SHOT_GLOW = { orb: 0xff4a8a, arrow: 0xffe0a0, bone: 0xfff0c0, rock: 0xffb060 };
 const ORB_COLORS = { fire: 0xff8a2a, ice: 0x8fe0ff, bolt: 0xc9a0ff };
 const Y = 0.55;
+// Above 1: these glow through the bloom pass.
+const HDR = { core: 2.2, halo: 1.5, orb: 2.4 };
 
 const dummy = new THREE.Object3D();
 const color = new THREE.Color();
+const hdrColor = new THREE.Color();
 
 /**
  * Arrows, monster shots, pickups, danger circles, aim lines, orbiting orbs,
@@ -49,7 +52,7 @@ export class Fx {
     const fletch = new THREE.BoxGeometry(0.1, 0.01, 0.1);
     fletch.translate(0, 0, -0.22);
     const arrowGeometry = mergeGeometries([shaft.toNonIndexed(), head.toNonIndexed(), fletch.toNonIndexed()]);
-    this.arrowMesh = new THREE.InstancedMesh(arrowGeometry, new THREE.MeshBasicMaterial({ color: 0xfff6e0, toneMapped: false }), 240);
+    this.arrowMesh = new THREE.InstancedMesh(arrowGeometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff6e0).multiplyScalar(1.25), toneMapped: false }), 240);
     this.arrowMesh.frustumCulled = false;
     scene.add(this.arrowMesh);
 
@@ -65,12 +68,12 @@ export class Fx {
 
     // Pickups.
     const gem = new THREE.OctahedronGeometry(0.1, 0);
-    this.xpMesh = new THREE.InstancedMesh(gem, new THREE.MeshBasicMaterial({ color: 0x6ff0ff, toneMapped: false }), 300);
+    this.xpMesh = new THREE.InstancedMesh(gem, new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6ff0ff).multiplyScalar(1.8), toneMapped: false }), 300);
     const coin = new THREE.CylinderGeometry(0.1, 0.1, 0.03, 14);
     coin.rotateX(Math.PI / 2);
-    this.coinMesh = new THREE.InstancedMesh(coin, new THREE.MeshStandardMaterial({ color: 0xffc93c, metalness: 0.6, roughness: 0.3, emissive: 0x7a5200 }), 300);
+    this.coinMesh = new THREE.InstancedMesh(coin, new THREE.MeshStandardMaterial({ color: 0xffc93c, metalness: 0.6, roughness: 0.3, emissive: 0xb07800, emissiveIntensity: 1.4 }), 300);
     const heart = new THREE.SphereGeometry(0.14, 10, 8);
-    this.heartMesh = new THREE.InstancedMesh(heart, new THREE.MeshBasicMaterial({ color: 0xff4a6a, toneMapped: false }), 20);
+    this.heartMesh = new THREE.InstancedMesh(heart, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff4a6a).multiplyScalar(1.6), toneMapped: false }), 20);
     for (const m of [this.xpMesh, this.coinMesh, this.heartMesh]) {
       m.frustumCulled = false;
       scene.add(m);
@@ -302,7 +305,7 @@ export class Fx {
         dummy.updateMatrix();
         this.heroOrbs.setMatrixAt(no, dummy.matrix);
         color.setHex(a.kind === 'pet' ? a.color : 0xb890ff);
-        this.heroOrbs.setColorAt(no++, color);
+        this.heroOrbs.setColorAt(no++, hdrColor.copy(color).multiplyScalar(HDR.orb));
         this.sparks.emit(a.x, Y, a.z, 0, 0, 0, color, a.kind === 'pet' ? 0.2 : 0.3, 0.22, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.8 });
         continue;
       }
@@ -336,11 +339,11 @@ export class Fx {
       else dummy.scale.setScalar(size);
       dummy.updateMatrix();
       this.shotCore.setMatrixAt(n, dummy.matrix);
-      this.shotCore.setColorAt(n, color.setHex(SHOT_COLORS[s.kind] ?? 0xffffff));
+      this.shotCore.setColorAt(n, color.setHex(SHOT_COLORS[s.kind] ?? 0xffffff).multiplyScalar(HDR.core));
       dummy.scale.multiplyScalar(2.1 + Math.sin(t * 20 + s.id) * 0.2);
       dummy.updateMatrix();
       this.shotHalo.setMatrixAt(n, dummy.matrix);
-      this.shotHalo.setColorAt(n, color.setHex(SHOT_GLOW[s.kind] ?? 0xffffff));
+      this.shotHalo.setColorAt(n, color.setHex(SHOT_GLOW[s.kind] ?? 0xffffff).multiplyScalar(HDR.halo));
       n++;
     }
     this.shotCore.count = this.shotHalo.count = n;
@@ -377,7 +380,8 @@ export class Fx {
       dummy.scale.setScalar(1 + Math.sin(t * 12 + i) * 0.1);
       dummy.updateMatrix();
       this.orbMesh.setMatrixAt(i, dummy.matrix);
-      this.orbMesh.setColorAt(i, color.setHex(ORB_COLORS[o.kind]));
+      this.orbMesh.setColorAt(i, color.setHex(ORB_COLORS[o.kind]).multiplyScalar(HDR.orb));
+      color.setHex(ORB_COLORS[o.kind]);
       this.sparks.emit(o.x, Y, o.z, 0, 0.3, 0, color, 0.18, 0.25, { endSize: 0.03, drag: 1, brightness: 1.5, opacity: 0.8 });
     });
     this.orbMesh.instanceMatrix.needsUpdate = true;

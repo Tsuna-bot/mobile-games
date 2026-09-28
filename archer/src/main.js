@@ -5,6 +5,7 @@ import { Assets } from './render/assets.js';
 import { View } from './render/view.js';
 import { Haptics } from './ui/haptics.js';
 import { UI } from './ui/ui.js';
+import { installIcons } from './ui/icons.js';
 
 function supportsWebGL2() {
   try {
@@ -46,6 +47,7 @@ function registerServiceWorker() {
 
 async function boot() {
   window.__archerBooted = true;
+  installIcons();
   const ui = new UI(document);
   if (!supportsWebGL2()) {
     ui.fatal('Ton navigateur ne supporte pas WebGL 2. Mets-le à jour ou essaie Safari ou Chrome récents.');

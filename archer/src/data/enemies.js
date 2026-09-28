@@ -18,7 +18,7 @@ export const ENEMIES = {
     blurb: 'Il se prépare… et charge en ligne droite.',
   },
   ghost: {
-    id: 'ghost', name: 'Fantôme', model: 'ghost', ai: 'float',
+    id: 'ghost', name: 'Fantôme', model: 'q_ghost', height: 1.05, ai: 'float',
     hp: 130, speed: 1.5, radius: 0.3, touch: 45, xp: 6, coins: 2, scale: 1, flying: true,
     blurb: 'Traverse les obstacles et flotte vers toi.',
   },
@@ -38,15 +38,15 @@ export const ENEMIES = {
     blurb: 'Lance des bombes : sors du cercle rouge !',
   },
   wisp: {
-    id: 'wisp', name: 'Feu follet', model: 'ghost', ai: 'float',
-    hp: 60, speed: 2.5, radius: 0.22, touch: 35, xp: 3, coins: 1, scale: 0.6, flying: true, tint: 0x9dd8ff,
+    id: 'wisp', name: 'Feu follet', model: 'q_hywirl', height: 0.6, ai: 'float',
+    hp: 60, speed: 2.5, radius: 0.22, touch: 35, xp: 3, coins: 1, scale: 0.6, flying: true,
     blurb: 'Petit, rapide, toujours en bande.',
   },
 
   // Bosses: bigger, several attack patterns, a health bar at the top of the screen.
   ogre: {
-    id: 'ogre', name: 'Ogre des bois', model: 'barbarian', show: ['2H_Axe', 'Barbarian_Hat'], aimClip: '2H_Melee_Attack_Chop', ai: 'bossOgre', boss: true,
-    hp: 4200, speed: 1.1, radius: 0.9, touch: 110, shot: 90, shotSpeed: 6, dash: 8, blast: 1.8, xp: 60, coins: 40, scale: 2.5, tint: 0xa8d060,
+    id: 'ogre', name: 'Roi Champignon', model: 'q_mushroomking', height: 3, ai: 'bossOgre', boss: true,
+    hp: 4200, speed: 1.1, radius: 0.9, touch: 110, shot: 90, shotSpeed: 6, dash: 8, blast: 1.8, xp: 60, coins: 40, scale: 2.5,
     blurb: 'Charge, frappe le sol et projette des rochers.',
   },
   skeletonKing: {
@@ -55,8 +55,8 @@ export const ENEMIES = {
     blurb: 'Spirales d’os, cercles de projectiles et squelettes invoqués.',
   },
   count: {
-    id: 'count', name: 'Liche pourpre', model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Shoot', ai: 'bossCount', boss: true,
-    hp: 8600, speed: 1.2, radius: 0.8, touch: 120, shot: 95, shotSpeed: 5.5, xp: 100, coins: 80, scale: 2.4, tint: 0xd06080,
-    blurb: 'Se téléporte, lâche des chauves-souris et des éventails de sang.',
+    id: 'count', name: 'Dragon spectral', model: 'q_dragon', height: 3, hover: true, ai: 'bossCount', boss: true,
+    hp: 8600, speed: 1.2, radius: 0.8, touch: 120, shot: 95, shotSpeed: 5.5, xp: 100, coins: 80, scale: 2.4,
+    blurb: 'Se téléporte, lâche des chauves-souris et des éventails de flammes.',
   },
 };

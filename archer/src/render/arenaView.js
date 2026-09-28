@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CELL } from '../sim/arena.js';
 import { batchStatic } from './batch.js';
+import { Ambience } from './ambience.js';
+import { FLOOR_STYLE, occlusionTexture, patchFloor, setRim } from './surfaces.js';
 
 /**
  * Themes: floor checker colours, what stands on blocks, pits and around the arena,
@@ -9,19 +11,24 @@ import { batchStatic } from './batch.js';
  */
 export const THEMES = {
   forest: {
-    floor: [0x9fd660, 0x93cc56], edge: 0x6fa844, ground: 0x4f8a38, fog: 0x86b86a, sky: 0xbfe5a0,
-    sun: 0xfff1d6, sunIntensity: 2.6, hemi: [0xdff4ff, 0x4f7a3a], hemiIntensity: 1.4,
-    // [model, footprint width] — KayKit props are fitted to the cell.
-    blocks: [['rock_single_C', 0.95, 1.6], ['rock_single_E', 1, 2.2], ['crate_A_big', 0.8], ['barrel', 0.72], ['tree_single_A', 0.95]],
-    border: [['tree_single_A', 1.1], ['tree_single_B', 1.15], ['trees_A_medium', 1.7], ['trees_B_medium', 1.6]],
-    outer: [['trees_A_large', 2.6], ['trees_B_large', 2.6], ['trees_A_medium', 2.2], ['tree_single_B', 1.4], ['tree_single_A', 1.3]],
-    props: [['rock_single_A', 0.5], ['resource_lumber', 0.9], ['target', 0.6], ['waterlily_A', 0.4], ['barrel', 0.5]],
+    floor: [0x94d05a, 0x8bc852], edge: 0x5f9a3c, ground: 0x4a8434, fog: 0x7fae66, sky: 0x9fcf88,
+    sun: 0xffeccc, sunIntensity: 2.5, hemi: [0xdff4ff, 0x3f6a30], hemiIntensity: 0.95,
+    style: FLOOR_STYLE.grass, groundStyle: FLOOR_STYLE.grass, env: 0.2, back: [0x9fd8ff, 1.2], rim: [0xfff4d0, 0.45],
+    grade: { shadows: 0x2a5a7a, highlights: 0xffd8a0, tone: 0.08, saturation: 1.15 },
+    // [model, footprint width, height stretch] — props are fitted to the cell.
+    blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['Rock_3_C', 0.95], ['Rock_3_E', 0.9], ['Bush_1_A', 0.95], ['Bush_1_C', 0.95]],
+    border: [['Tree_1_A', 1.3], ['Tree_1_B', 1.35], ['Tree_3_A', 1.4], ['Tree_4_A', 1.1], ['Bush_1_C', 1.1], ['Tree_1_C', 1.3]],
+    outer: [['Tree_1_A', 2], ['Tree_1_B', 2.1], ['Tree_1_C', 2], ['Tree_3_A', 2.2], ['Tree_3_B', 2.2], ['Tree_4_A', 1.6], ['Tree_4_B', 1.6], ['Rock_2_A', 1.6], ['Bush_3_A', 1.4]],
+    props: [['Grass_1_A', 0.45], ['Grass_2_A', 0.45], ['Bush_1_G', 0.6], ['Bush_1_E', 0.5], ['Rock_1_A', 0.5], ['barrel', 0.5]],
+    floorDecor: [['Bush_1_G', 0.32], ['Bush_1_E', 0.24]],
     pit: { deep: 0x2f7fbf, shallow: 0x6fd0e8, foam: 0xe8fbff },
     door: ['fence_wood_straight_gate', 2.2],
   },
   dungeon: {
-    floor: [0x8a88a8, 0x807e9e], edge: 0x5d5b78, ground: 0x2a2838, fog: 0x3a3850, sky: 0x2a2838,
-    sun: 0xffd6a8, sunIntensity: 2.2, hemi: [0xc8c0ff, 0x3a3048], hemiIntensity: 1.2,
+    floor: [0x817e9c, 0x7a7794], edge: 0x55526e, ground: 0x221f2e, fog: 0x2a2638, sky: 0x1c1a26,
+    sun: 0xffcf98, sunIntensity: 2.4, hemi: [0xc8c0ff, 0x3a3048], hemiIntensity: 0.9,
+    style: FLOOR_STYLE.stone, groundStyle: FLOOR_STYLE.soil, env: 0.3, back: [0x8a7aff, 1.4], rim: [0xffc890, 0.5],
+    grade: { shadows: 0x3a2a6a, highlights: 0xffb870, tone: 0.1, saturation: 1.1 },
     blocks: [['column', 0.8], ['barrel_large', 0.85], ['crates_stacked', 0.95], ['box_stacked', 0.95], ['keg_decorated', 0.95]],
     walls: ['wall', 2],
     outer: [['pillar', 1.2], ['pillar_decorated', 1.4], ['rubble_half', 2.4], ['barrel_small_stack', 1.4]],
@@ -31,11 +38,13 @@ export const THEMES = {
     torch: ['torch_lit', 0.28, 0xffb050],
   },
   graveyard: {
-    floor: [0x6f7f6a, 0x667862], edge: 0x4a5a48, ground: 0x283428, fog: 0x3c4a50, sky: 0x2c3844,
-    sun: 0xc8d8ff, sunIntensity: 1.8, hemi: [0xa8c0ff, 0x2a3024], hemiIntensity: 1.3,
+    floor: [0x667a6c, 0x5f7265], edge: 0x43543f, ground: 0x1e2a24, fog: 0x2e3c46, sky: 0x1e2834,
+    sun: 0xc8d8ff, sunIntensity: 2, hemi: [0xa8c0ff, 0x2a3024], hemiIntensity: 1,
+    style: FLOOR_STYLE.flagstone, groundStyle: FLOOR_STYLE.soil, env: 0.3, back: [0x7affc8, 1.3], rim: [0xb8ffe0, 0.55],
+    grade: { shadows: 0x1a4a5a, highlights: 0xc8e0ff, tone: 0.12, saturation: 1.05 },
     blocks: [['gravestone', 0.9], ['grave_A', 0.95], ['grave_B', 0.95], ['pumpkin_orange_jackolantern', 0.8], ['shrine_candles', 0.75]],
     walls: ['fence', 2],
-    outer: [['tree_dead_large', 1.8], ['tree_dead_medium', 1.5], ['tree_pine_orange_large', 2.6], ['tree_pine_yellow_large', 2.6], ['tree_pine_orange_medium', 2], ['crypt', 2.6]],
+    outer: [['tree_dead_large', 1.8], ['tree_dead_medium', 1.5], ['Tree_Bare_1_A', 1.4], ['Tree_Bare_2_A', 1.3], ['tree_pine_orange_large', 2.6], ['tree_pine_yellow_large', 2.6], ['tree_pine_orange_medium', 2], ['crypt', 2.6]],
     props: [['pumpkin_yellow', 0.5], ['skull_candle', 0.45], ['ribcage', 0.5], ['bone_A', 0.4], ['gravemarker_A', 0.45], ['coffin_decorated', 0.8]],
     pit: { deep: 0x0a1a18, shallow: 0x2a5a48, foam: 0x7fffc0 },
     door: ['fence_gate', 2.2],
@@ -100,7 +109,13 @@ export class ArenaView {
     cam.far = 30;
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.02;
-    scene.add(this.hemi, this.sun, this.sun.target);
+    // Back light: a coloured edge on everything, seen from the camera side.
+    this.back = new THREE.DirectionalLight(0x9fd8ff, 1.2);
+    this.back.position.set(3, 6, -10);
+    scene.add(this.hemi, this.sun, this.sun.target, this.back);
+    this.ambience = new Ambience(scene);
+    this.effects = 1;
+    this.onTheme = null;
     this.waterMaterials = [];
     this.torches = [];
   }
@@ -134,7 +149,12 @@ export class ArenaView {
     };
     const scene = this.scene;
     scene.background = new THREE.Color(theme.sky);
-    scene.fog = new THREE.Fog(theme.fog, 22, 42);
+    scene.fog = new THREE.Fog(theme.fog, 26, 52);
+    scene.environmentIntensity = theme.env;
+    this.back.color.setHex(theme.back[0]);
+    this.back.intensity = theme.back[1];
+    setRim(theme.rim[0], theme.rim[1]);
+    this.onTheme?.(theme);
     this.hemi.color.setHex(theme.hemi[0]);
     this.hemi.groundColor.setHex(theme.hemi[1]);
     this.hemi.intensity = theme.hemiIntensity;
@@ -149,7 +169,7 @@ export class ArenaView {
     // Ground outside the arena.
     const groundGeometry = new THREE.PlaneGeometry(60, 60);
     groundGeometry.rotateX(-Math.PI / 2);
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: theme.ground, roughness: 1 });
+    const groundMaterial = patchFloor(new THREE.MeshStandardMaterial({ color: theme.ground, roughness: 1 }), { style: theme.groundStyle, detail: 0.6 });
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.position.y = -0.4;
     ground.receiveShadow = true;
@@ -159,7 +179,9 @@ export class ArenaView {
     // Checker floor: one tile per cell, vertex colours, a slight bevel shade at the rim.
     const tile = new RoundedBoxGeometry(0.97, 0.24, 0.97, 1, 0.07);
     tile.translate(0, -0.12, 0);
-    const floorMaterial = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 });
+    const occlusion = occlusionTexture(arena);
+    const floorMaterial = patchFloor(new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0 }), { style: theme.style, occlusion: occlusion.texture, bounds: occlusion.bounds });
+    this.disposables.push(occlusion.texture);
     const floor = new THREE.InstancedMesh(tile, floorMaterial, W * H);
     floor.receiveShadow = true;
     const m = new THREE.Matrix4();
@@ -184,7 +206,7 @@ export class ArenaView {
     // Rim around the arena.
     const rimGeometry = new THREE.BoxGeometry(W + 0.6, 0.3, H + 0.6);
     rimGeometry.translate(0, -0.2, 0);
-    const rimMaterial = new THREE.MeshStandardMaterial({ color: theme.edge, roughness: 1 });
+    const rimMaterial = patchFloor(new THREE.MeshStandardMaterial({ color: theme.edge, roughness: 1 }), { style: theme.groundStyle, detail: 0.5 });
     const rim = new THREE.Mesh(rimGeometry, rimMaterial);
     rim.receiveShadow = true;
     this.root.add(rim);
@@ -219,6 +241,16 @@ export class ArenaView {
       for (let c = 0; c < W; c++) {
         if (arena.cells[r * W + c] !== CELL.BLOCK) continue;
         place(pick(theme.blocks), c - halfW + 0.5, r - halfH + 0.5, Math.floor(random() * 4) * (Math.PI / 2) + (random() - 0.5) * 0.4);
+      }
+    }
+
+    // A few tufts on the floor (no gameplay effect, merged with the rest).
+    if (theme.floorDecor) {
+      for (let i = 0; i < 14; i++) {
+        const c = Math.floor(random() * W);
+        const r = Math.floor(random() * H);
+        if (arena.cells[r * W + c] !== CELL.FLOOR) continue;
+        place(pick(theme.floorDecor), c - halfW + 0.5 + (random() - 0.5) * 0.7, r - halfH + 0.5 + (random() - 0.5) * 0.7, random() * Math.PI * 2, 0.8 + random() * 0.5).userData.noShadow = true;
       }
     }
 
@@ -292,6 +324,7 @@ export class ArenaView {
     this.door = { mesh: door, glow, open: 0, target: 0, baseY: 0, height: this.assets.fittedHeight(theme.door[0], theme.door[1]) };
     // Everything else stands still: bake it into one mesh per texture.
     this.disposables.push(...batchStatic(this.root, new Set([door])));
+    this.ambience.build(themeId, halfW, halfH, this.effects);
   }
 
   waterMaterial(theme) {
@@ -317,6 +350,7 @@ export class ArenaView {
 
   update(dt) {
     this.time += dt;
+    this.ambience.update(dt);
     if (this.sharedWater) this.sharedWater.uniforms.uTime.value = this.time;
     for (let i = 0; i < this.torches.length; i++) {
       const s = 1 + Math.sin(this.time * 9 + i * 1.7) * 0.12 + Math.sin(this.time * 23 + i) * 0.06;

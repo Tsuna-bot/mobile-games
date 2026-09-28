@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { damp } from '../core/math.js';
 import { mergeSkinned } from './batch.js';
+import { skinOf } from '../data/skins.js';
+import { patchRim } from './surfaces.js';
 
 const TMP = new THREE.Color();
 
@@ -117,46 +119,6 @@ function dressCharacter(assets, name, show = [], attach = null) {
   return figure;
 }
 
-/** A soft rounded ghost (no rig): a dome, a wavy skirt and glowing eyes. */
-function makeGhost(color, gear) {
-  const group = new THREE.Group();
-  const profile = [];
-  for (let i = 0; i <= 12; i++) {
-    const t = i / 12;
-    const a = t * Math.PI * 0.5;
-    profile.push(new THREE.Vector2(Math.sin(a) * 0.36 + 0.001, 1.05 - (1 - Math.cos(a)) * 0.36));
-  }
-  profile.push(new THREE.Vector2(0.4, 0.45), new THREE.Vector2(0.44, 0.22), new THREE.Vector2(0.001, 0.22));
-  const geometry = new THREE.LatheGeometry(profile, 24);
-  // Wavy hem.
-  const pos = geometry.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    if (y < 0.5) {
-      const a = Math.atan2(pos.getZ(i), pos.getX(i));
-      pos.setY(i, y + Math.sin(a * 6) * 0.06 * (0.5 - y) / 0.28);
-    }
-  }
-  geometry.computeVertexNormals();
-  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.35, transparent: true, opacity: 0.85, emissive: 0x000000 });
-  const body = new THREE.Mesh(geometry, material);
-  body.castShadow = true;
-  const eyeGeometry = new THREE.SphereGeometry(0.055, 12, 8);
-  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x1a1030 });
-  for (const x of [-0.12, 0.12]) {
-    const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    eye.position.set(x, 0.8, 0.31);
-    eye.scale.set(1, 1.4, 0.6);
-    group.add(eye);
-  }
-  const mouth = new THREE.Mesh(eyeGeometry, eyeMaterial);
-  mouth.position.set(0, 0.63, 0.34);
-  mouth.scale.set(1.3, 0.9, 0.5);
-  group.add(body, mouth);
-  gear.push(geometry, eyeGeometry, eyeMaterial);
-  return { group, material };
-}
-
 /**
  * The hero and the monsters (KayKit characters with their weapons), health bars,
  * hit flashes, spawn and death animations.
@@ -170,6 +132,7 @@ export class Actors {
     this.enemies = new Map();
     this.cameraQuaternion = new THREE.Quaternion();
     this.hero = null;
+    this.theme = 'forest';
   }
 
   // ------------------------------------------------------------ hero
@@ -283,32 +246,31 @@ export class Actors {
     root.add(body);
     const gear = [];
     const materials = [];
-    let model;
-    if (def.model === 'ghost') {
-      const ghost = makeGhost(def.tint ?? 0xe8f4ff, gear);
-      model = ghost.group;
-      model.scale.setScalar(def.scale);
-      materials.push(ghost.material);
-    } else {
-      model = dressCharacter(this.assets, def.model, def.show, def.attach);
-      model.scale.setScalar(CHARACTER_SCALE * def.scale);
-      // Own materials so each monster can flash and be tinted.
-      const copies = new Map();
-      model.traverse((o) => {
-        if (!o.isMesh) return;
-        let copy = copies.get(o.material);
-        // Blob shadows are enough for the crowd; only bosses cast real ones.
-        o.castShadow = Boolean(def.boss);
-        if (!copy) {
-          copy = o.material.clone();
-          if (def.tint && copy.map) copy.color.setHex(def.tint);
-          copy.emissive = new THREE.Color(0x000000);
-          copies.set(o.material, copy);
-          materials.push(copy);
-        }
-        o.material = copy;
-      });
-    }
+    const skin = skinOf(def, this.theme);
+    const monster = skin.model.startsWith('q_');
+    const model = monster ? this.assets.clone(skin.model) : dressCharacter(this.assets, skin.model, skin.show, skin.attach);
+    // Quaternius monsters are fitted to a height; KayKit characters share one scale.
+    const height = skin.height ?? 1.3 * def.scale;
+    if (skin.height) model.scale.setScalar(height / this.assets.height(skin.model));
+    else model.scale.setScalar(CHARACTER_SCALE * def.scale);
+    // Own materials so each monster can flash and be tinted.
+    const copies = new Map();
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.frustumCulled = false;
+      // Blob shadows are enough for the crowd; only bosses cast real ones.
+      o.castShadow = Boolean(def.boss);
+      let copy = copies.get(o.material);
+      if (!copy) {
+        copy = o.material.clone();
+        if (skin.tint && copy.map) copy.color.setHex(skin.tint);
+        copy.emissive = new THREE.Color(0x000000);
+        patchRim(copy);
+        copies.set(o.material, copy);
+        materials.push(copy);
+      }
+      o.material = copy;
+    });
     gear.push(...materials);
     const scale = def.scale;
     body.add(model);
@@ -316,23 +278,36 @@ export class Actors {
     let bar = null;
     if (!def.boss) {
       bar = makeBar(0.7 * Math.max(0.8, def.scale), 0xff5a4a, gear);
-      bar.group.position.y = 1.1 * scale + 0.25;
+      bar.group.position.y = height + (skin.hover ? 0.55 : 0.25);
       bar.group.visible = false;
       root.add(bar.group);
     }
-    const skeleton = def.model.startsWith('skeleton');
-    const animator = new Animator(model, def.model === 'ghost' ? [] : this.assets.clips, {
-      idle: skeleton ? 'Idle_Combat' : 'Idle', walk: skeleton ? 'Walking_D_Skeletons' : 'Walking_A', run: 'Running_A', die: 'Death_A', hit: 'Hit_A', aim: def.aimClip, spawn: skeleton ? 'Spawn_Ground_Skeletons' : null,
+    const skeleton = skin.model.startsWith('skeleton');
+    const clips = monster ? this.assets.clipsOf(skin.model) : this.assets.clips;
+    const has = (name) => clips.some((c) => c.name === name);
+    const pickClip = (...names) => names.find(has) ?? null;
+    const animator = new Animator(model, clips, monster ? {
+      idle: pickClip('Idle', 'Flying_Idle'), walk: pickClip('Walk', 'Fast_Flying', 'Flying_Idle'), run: pickClip('Run', 'Fast_Flying', 'Walk'),
+      die: pickClip('Death'), hit: pickClip('HitReact', 'HitRecieve'), aim: pickClip('Weapon', 'Punch', 'Bite_Front', 'Headbutt'),
+    } : {
+      idle: skeleton ? 'Idle_Combat' : 'Idle', walk: skeleton ? 'Walking_D_Skeletons' : 'Walking_A', run: 'Running_A', die: 'Death_A', hit: 'Hit_A', aim: skin.aimClip, spawn: skeleton ? 'Spawn_Ground_Skeletons' : null,
     });
     animator.play(animator.actions.spawn ? 'spawn' : 'idle');
     root.position.set(enemy.x, 0, enemy.z);
     // Skeletons climb out of the ground with their own animation; the others rise.
     body.position.y = animator.actions.spawn ? 0 : -1.2;
     this.scene.add(root);
-    const view = { enemy, root, body, model, materials, bar, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: Boolean(def.flying), ghost: def.model === 'ghost', risesByAnim: Boolean(animator.actions.spawn) };
+    const view = { enemy, root, body, model, materials, bar, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
     enemy.view = view;
     this.enemies.set(enemy.id, view);
     return view;
+  }
+
+  /** Squash and a white flash when an arrow lands. */
+  enemyHit(enemy, crit) {
+    const view = enemy.view;
+    if (!view || view.dying > 0) return;
+    view.punch = crit ? 1 : 0.6;
   }
 
   enemyDied(enemy) {
@@ -414,13 +389,17 @@ export class Actors {
       // Rises from the ground when it spawns.
       const hidden = e.spawning > 0 && !view.risesByAnim;
       view.body.position.y = damp(view.body.position.y, hidden ? -1.2 : view.floaty ? 0.25 + Math.sin(time * 3 + e.id) * 0.08 : 0, 8, dt);
-      if (view.ghost) view.model.rotation.z = Math.sin(time * 2.2 + e.id) * 0.08;
       const aiming = e.state === 'aim';
       if (e.moving || aiming) {
         const desired = Math.atan2(aiming ? e.aimX : e.dirX, aiming ? e.aimZ : e.dirZ);
         view.yaw += shortestAngle(view.yaw, desired) * Math.min(1, dt * 12);
       }
       view.body.rotation.y = view.yaw;
+      if (view.punch > 0) {
+        view.punch = Math.max(0, view.punch - dt * 7);
+        const k = Math.sin(view.punch * Math.PI) * 0.16 * view.punch;
+        view.body.scale.set(1 + k, 1 - k, 1 + k);
+      } else view.body.scale.set(1, 1, 1);
       if (e.spawning > 0 && view.risesByAnim) view.animator.play('spawn', false, 1.3);
       else if (e.state === 'dash') view.animator.play('run', false, 1.6);
       else if (aiming || e.state === 'slam') view.animator.play('aim', false, 0.8);

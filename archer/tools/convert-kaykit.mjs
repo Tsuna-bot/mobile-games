@@ -19,6 +19,16 @@ const SKE = `${K}/KayKit-Character-Pack-Skeletons-1.0/addons/kaykit_character_pa
 const DUN = `${K}/KayKit-Dungeon-Remastered-1.0/addons/kaykit_dungeon_remastered/Assets/gltf`;
 const HAL = `${K}/KayKit-Halloween-Bits-1.0/addons/kaykit_halloween_bits/Assets/gltf`;
 const HEX = `${K}/KayKit-Medieval-Hexagon-Pack-1.0/addons/kaykit_medieval_hexagon_pack/Assets/gltf`;
+// KayKit Forest Nature Pack (free tier, itch.io) and Quaternius Ultimate Monsters (glTF folders).
+const FOR = `${K}/KayKit-Forest/KayKit_Forest_Nature_Pack_1.0_FREE/Assets/gltf`;
+const UM = `${K}/../q/um`;
+// Quaternius monsters keep their own rig and clips.
+const MONSTERS = {
+  q_mushnub: 'Blob/Mushnub', q_mushnub_evolved: 'Blob/Mushnub_Evolved', q_wizard: 'Blob/Wizard', q_spiky: 'Blob/GreenSpikyBlob', q_pinkblob: 'Blob/PinkBlob',
+  q_orc: 'Big/Orc', q_orc_skull: 'Big/Orc_Skull', q_demon: 'Big/Demon', q_bluedemon: 'Big/BlueDemon', q_mushroomking: 'Big/MushroomKing', q_tribal: 'Big/Tribal', q_yeti: 'Big/Yeti',
+  q_ghost: 'Flying/Ghost', q_ghost_skull: 'Flying/Ghost_Skull', q_bee: 'Flying/Armabee', q_glub: 'Flying/Glub', q_hywirl: 'Flying/Hywirl', q_dragon: 'Flying/Dragon_Evolved', q_bat: 'Flying/Goleling',
+};
+const KEEP_MONSTER = new Set(['Death', 'HitReact', 'HitRecieve', 'Idle', 'Run', 'Walk', 'Punch', 'Weapon', 'Bite_Front', 'Flying_Idle', 'Fast_Flying', 'Headbutt', 'Jump']);
 
 const KEEP = new Set(['Idle', 'Idle_Combat', 'Running_A', 'Walking_A', 'Walking_D_Skeletons', 'Death_A', 'Hit_A', '1H_Ranged_Shoot', '2H_Ranged_Shoot', 'Spellcast_Shoot', 'Spellcast_Summon', '1H_Melee_Attack_Chop', '2H_Melee_Attack_Chop', '2H_Melee_Attack_Spin', 'Cheer', 'Spawn_Ground_Skeletons', 'Taunt', 'Throw', 'Dodge_Forward', 'Unarmed_Melee_Attack_Punch_A']);
 
@@ -58,6 +68,12 @@ const PROPS = {
   grave_A: HAL, grave_B: HAL, gravestone: HAL, gravemarker_A: HAL, crypt: HAL, coffin_decorated: HAL, pumpkin_orange_jackolantern: HAL, pumpkin_yellow: HAL,
   tree_dead_large: HAL, tree_dead_medium: HAL, tree_pine_orange_large: HAL, tree_pine_yellow_large: HAL, tree_pine_orange_medium: HAL,
   fence: HAL, fence_gate: HAL, fence_pillar: HAL, lantern_standing: HAL, post_lantern: HAL, post_skull: HAL, shrine_candles: HAL, skull_candle: HAL, arch_gate: HAL, ribcage: HAL, bone_A: HAL,
+  // Forest (KayKit Forest Nature Pack).
+  Tree_1_A_Color1: FOR, Tree_1_B_Color1: FOR, Tree_1_C_Color1: FOR, Tree_3_A_Color1: FOR, Tree_3_B_Color1: FOR, Tree_4_A_Color1: FOR, Tree_4_B_Color1: FOR, Tree_2_A_Color1: FOR,
+  Tree_Bare_1_A_Color1: FOR, Tree_Bare_1_B_Color1: FOR, Tree_Bare_2_A_Color1: FOR,
+  Bush_1_A_Color1: FOR, Bush_1_C_Color1: FOR, Bush_1_E_Color1: FOR, Bush_1_G_Color1: FOR, Bush_3_A_Color1: FOR, Bush_4_A_Color1: FOR,
+  Rock_3_A_Color1: FOR, Rock_3_B_Color1: FOR, Rock_3_C_Color1: FOR, Rock_3_E_Color1: FOR, Rock_2_A_Color1: FOR, Rock_1_A_Color1: FOR,
+  Grass_1_A_Color1: FOR, Grass_2_A_Color1: FOR,
   // Weapons shown in hands.
   crossbow_1handed: `${ADV}/Assets/gltf`, staff: `${ADV}/Assets/gltf`, sword_1handed: `${ADV}/Assets/gltf`, quiver: `${ADV}/Assets/gltf`, arrow: `${ADV}/Assets/gltf`, axe_2handed: `${ADV}/Assets/gltf`,
 };
@@ -81,7 +97,9 @@ async function convert(input, output, character) {
   const root = doc.getRoot();
   if (character) {
     // All KayKit characters share the same rig: only skeleton_minion carries the clips.
-    for (const anim of root.listAnimations()) if (character !== 'anims' || !KEEP.has(anim.getName())) dropAnim(anim);
+    // Quaternius monsters ('monster') keep their own.
+    const keep = character === 'monster' ? KEEP_MONSTER : character === 'anims' ? KEEP : new Set();
+    for (const anim of root.listAnimations()) if (!keep.has(anim.getName())) dropAnim(anim);
     // Drop tracks that never move away from the rest pose (most scale and many translation tracks).
     for (const anim of root.listAnimations()) {
       for (const channel of anim.listChannels()) {
@@ -114,6 +132,11 @@ for (const [name, file] of Object.entries(CHARACTERS)) {
   total += size;
   console.log('char', name, Math.round(size / 1024), 'KB');
 }
+for (const [name, file] of Object.entries(MONSTERS)) {
+  const size = await convert(`${UM}/${file}.gltf`, `${OUT}/chars/${name}.glb`, 'monster');
+  total += size;
+  console.log('monster', name, Math.round(size / 1024), 'KB');
+}
 for (const [key, dir] of Object.entries(PROPS)) {
   const fileName = key.includes('.') ? key : `${key}.gltf`;
   const file = find(dir, fileName) || find(dir, `${fileName}.glb`) || find(dir, fileName.replace(/\.gltf$/, '.glb'));
@@ -121,7 +144,7 @@ for (const [key, dir] of Object.entries(PROPS)) {
     console.log('MISSING', key);
     continue;
   }
-  const name = fileName.replace(/\.gltf$|\.glb$/, '').replace('.gltf', '');
+  const name = fileName.replace(/\.gltf$|\.glb$/, '').replace('.gltf', '').replace('_Color1', '');
   const size = await convert(file, `${OUT}/props/${name}.glb`, false);
   total += size;
 }

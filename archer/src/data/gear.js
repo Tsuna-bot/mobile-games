@@ -10,12 +10,12 @@ export const RARITIES = [
 ];
 
 export const SLOTS = [
-  { id: 'weapon', name: 'Arme', icon: '🏹' },
-  { id: 'armor', name: 'Armure', icon: '🛡️' },
-  { id: 'ring1', name: 'Anneau', icon: '💍', kind: 'ring' },
-  { id: 'ring2', name: 'Anneau', icon: '💍', kind: 'ring' },
-  { id: 'amulet', name: 'Amulette', icon: '📿' },
-  { id: 'pet', name: 'Familier', icon: '🐾' },
+  { id: 'weapon', name: 'Arme', icon: 'slot-weapon' },
+  { id: 'armor', name: 'Armure', icon: 'slot-armor' },
+  { id: 'ring1', name: 'Anneau', icon: 'slot-ring', kind: 'ring' },
+  { id: 'ring2', name: 'Anneau', icon: 'slot-ring', kind: 'ring' },
+  { id: 'amulet', name: 'Amulette', icon: 'slot-amulet' },
+  { id: 'pet', name: 'Familier', icon: 'slot-pet' },
 ];
 
 /**
@@ -25,26 +25,26 @@ export const SLOTS = [
  */
 export const BASES = {
   // Weapons change how you shoot.
-  bow: { id: 'bow', slot: 'weapon', name: 'Arc de chasse', icon: '🏹', text: 'Équilibré.', weapon: 'bow', stats: (k) => ({ damage: 20 * k }) },
-  crossbow: { id: 'crossbow', slot: 'weapon', name: 'Arbalète', icon: '🎯', text: 'Plus lente, carreaux puissants et rapides qui traversent un ennemi.', weapon: 'crossbow', stats: (k) => ({ damage: 34 * k }) },
-  staff: { id: 'staff', slot: 'weapon', name: 'Bâton arcanique', icon: '🪄', text: 'Orbes magiques qui suivent leur cible.', weapon: 'staff', stats: (k) => ({ damage: 22 * k }) },
-  blades: { id: 'blades', slot: 'weapon', name: 'Lames tournoyantes', icon: '🌀', text: 'Tir très rapide, les lames rebondissent une fois.', weapon: 'blades', stats: (k) => ({ damage: 13 * k }) },
+  bow: { id: 'bow', slot: 'weapon', name: 'Arc de chasse', icon: 'bow', text: 'Équilibré.', weapon: 'bow', stats: (k) => ({ damage: 20 * k }) },
+  crossbow: { id: 'crossbow', slot: 'weapon', name: 'Arbalète', icon: 'crossbow', text: 'Plus lente, carreaux puissants et rapides qui traversent un ennemi.', weapon: 'crossbow', stats: (k) => ({ damage: 34 * k }) },
+  staff: { id: 'staff', slot: 'weapon', name: 'Bâton arcanique', icon: 'staff', text: 'Orbes magiques qui suivent leur cible.', weapon: 'staff', stats: (k) => ({ damage: 22 * k }) },
+  blades: { id: 'blades', slot: 'weapon', name: 'Lames tournoyantes', icon: 'blades', text: 'Tir très rapide, les lames rebondissent une fois.', weapon: 'blades', stats: (k) => ({ damage: 13 * k }) },
 
   // Armours.
-  leather: { id: 'leather', slot: 'armor', name: 'Tunique de cuir', icon: '🥋', text: 'Vie et un peu d’esquive.', stats: (k) => ({ hp: 110 * k, dodge: 0.02 + 0.01 * k }) },
-  mail: { id: 'mail', slot: 'armor', name: 'Cotte de mailles', icon: '🛡️', text: 'Beaucoup de vie, réduit les dégâts.', stats: (k) => ({ hp: 150 * k, armor: 0.03 + 0.012 * k }) },
-  robe: { id: 'robe', slot: 'armor', name: 'Robe enchantée', icon: '🧥', text: 'Vie et dégâts contre les boss.', stats: (k) => ({ hp: 90 * k, bossDamage: 0.05 + 0.03 * k }) },
+  leather: { id: 'leather', slot: 'armor', name: 'Tunique de cuir', icon: 'leather', text: 'Vie et un peu d’esquive.', stats: (k) => ({ hp: 110 * k, dodge: 0.02 + 0.01 * k }) },
+  mail: { id: 'mail', slot: 'armor', name: 'Cotte de mailles', icon: 'mail', text: 'Beaucoup de vie, réduit les dégâts.', stats: (k) => ({ hp: 150 * k, armor: 0.03 + 0.012 * k }) },
+  robe: { id: 'robe', slot: 'armor', name: 'Robe enchantée', icon: 'robe', text: 'Vie et dégâts contre les boss.', stats: (k) => ({ hp: 90 * k, bossDamage: 0.05 + 0.03 * k }) },
 
   // Rings.
-  wolf: { id: 'wolf', slot: 'ring', name: 'Anneau du loup', icon: '🐺', text: 'Coups critiques.', stats: (k) => ({ crit: 0.02 + 0.012 * k, critDamage: 0.1 * k }) },
-  bear: { id: 'bear', slot: 'ring', name: 'Anneau de l’ours', icon: '🐻', text: 'Vie.', stats: (k) => ({ hp: 70 * k }) },
-  serpent: { id: 'serpent', slot: 'ring', name: 'Anneau du serpent', icon: '🐍', text: 'Esquive et vitesse.', stats: (k) => ({ dodge: 0.02 + 0.008 * k, speedMul: 0.02 + 0.01 * k }) },
-  falcon: { id: 'falcon', slot: 'ring', name: 'Anneau du faucon', icon: '🦅', text: 'Cadence de tir.', stats: (k) => ({ rateMul: 0.04 + 0.025 * k }) },
+  wolf: { id: 'wolf', slot: 'ring', name: 'Anneau du loup', icon: 'wolf', text: 'Coups critiques.', stats: (k) => ({ crit: 0.02 + 0.012 * k, critDamage: 0.1 * k }) },
+  bear: { id: 'bear', slot: 'ring', name: 'Anneau de l’ours', icon: 'bear', text: 'Vie.', stats: (k) => ({ hp: 70 * k }) },
+  serpent: { id: 'serpent', slot: 'ring', name: 'Anneau du serpent', icon: 'serpent', text: 'Esquive et vitesse.', stats: (k) => ({ dodge: 0.02 + 0.008 * k, speedMul: 0.02 + 0.01 * k }) },
+  falcon: { id: 'falcon', slot: 'ring', name: 'Anneau du faucon', icon: 'falcon', text: 'Cadence de tir.', stats: (k) => ({ rateMul: 0.04 + 0.025 * k }) },
 
   // Amulets.
-  life: { id: 'life', slot: 'amulet', name: 'Amulette de vie', icon: '💚', text: 'Soigne en entrant dans chaque salle.', stats: (k) => ({ hp: 40 * k, healOnRoom: 0.03 + 0.012 * k }) },
-  rage: { id: 'rage', slot: 'amulet', name: 'Amulette de rage', icon: '🔥', text: 'Attaque.', stats: (k) => ({ damage: 12 * k }) },
-  fortune: { id: 'fortune', slot: 'amulet', name: 'Amulette de fortune', icon: '🪙', text: 'Plus d’or ramassé.', stats: (k) => ({ coinMul: 0.1 + 0.08 * k, hp: 25 * k }) },
+  life: { id: 'life', slot: 'amulet', name: 'Amulette de vie', icon: 'life', text: 'Soigne en entrant dans chaque salle.', stats: (k) => ({ hp: 40 * k, healOnRoom: 0.03 + 0.012 * k }) },
+  rage: { id: 'rage', slot: 'amulet', name: 'Amulette de rage', icon: 'rage', text: 'Attaque.', stats: (k) => ({ damage: 12 * k }) },
+  fortune: { id: 'fortune', slot: 'amulet', name: 'Amulette de fortune', icon: 'fortune', text: 'Plus d’or ramassé.', stats: (k) => ({ coinMul: 0.1 + 0.08 * k, hp: 25 * k }) },
 };
 
 export const BASE_IDS = Object.keys(BASES);

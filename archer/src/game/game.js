@@ -14,6 +14,7 @@ import { HEROES } from '../data/meta.js';
 import { ensureProfile, runDrop, runGear } from '../meta/profile.js';
 import { Arena } from '../sim/arena.js';
 import { Menu } from './menu.js';
+import { icon } from '../ui/icons.js';
 import { Run, STATE } from '../sim/run.js';
 
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
@@ -34,6 +35,7 @@ export class Game {
     this.save = ensureProfile(save);
     const scene = view.scene;
     this.arenaView = new ArenaView(scene, assets);
+    this.arenaView.onTheme = (theme) => view.setGrade(theme.grade);
     this.actors = new Actors(scene, assets);
     this.fx = new Fx(scene);
     this.joystick = new Joystick(document.getElementById('touch'), document.getElementById('joy'), document.getElementById('joy-knob'));
@@ -52,6 +54,7 @@ export class Game {
     this.shake = 0;
     this.time = 0;
     this.slowMo = 0;
+    this.hitStop = 0;
     this.tmp = new THREE.Vector3();
     this.fadeEl = document.createElement('div');
     this.fadeEl.style.cssText = 'position:absolute;inset:0;z-index:5;background:#000;opacity:0;pointer-events:none;transition:opacity .22s ease';
@@ -110,6 +113,7 @@ export class Game {
     this.view.renderer.shadowMap.enabled = preset.shadows;
     this.arenaView.setShadowSize(preset.shadowMapSize);
     this.fx.scale = preset.effects;
+    this.arenaView.effects = preset.effects;
     this.monitor.reset();
     this.fitCamera();
   }
@@ -186,7 +190,7 @@ export class Game {
       gems: save.gems,
       chapterNumber: save.chapter + 1,
       chapterName: chapter.name,
-      best: best ? (best > ROOMS ? '✓ Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
+      best: best ? (best > ROOMS ? 'Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
       locked: save.chapter > save.unlocked,
       canPrev: save.chapter > 0,
       canNext: save.chapter < CHAPTERS.length - 1,
@@ -237,17 +241,19 @@ export class Game {
 
   buildRoom() {
     const run = this.run;
+    this.actors.theme = run.chapter.theme;
     this.arenaView.build(run.arena, run.chapter.theme, run.chapterIndex * 100 + run.room * 7 + 3);
     this.arenaView.openDoor(false);
   }
 
   offerChoices(kicker, title) {
     const run = this.run;
-    if (!run) return;
+    // Delayed offers can arrive after the choice was already made: never show an empty screen.
+    if (!run || this.mode !== MODE.CHOOSING || ![STATE.START, STATE.CHOOSE, STATE.ANGEL].includes(run.state) || (!run.choices.length && run.state !== STATE.ANGEL)) return;
     this.mode = MODE.CHOOSING;
     this.joystick.release();
     const angel = run.state === STATE.ANGEL;
-    const extra = angel ? [{ id: 'heal', icon: '💚', name: 'Soin de l’ange', text: 'Rend 40 % de ta vie.' }] : [];
+    const extra = angel ? [{ id: 'heal', icon: 'heal', name: 'Soin de l’ange', text: 'Rend 40 % de ta vie.' }] : [];
     this.ui.showChoices(kicker, title, run.choices, run.taken, (id) => this.choose(id), extra);
   }
 
@@ -329,7 +335,7 @@ export class Game {
     this.pendingDrop = drop;
     writeSave(save);
     const loot = [`<span class="pill"><i class="coin-icon"></i><b>+${coins}</b></span>`];
-    if (drop) loot.push('<span class="pill">🎁 Objet trouvé</span>');
+    if (drop) loot.push(`<span class="pill">${icon('gift')} Objet trouvé</span>`);
     if (gems) loot.push(`<span class="pill"><i class="gem-icon"></i><b>+${gems}</b></span>`);
     this.ui.showEnd(
       `Chapitre ${run.chapterIndex + 1} · ${run.chapter.name}`,
@@ -340,7 +346,7 @@ export class Game {
         ['Monstres', run.kills],
         ['Capacités', Object.values(run.taken).reduce((a, b) => a + b, 0)],
       ],
-      loot.join('') + (record && !won ? '<span class="pill">🏅 Nouveau record</span>' : '') + (unlocked ? '<span class="pill">🔓 Chapitre suivant</span>' : ''),
+      loot.join('') + (record && !won ? `<span class="pill">${icon('trophy')} Nouveau record</span>` : '') + (unlocked ? `<span class="pill">${icon('crown')} Chapitre suivant</span>` : ''),
     );
     if (won) this.audio.victory();
     else this.audio.defeat();
@@ -364,7 +370,7 @@ export class Game {
           for (const enemy of this.run.enemies) actors.addEnemy(enemy);
           this.camZ = this.run.player.z;
           if (boss) {
-            ui.banner(`👑 ${this.run.enemies[0]?.def.name ?? 'Boss'}`, 'Le gardien du chapitre', 'danger');
+            ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', 'Le gardien du chapitre', 'danger');
             audio.warning(true);
             this.haptics.pulse(HAPTIC.boss);
           } else ui.banner(`Salle ${room}`);
@@ -384,7 +390,11 @@ export class Game {
         this.floatWorld(enemy.x, 1 + enemy.def.scale * 0.5, enemy.z, String(Math.round(damage)), crit ? 'crit' : '');
         const p = this.run.player;
         fx.hit(enemy.x, enemy.z, crit, source?.orb ?? (p.burn ? 'fire' : p.frost ? 'ice' : p.poison ? 'poison' : null));
-        if (crit) this.haptics.pulse(HAPTIC.hit);
+        actors.enemyHit(enemy, crit);
+        if (crit) {
+          this.haptics.pulse(HAPTIC.hit);
+          this.hitStop = Math.max(this.hitStop, 0.03);
+        }
       },
       onDot: (enemy, amount) => this.floatWorld(enemy.x, 1.1, enemy.z, String(Math.round(amount)), 'dot'),
       onEnemyDie: (enemy) => {
@@ -392,6 +402,9 @@ export class Game {
         fx.death(enemy.x, enemy.z, Boolean(enemy.def.boss), enemy.def.id === 'ghost' || enemy.def.id === 'wisp' ? COLORS.ice : COLORS.smoke);
         audio.enemyDeath(Boolean(enemy.def.boss));
         this.haptics.pulse(enemy.def.boss ? HAPTIC.boss : HAPTIC.kill);
+        // A few frames of hit stop sell the kill.
+        this.hitStop = Math.max(this.hitStop, 0.06);
+        this.shake = Math.min(1, this.shake + 0.12);
         if (enemy.def.boss) {
           this.shake = 1;
           this.slowMo = 0.9;
@@ -485,7 +498,7 @@ export class Game {
         if (item.kind === 'coin') audio.coin();
         else if (item.kind === 'heart') {
           fx.heal(p.x, p.z);
-          this.floatWorld(p.x, 1.3, p.z, '+❤', 'heal');
+          this.floatWorld(p.x, 1.3, p.z, 'Soin', 'heal');
           audio.heal();
         } else audio.collect(0);
       },
@@ -530,10 +543,9 @@ export class Game {
       }
     }
     // Slow motion after the boss falls.
-    if (this.slowMo > 0) {
-      this.slowMo -= dt;
-      this.loop.timeScale = this.slowMo > 0 ? 0.3 : 1;
-    }
+    if (this.slowMo > 0) this.slowMo -= dt;
+    if (this.hitStop > 0) this.hitStop -= dt;
+    this.loop.timeScale = this.hitStop > 0 ? 0.12 : this.slowMo > 0 ? 0.3 : 1;
   }
 
   update(dt) {
@@ -570,7 +582,7 @@ export class Game {
     let targetZ;
     if (this.mode === MODE.MENU || !run) targetZ = 3.4;
     // The view scrolls with the hero (a little ahead of them), like the original.
-    else targetZ = clamp(run.player.z - 1.6, -halfH + 3.4, halfH - 1.6);
+    else targetZ = clamp(run.player.z - 1.6, -halfH + 3.4, halfH - 4.2);
     this.camZ = damp(this.camZ, targetZ, 6, dt);
     this.shake = Math.max(0, this.shake - dt * 2.2);
     const s = this.shake * this.shake * 0.25;

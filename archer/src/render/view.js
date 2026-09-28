@@ -5,6 +5,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CONFIG } from '../config.js';
 
 export const QUALITY_LEVELS = ['low', 'medium', 'high', 'ultra'];
@@ -13,7 +14,7 @@ export const QUALITY_LEVELS = ['low', 'medium', 'high', 'ultra'];
 export const QUALITY_PRESETS = {
   ultra: { maxPixelRatio: 2, shadows: true, shadowMapSize: 2048, effects: 1, bloom: true, grade: true, ao: true, grass: 1 },
   high: { maxPixelRatio: 2, shadows: true, shadowMapSize: 2048, effects: 1, bloom: true, grade: true, ao: false, grass: 1 },
-  medium: { maxPixelRatio: 1.5, shadows: true, shadowMapSize: 1024, effects: 0.75, bloom: false, grade: true, ao: false, grass: 0.6 },
+  medium: { maxPixelRatio: 1.5, shadows: true, shadowMapSize: 1024, effects: 0.75, bloom: true, grade: true, ao: false, grass: 0.6 },
   low: { maxPixelRatio: 1, shadows: false, shadowMapSize: 1024, effects: 0.5, bloom: false, grade: false, ao: false, grass: 0 },
 };
 
@@ -148,6 +149,11 @@ export class View {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.scene = new THREE.Scene();
+    // Soft studio reflections on every standard material (a small prefiltered cube map).
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.environment = this.environment;
     this.camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, 1, 0.1, 200);
     this.preset = QUALITY_PRESETS.high;
     this.qualityLevel = 'high';
@@ -216,18 +222,21 @@ export class View {
     }
     // Threshold above lit white (snow at noon): only emissive things (spells, sparks) glow.
     if (preset.bloom) {
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), 0.5, 0.45, 1.5);
+      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), 0.55, 0.5, 1.05);
       this.composer.addPass(this.bloomPass);
     }
     this.composer.addPass(new OutputPass());
     if (preset.grade) {
       this.gradePass = new ShaderPass(GradeShader);
       this.composer.addPass(this.gradePass);
+      if (this.grade) this.setGrade(this.grade);
     }
   }
 
   /** Per-level color grade (split toning colors and strength). */
-  setGrade({ shadows, highlights, tone, saturation }) {
+  setGrade(grade) {
+    this.grade = grade;
+    const { shadows, highlights, tone, saturation } = grade;
     const u = GradeShader.uniforms;
     u.uShadows.value.set(shadows);
     u.uHighlights.value.set(highlights);

@@ -1,4 +1,5 @@
 import { ABILITIES } from '../data/abilities.js';
+import { badge, icon } from './icons.js';
 
 const FLOATERS = 40;
 
@@ -152,7 +153,7 @@ export class UI {
       card.className = 'card';
       card.style.animationDelay = `${0.08 + i * 0.1}s`;
       const stacks = taken[a.id] ?? 0;
-      card.innerHTML = `<span class="card__icon" aria-hidden="true">${a.icon}</span><b>${a.name}</b><small>${a.text}</small>${a.max && a.max < 99 && stacks ? `<span class="card__stack">${stacks}/${a.max}</span>` : ''}`;
+      card.innerHTML = `${badge(a.icon, 'card__icon')}<b>${a.name}</b><small>${a.text}</small>${a.max && a.max < 99 && stacks ? `<span class="card__stack">${stacks}/${a.max}</span>` : ''}`;
       // Ignore taps in the first moments (the thumb was still on the joystick).
       card.addEventListener('click', () => {
         if (performance.now() - this.choiceShownAt < 350) return;
@@ -168,7 +169,7 @@ export class UI {
   renderTaken(box, taken) {
     box.innerHTML = Object.entries(taken)
       .filter(([id]) => id !== 'heal')
-      .map(([id, n]) => `<span title="${ABILITIES[id].name}">${ABILITIES[id].icon}${n > 1 ? `<sup>${n}</sup>` : ''}</span>`)
+      .map(([id, n]) => `<span title="${ABILITIES[id].name}">${badge(ABILITIES[id].icon)}${n > 1 ? `<sup>${n}</sup>` : ''}</span>`)
       .join('');
   }
 

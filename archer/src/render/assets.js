@@ -2,16 +2,22 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { patchRim } from './surfaces.js';
 
 const BASE_URL = 'assets/kk/';
 
 // KayKit packs by Kay Lousberg (CC0): Adventurers, Skeletons, Dungeon Remastered,
-// Halloween Bits, Medieval Hexagon. Converted by tools (meshopt, quantized).
-const CHARACTERS = ['rogue_hooded', 'rogue', 'mage', 'knight', 'barbarian', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage'];
+// Halloween Bits, Medieval Hexagon, Forest Nature; Quaternius Ultimate Monsters (CC0).
+// Converted by tools/convert-kaykit.mjs (meshopt, quantized).
+const CHARACTERS = ['rogue_hooded', 'rogue', 'mage', 'knight', 'barbarian', 'skeleton_minion', 'skeleton_rogue', 'skeleton_warrior', 'skeleton_mage',
+  // Quaternius Ultimate Monsters (CC0), each with its own rig and clips.
+  'q_mushnub', 'q_mushnub_evolved', 'q_wizard', 'q_orc', 'q_orc_skull', 'q_demon', 'q_bluedemon', 'q_mushroomking', 'q_tribal',
+  'q_ghost', 'q_ghost_skull', 'q_bee', 'q_glub', 'q_hywirl', 'q_dragon', 'q_bat'];
 const PROPS = [
-  // Forest.
-  'trees_A_large', 'trees_A_medium', 'trees_B_large', 'trees_B_medium', 'tree_single_A', 'tree_single_B',
-  'rock_single_A', 'rock_single_C', 'rock_single_E', 'resource_lumber', 'crate_A_big', 'barrel', 'waterlily_A', 'target', 'fence_wood_straight', 'fence_wood_straight_gate',
+  // Forest (KayKit Forest Nature Pack).
+  'Tree_1_A', 'Tree_1_B', 'Tree_1_C', 'Tree_2_A', 'Tree_3_A', 'Tree_3_B', 'Tree_4_A', 'Tree_4_B', 'Tree_Bare_1_A', 'Tree_Bare_1_B', 'Tree_Bare_2_A',
+  'Bush_1_A', 'Bush_1_C', 'Bush_1_E', 'Bush_1_G', 'Bush_3_A', 'Bush_4_A', 'Rock_3_A', 'Rock_3_B', 'Rock_3_C', 'Rock_3_E', 'Rock_2_A', 'Rock_1_A', 'Grass_1_A', 'Grass_2_A',
+  'crate_A_big', 'barrel', 'fence_wood_straight_gate',
   // Dungeon.
   'column', 'pillar', 'pillar_decorated', 'barrel_large', 'barrel_small_stack', 'box_stacked', 'crates_stacked', 'wall', 'wall_gated', 'torch_lit', 'banner_red', 'banner_patternA_blue',
   'chest_gold', 'rubble_half', 'keg_decorated', 'coin_stack_large',
@@ -31,6 +37,7 @@ export class Assets {
     this.materials = new Map();
     this.sizes = new Map();
     this.clips = [];
+    this.monsterClips = new Map();
     this.mergedCache = new Map();
   }
 
@@ -46,8 +53,9 @@ export class Assets {
         : await loader.loadAsync(`${BASE_URL}${path}.glb`);
       const name = path.slice(path.indexOf('/') + 1);
       this.register(name, gltf.scene);
-      // All the characters share one rig: the clips live in skeleton_minion.
-      if (gltf.animations.length) this.clips = gltf.animations;
+      // All the KayKit characters share one rig: their clips live in skeleton_minion.
+      if (name === 'skeleton_minion') this.clips = gltf.animations;
+      else if (gltf.animations.length) this.monsterClips.set(name, gltf.animations);
       onProgress?.(++loaded / MODELS.length);
     }));
   }
@@ -75,6 +83,8 @@ export class Assets {
       object.receiveShadow = !skinned;
     });
     scene.userData.skinned = skinned;
+    // Characters get a rim light; weapons in their hands share their pack's material.
+    if (skinned) scene.traverse((o) => o.isMesh && patchRim(o.material));
     const box = new THREE.Box3().setFromObject(scene);
     this.sizes.set(name, box);
     this.models.set(name, scene);
@@ -96,6 +106,16 @@ export class Assets {
     prop.position.set(-(box.min.x + box.max.x) / 2 * s, -box.min.y * s, -(box.min.z + box.max.z) / 2 * s);
     holder.add(prop);
     return holder;
+  }
+
+  clipsOf(name) {
+    return this.monsterClips.get(name) ?? [];
+  }
+
+  /** Height of a model as loaded. */
+  height(name) {
+    const box = this.sizes.get(name);
+    return Math.max(1e-3, box.max.y - box.min.y);
   }
 
   /** Height of a model once fitted to `width`. */
