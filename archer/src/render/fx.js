@@ -50,6 +50,36 @@ void main() {
   gl_FragColor = vec4(vTint * fade * edge * flow * 0.9, 1.0);
 }`;
 
+// Anime hit sparks: camera-facing four-pointed stars, turned by the instance's angle.
+const STAR_VERTEX = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  vTint = instanceColor;
+  float size = length(instanceMatrix[0].xyz);
+  float angle = atan(instanceMatrix[0].y, instanceMatrix[0].x);
+  vec2 q = position.xy;
+  vUv = q;
+  q = vec2(q.x * cos(angle) - q.y * sin(angle), q.x * sin(angle) + q.y * cos(angle));
+  vec4 center = modelViewMatrix * vec4(instanceMatrix[3].xyz, 1.0);
+  center.xy += q * size;
+  gl_Position = projectionMatrix * center;
+}`;
+
+const STAR_FRAGMENT = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  vec2 p = vUv * 2.0;
+  float r = length(p);
+  if (r > 1.0) discard;
+  float cross = max(0.0, 1.0 - abs(p.x) * 9.0) * (1.0 - abs(p.y)) + max(0.0, 1.0 - abs(p.y) * 9.0) * (1.0 - abs(p.x));
+  float diag = max(0.0, 1.0 - abs(p.x - p.y) * 7.0) + max(0.0, 1.0 - abs(p.x + p.y) * 7.0);
+  float core = pow(max(0.0, 1.0 - r * 2.2), 2.0);
+  float a = cross * 1.2 + diag * 0.35 * (1.0 - r) + core * 1.5;
+  gl_FragColor = vec4(vTint * a + vec3(core), 1.0);
+}`;
+
 // Monster spells: a camera-facing glow with slowly turning rays around each shot.
 const GLOW_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -233,6 +263,18 @@ export class Fx {
       scene.add(m);
     }
 
+    // Hit stars (pooled, one draw call).
+    this.starList = [];
+    this.starMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+      vertexShader: STAR_VERTEX, fragmentShader: STAR_FRAGMENT,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false,
+    }), 64);
+    this.starMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(64 * 3), 3);
+    this.starMesh.frustumCulled = false;
+    this.starMesh.renderOrder = 30;
+    this.starMesh.count = 0;
+    scene.add(this.starMesh);
+
     // Danger circles and aim lines (pooled meshes).
     this.hazardPool = [];
     this.hazardGeometry = { ring: new THREE.RingGeometry(0.94, 1, 48).rotateX(-Math.PI / 2), disc: new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2) };
@@ -253,6 +295,7 @@ export class Fx {
   }
 
   clear() {
+    this.starList.length = 0;
     this.sparks.clear();
     this.puffs.clear();
     for (const h of this.hazardPool) h.active = false;
@@ -263,8 +306,15 @@ export class Fx {
 
   // ------------------------------------------------------------ one-shot effects
 
+  /** An anime hit star at (x, y, z): pops open fast, then shrinks. */
+  star(x, y, z, size, c, life = 0.18) {
+    if (this.starList.length >= 64) this.starList.shift();
+    this.starList.push({ x, y, z, size, life, max: life, color: c.clone ? c.clone() : new THREE.Color(c), angle: Math.random() * Math.PI });
+  }
+
   hit(x, z, crit, element) {
     const c = element === 'fire' ? COLORS.fire : element === 'ice' ? COLORS.ice : element === 'poison' ? COLORS.poison : COLORS.spark;
+    this.star(x + (Math.random() - 0.5) * 0.3, Y + 0.15, z + (Math.random() - 0.5) * 0.3, crit ? 1.5 : 0.75, c, crit ? 0.24 : 0.16);
     this.sparks.burst(x, Y, z, this.count(crit ? 14 : 7), crit ? 4 : 2.6, c, crit ? 0.16 : 0.11, 0.3, { gravity: 5, brightness: 1.7 });
     if (crit) this.flash(x, Y, z, 0.9, COLORS.spark);
   }
@@ -278,6 +328,7 @@ export class Fx {
   /** Execution: a bright crossed slash on the monster and a ring. */
   execute(x, z, boss) {
     const c = boss ? COLORS.fire : COLORS.shadow;
+    this.star(x, 0.8, z, boss ? 3.4 : 2.2, c, 0.3);
     this.flash(x, 0.7, z, boss ? 2.2 : 1.5, c);
     this.sparks.burst(x, 0.6, z, this.count(boss ? 40 : 24), boss ? 6 : 4.5, c, 0.14, 0.45, { gravity: 3, brightness: 2.2 });
     this.ring(x, z, boss ? 2.6 : 1.6, 0.45, c);
@@ -288,12 +339,14 @@ export class Fx {
   }
 
   death(x, z, big, tint = COLORS.smoke) {
+    this.star(x, 0.7, z, big ? 4 : 1.8, COLORS.spark, big ? 0.45 : 0.26);
     this.puffs.burst(x, 0.3, z, this.count(big ? 30 : 12), big ? 3 : 1.8, tint, big ? 0.5 : 0.3, 0.8, { upward: 0.6, drag: 2.5, endSize: big ? 1.4 : 0.7 });
     this.sparks.burst(x, 0.5, z, this.count(big ? 40 : 10), big ? 5 : 2.5, COLORS.spark, 0.12, 0.5, { gravity: 4, brightness: 1.6 });
     this.ring(x, z, big ? 3 : 0.9, big ? 0.7 : 0.35, COLORS.spark);
   }
 
   blast(x, z, radius, c = COLORS.fire) {
+    this.star(x, 0.5, z, radius * 1.6, c, 0.28);
     this.sparks.burst(x, 0.2, z, this.count(26 + radius * 10), 4 + radius * 2, c, 0.22, 0.55, { gravity: 3, upward: 0.6, brightness: 1.8 });
     this.puffs.burst(x, 0.15, z, this.count(14), radius * 2.4, COLORS.smoke, 0.5, 0.9, { upward: 0.5, drag: 2.5, endSize: 1.2 });
     this.flash(x, 0.4, z, radius * 1.6, c);
@@ -311,6 +364,7 @@ export class Fx {
   }
 
   levelUp(x, z) {
+    this.star(x, 1, z, 2.6, COLORS.coin, 0.4);
     this.sparks.burst(x, 0.4, z, this.count(50), 3, COLORS.coin, 0.16, 1, { upward: 0.95, gravity: -1.5, drag: 1.2, brightness: 1.8 });
     this.ring(x, z, 2, 0.6, COLORS.coin);
     this.ring(x, z, 1.2, 0.45, COLORS.spark);
@@ -497,6 +551,24 @@ export class Fx {
     const t = this.time;
     this.sparks.update(dt);
     this.puffs.update(dt);
+    // Hit stars: open in the first third of their life, then close and fade.
+    let ns = 0;
+    for (const st of this.starList) {
+      st.life -= dt;
+      if (st.life <= 0) continue;
+      const k = 1 - st.life / st.max;
+      const grow = k < 0.3 ? k / 0.3 : 1 - (k - 0.3) / 0.7;
+      dummy.position.set(st.x, st.y, st.z);
+      dummy.rotation.set(0, 0, st.angle + k * 0.6);
+      dummy.scale.setScalar(Math.max(0.001, st.size * (0.4 + grow * 0.6)));
+      dummy.updateMatrix();
+      this.starMesh.setMatrixAt(ns, dummy.matrix);
+      this.starMesh.setColorAt(ns++, hdrColor.copy(st.color).multiplyScalar(1.6 * grow + 0.2));
+    }
+    this.starList = this.starList.filter((st) => st.life > 0);
+    this.starMesh.count = ns;
+    this.starMesh.instanceMatrix.needsUpdate = true;
+    this.starMesh.instanceColor.needsUpdate = true;
 
     for (const r of this.floorRings) {
       if (r.life <= 0) {

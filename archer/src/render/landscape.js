@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL } from '../sim/arena.js';
 import { batchStatic } from './batch.js';
 import { Ambience } from './ambience.js';
-import { FLOOR_STYLE, occlusionTexture, patchFloor, patchRim, rigidOutlineMaterial, setRim, toonRamp } from './surfaces.js';
+import { FLOOR_STYLE, WORLD, injectWorldLight, occlusionTexture, patchFloor, patchRim, rigidOutlineMaterial, setRim, setWorldLight, toonRamp } from './surfaces.js';
 
 // Open anime landscapes around the (unchanged) 9 × 15 arena of the simulation:
 // a sculpted terrain that rises into hills, wind-blown grass and flowers, ponds where
@@ -286,8 +286,8 @@ export const LANDS = {
   forest: {
     sky: 0xd4eef0, skyTop: 0x4a9ae0, fog: 0xa8d2c0, fogRange: [24, 58], clouds: 0xffffff,
     sun: 0xfff0d2, sunIntensity: 2.7, hemi: [0xe4f4ff, 0x56863e], hemiIntensity: 1.15, back: [0xa8e4ff, 0.9], rim: [0xfff6e0, 0.5], env: 0.15,
-    grade: { shadows: 0x2a5a78, highlights: 0xffe0b0, tone: 0.07, saturation: 1.18 },
-    ground: [0x5fa83e, 0x8ccc52], dirt: 0xb89a5c, rock: 0x86908e, sand: 0xe4d49c, style: FLOOR_STYLE.grass,
+    grade: { shadows: 0x2a4a78, highlights: 0xffe0b8, tone: 0.07, saturation: 1.04 },
+    ground: [0x4a8c3a, 0x70a848], dirt: 0xb89a5c, rock: 0x86908e, sand: 0xe4d49c, style: FLOOR_STYLE.grass,
     hill: 3.2, grass: [0x2f7a2a, 0xb2e864], grassHeight: [0.2, 0.38], grassDensity: 1,
     flowers: [0xfff09a, 0xff9ec8, 0xffffff, 0xb9a4ff, 0xffb070], flowerDensity: 1,
     water: { deep: 0x1f6fb0, shallow: 0x62dbe4, foam: 0xf4ffff },
@@ -352,7 +352,7 @@ export const LANDS = {
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['Rock_3_C', 0.9], ['@pine', 0.9]],
     edge: [['Rock_1_A', 0.55], ['@pine', 0.6], ['Rock_3_E', 0.6]],
     trees: [['@pine', 1.5], ['@pine', 1.8], ['@pine', 1.3], ['Rock_2_A', 1.8], ['Tree_Bare_1_A', 1.8]],
-    tint: 0xdce8f4, treeCount: 80, stone: 0xc8d4e0, portal: 0x9fe8ff, ambience: 'tundra',
+    tint: 0xdce8f4, treeCount: 80, stone: 0xc8d4e0, portal: 0x9fe8ff, ambience: 'tundra', light: { dapple: 0.12 },
   },
   // A toxic marsh: reeds, dead trees, green ponds, fireflies and mist.
   swamp: {
@@ -381,7 +381,7 @@ export const LANDS = {
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['Rock_3_C', 0.9], ['@spire', 0.85]],
     edge: [['Rock_1_A', 0.6], ['Rock_3_E', 0.6], ['tree_dead_medium', 0.6]],
     trees: [['@spire', 1.4], ['@spire', 1.8], ['Rock_2_A', 2.2], ['tree_dead_large', 1.8], ['Rock_3_E', 1.8]],
-    tint: 0x6a5a58, treeCount: 50, stone: 0x5a4a4a, portal: 0xff8a3a, torch: 0xff7a2a, ambience: 'volcano',
+    tint: 0x6a5a58, treeCount: 50, stone: 0x5a4a4a, portal: 0xff8a3a, torch: 0xff7a2a, ambience: 'volcano', light: { dapple: 0, clouds: 0.22 },
   },
   // The shadow citadel by night: a vast dark courtyard, pillars, violet void pools.
   citadel: {
@@ -411,14 +411,14 @@ export const LANDS = {
     blocks: [['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@cactus', 0.8], ['@spire', 0.8], ['pillar', 0.85]],
     edge: [['Rock_1_A', 0.55], ['@cactus', 0.55], ['Rock_3_E', 0.6]],
     trees: [['@palm', 1.8], ['@palm', 2.2], ['@cactus', 1.3], ['@spire', 2], ['Rock_2_A', 2.2]],
-    tint: 0xf0d8b0, treeCount: 45, stone: 0xe0c8a0, portal: 0xffd070, torch: 0xffb050, ambience: 'desert',
+    tint: 0xf0d8b0, treeCount: 45, stone: 0xe0c8a0, portal: 0xffd070, torch: 0xffb050, ambience: 'desert', light: { dapple: 0, clouds: 0.35 },
   },
   // A spring garden: cherry trees in bloom, a stone path, falling petals.
   sakura: {
     sky: 0xfde4ec, skyTop: 0x7ab0f0, fog: 0xf0d4e0, fogRange: [24, 60], clouds: 0xffffff,
     sun: 0xfff4ea, sunIntensity: 2.6, hemi: [0xffe8f4, 0x6a8a58], hemiIntensity: 1.15, back: [0xffc0e0, 0.9], rim: [0xfff0f8, 0.55], env: 0.15,
-    grade: { shadows: 0x5a3a6a, highlights: 0xffe0f0, tone: 0.08, saturation: 1.12 },
-    ground: [0x6aa84a, 0x9acc68], dirt: 0xc8a888, rock: 0x98969c, sand: 0xe8d8c8, style: FLOOR_STYLE.grass, court: 0xb8b4b0,
+    grade: { shadows: 0x5a3a6a, highlights: 0xffe0f0, tone: 0.08, saturation: 1.04 },
+    ground: [0x5a9448, 0x86b45e], dirt: 0xc8a888, rock: 0x98969c, sand: 0xe8d8c8, style: FLOOR_STYLE.grass, court: 0xb8b4b0,
     hill: 3.2, grass: [0x3a7a3a, 0xc8f080], grassHeight: [0.16, 0.3], grassDensity: 0.9,
     flowers: [0xffb0d0, 0xffffff, 0xff8ab8, 0xffe0f0], flowerDensity: 1.2,
     water: { deep: 0x2a70a8, shallow: 0x7ae0e8, foam: 0xffffff, calm: true },
@@ -426,7 +426,7 @@ export const LANDS = {
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['@blossom', 0.9], ['shrine_candles', 0.7], ['pillar', 0.85]],
     edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['@blossom', 0.6], ['Bush_1_E', 0.6]],
     trees: [['@blossom', 2.2], ['@blossom', 2.6], ['@blossom', 1.8], ['Tree_1_A', 2.3], ['Rock_2_A', 2]],
-    treeCount: 70, stone: 0xd8ccd4, portal: 0xffa8d8, ambience: 'sakura',
+    treeCount: 70, stone: 0xd8ccd4, portal: 0xffa8d8, ambience: 'sakura', flecks: [0xffb0d0, 0xfff0f6], fleckAmount: 2.2,
   },
   // Autumn woods at golden hour: red and orange crowns, leaves drifting down.
   autumn: {
@@ -441,7 +441,7 @@ export const LANDS = {
     blocks: [['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@blossom', 0.9], ['barrel_large', 0.7], ['crates_stacked', 0.8]],
     edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.55], ['pumpkin_orange_jackolantern', 0.5], ['Bush_1_A', 0.7]],
     trees: [['@blossom', 2.4], ['tree_pine_orange_large', 2.4], ['tree_pine_yellow_large', 2.4], ['@blossom', 2], ['tree_pine_orange_medium', 2], ['Tree_Bare_1_A', 2]],
-    treeCount: 70, stone: 0xc8a888, portal: 0xffb050, torch: 0xffa040, ambience: 'autumn',
+    treeCount: 70, stone: 0xc8a888, portal: 0xffb050, torch: 0xffa040, ambience: 'autumn', flecks: [0xd8501a, 0xffa830], fleckAmount: 2.4,
   },
   // Coral abyss: a sunken reef in blue-green light, glowing corals, rising bubbles.
   abyss: {
@@ -456,7 +456,7 @@ export const LANDS = {
     blocks: [['@coral', 0.95], ['@crystal', 0.9], ['Rock_3_A', 0.95], ['Rock_3_C', 0.9]],
     edge: [['@coral', 0.6], ['Rock_1_A', 0.5], ['@crystal', 0.5]],
     trees: [['@coral', 1.8], ['@coral', 2.2], ['@crystal', 1.8], ['Rock_2_A', 2.2], ['Rock_3_E', 1.8]],
-    tint: 0xa8d8e0, treeCount: 60, stone: 0x6aa8b0, portal: 0x6affe8, torch: 0x6affe8, ambience: 'abyss',
+    tint: 0xa8d8e0, treeCount: 60, stone: 0x6aa8b0, portal: 0x6affe8, torch: 0x6affe8, ambience: 'abyss', light: { clouds: 0.9, caustics: true },
   },
   // Sky islands: bright heights above a sea of clouds, white blossoms, sunbeams.
   sky: {
@@ -471,7 +471,7 @@ export const LANDS = {
     blocks: [['column', 0.75], ['pillar_decorated', 0.85], ['Rock_3_A', 0.95], ['@blossom', 0.9]],
     edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['column', 0.55]],
     trees: [['@blossom', 2.2], ['@blossom', 2.6], ['pillar_decorated', 1.6], ['column', 1.3], ['Tree_1_B', 2.3]],
-    treeCount: 50, stone: 0xf0f0f8, portal: 0xa8f0ff, ambience: 'sky',
+    treeCount: 50, stone: 0xf0f0f8, portal: 0xa8f0ff, ambience: 'sky', light: { clouds: 0.5 },
   },
   // Emerald jungle: humid and dense, palms, giant glowing mushrooms, fireflies, mist.
   jungle: {
@@ -486,7 +486,7 @@ export const LANDS = {
     blocks: [['Bush_4_A', 0.95], ['Rock_3_A', 0.9], ['@mushroom', 0.85], ['Bush_1_G', 0.9]],
     edge: [['Bush_1_C', 0.9], ['Bush_4_A', 0.7], ['@mushroom', 0.5], ['Bush_1_E', 0.7]],
     trees: [['@palm', 2.2], ['@palm', 2.6], ['Tree_2_A', 2.4], ['@mushroom', 1.6], ['Tree_1_C', 2.4], ['Tree_3_A', 2.6]],
-    treeCount: 85, stone: 0x8aa890, portal: 0x8aff9a, ambience: 'jungle',
+    treeCount: 85, stone: 0x8aa890, portal: 0x8aff9a, ambience: 'jungle', light: { clouds: 0.5 },
   },
   // Storm peaks: slate crags under a black sky, driving rain, flashes of light.
   storm: {
@@ -501,7 +501,7 @@ export const LANDS = {
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['@spire', 0.85], ['@pine', 0.9]],
     edge: [['Rock_1_A', 0.6], ['Rock_3_E', 0.6], ['@pine', 0.6]],
     trees: [['@spire', 1.8], ['@spire', 2.4], ['@pine', 1.8], ['@pine', 1.5], ['Rock_2_A', 2.4]],
-    tint: 0x9aa4b8, treeCount: 70, stone: 0x8a94a8, portal: 0x8ad0ff, torch: 0x8ad0ff, ambience: 'storm',
+    tint: 0x9aa4b8, treeCount: 70, stone: 0x8a94a8, portal: 0x8ad0ff, torch: 0x8ad0ff, ambience: 'storm', light: { clouds: 0.5 },
   },
   // The void rift: a shattered black plain, violet crystals, pools of nothing.
   void: {
@@ -531,7 +531,7 @@ export const LANDS = {
     blocks: [['column', 0.75], ['pillar_decorated', 0.85], ['pillar', 0.9], ['coin_stack_large', 0.6], ['chest_gold', 0.7]],
     edge: [['column', 0.55], ['banner_red', 0.5], ['coin_stack_large', 0.45], ['Rock_1_A', 0.5]],
     trees: [['@palm', 2.2], ['pillar_decorated', 1.7], ['column', 1.4], ['@palm', 1.8], ['pillar', 1.5]],
-    tint: 0xffe8a0, treeCount: 55, stone: 0xf0d890, portal: 0xffe070, torch: 0xffc040, ambience: 'golden',
+    tint: 0xffe8a0, treeCount: 55, stone: 0xf0d890, portal: 0xffe070, torch: 0xffc040, ambience: 'golden', light: { dapple: 0, clouds: 0.3 },
   },
   // The celestial throne: a white and gold court among the stars, drifting light.
   celestial: {
@@ -637,6 +637,7 @@ function vegetationMaterial(uniforms, flower) {
       .replace('#include <common>', `#include <common>
 attribute float aH;
 varying float vH;
+varying vec2 vGrassXZ;
 uniform float uTime;
 uniform vec3 uPush;
 uniform float uWind;`)
@@ -649,6 +650,7 @@ uniform float uWind;`)
     vec3 iPos = vec3(0.0);
     mat3 iRot = mat3(1.0);
   #endif
+  vGrassXZ = (modelMatrix * vec4(iPos, 1.0)).xz;
   float sway = sin(uTime * 1.7 + iPos.x * 0.6 + iPos.z * 0.45) * 0.6 + sin(uTime * 3.3 + iPos.x * 1.9 - iPos.z) * 0.25;
   // Wind in proportion to the plant's size; the hero parts the grass (world units).
   float s = sqrt(dot(iRot[0], iRot[0]));
@@ -665,6 +667,7 @@ uniform float uWind;`)
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying float vH;
+varying vec2 vGrassXZ;
 uniform vec3 uBase;
 uniform vec3 uTip;`)
       .replace('#include <color_fragment>', flower
@@ -673,6 +676,7 @@ uniform vec3 uTip;`)
   else diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.82, 0.3), smoothstep(1.03, 1.2, vH));`
         : `#include <color_fragment>
   diffuseColor.rgb *= mix(uBase, uTip, smoothstep(0.0, 1.0, vH));`);
+    injectWorldLight(shader, 'vGrassXZ');
   };
   material.customProgramCacheKey = () => (flower ? 'flower' : 'grass');
   return material;
@@ -693,6 +697,9 @@ uniform float uTime;
 uniform vec3 uDeep;
 uniform vec3 uShallow;
 uniform vec3 uFoam;
+uniform vec3 uSky;
+uniform vec3 uSun;
+uniform vec3 uSunDir;
 uniform sampler2D uHeight;
 uniform vec4 uBounds;
 uniform vec2 uRange;
@@ -700,6 +707,11 @@ uniform float uLevel;
 uniform float uGlow;
 uniform float uFlow;
 varying vec3 vWorld;
+float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wNoise(vec2 p) {
+  vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(wHash(i), wHash(i + vec2(1, 0)), f.x), mix(wHash(i + vec2(0, 1)), wHash(i + vec2(1, 1)), f.x), f.y);
+}
 void main() {
   vec2 uv = (vWorld.xz - uBounds.xy) / uBounds.zw;
   float ground = mix(uRange.x, uRange.y, texture2D(uHeight, uv).r);
@@ -707,18 +719,32 @@ void main() {
   if (depth <= 0.0) discard;
   vec2 p = vWorld.xz;
   float t = uTime * uFlow;
+  // Ripples: two drifting noise layers give a wobbling surface normal.
+  float h1 = wNoise(p * 3.0 + vec2(t * 0.6, t * 0.4));
+  float h2 = wNoise(p * 5.3 - vec2(t * 0.5, -t * 0.7));
+  vec3 n = normalize(vec3((h1 - 0.5) * 0.5 + (h2 - 0.5) * 0.3, 1.0, (h1 - h2) * 0.4));
   float w = sin(p.x * 2.3 + t * 1.1) * sin(p.y * 2.9 - t * 0.9);
-  float caustic = smoothstep(0.55, 0.95, sin(p.x * 6.0 + sin(p.y * 5.0 + t) * 1.5 + t * 0.8) * 0.5 + 0.5);
-  vec3 c = mix(uShallow, uDeep, smoothstep(0.02, 0.28, depth + w * 0.02));
-  c += caustic * 0.08 * (1.0 - smoothstep(0.1, 0.3, depth));
-  // A bright foam line along the shore, breathing with the ripples.
+  vec3 c = mix(uShallow, uDeep, smoothstep(0.02, 0.3, depth + (h1 - 0.5) * 0.03));
+  // Light dancing on the shallow bottom.
+  float ca = wNoise(p * 4.0 + wNoise(p * 2.0 + t * 0.3) * 1.5 + t * 0.2);
+  c += uShallow * pow(1.0 - abs(ca - 0.5) * 2.0, 5.0) * 0.35 * (1.0 - smoothstep(0.05, 0.3, depth));
+  // Sky in the surface, stronger at grazing angles.
+  vec3 view = normalize(cameraPosition - vWorld);
+  float fresnel = pow(1.0 - max(dot(n, view), 0.0), 3.0);
+  float wet = uGlow > 1.0 ? 0.15 : 1.0;
+  c = mix(c, uSky, (0.08 + fresnel * 0.35) * wet);
+  // Sun glints: little stars on the ripples.
+  vec3 r = reflect(-view, n);
+  float glint = pow(max(dot(r, uSunDir), 0.0), 60.0);
+  float sparkle = step(0.975, wNoise(p * 14.0 + t * 1.5)) * step(0.5, h1);
+  c += uSun * (glint * 0.6 + sparkle * 0.4) * wet;
+  // Foam: a breathing line along the shore and rings rolling toward it.
   float foam = 1.0 - smoothstep(0.0, 0.035 + 0.015 * (w * 0.5 + 0.5), depth);
-  c = mix(c, uFoam, foam * 0.9);
-  // Sky glint.
-  c += vec3(0.12) * smoothstep(0.75, 1.0, sin(p.x * 1.3 - p.y * 0.7 + t * 0.6) * 0.5 + 0.5) * (1.0 - foam);
+  float rings = smoothstep(0.82, 0.95, fract(depth * 14.0 - t * 0.5 + h1 * 0.4)) * (1.0 - smoothstep(0.03, 0.08, depth));
+  c = mix(c, uFoam, max(foam * 0.9, rings * 0.35));
   // Lava and glowing springs shine (the bloom picks them up).
   c *= 1.0 + uGlow * (0.6 + 0.4 * w);
-  gl_FragColor = vec4(c, uGlow > 1.0 ? 1.0 : 0.93);
+  gl_FragColor = vec4(c, uGlow > 1.0 ? 1.0 : 0.94);
   #include <colorspace_fragment>
 }`;
 
@@ -767,6 +793,8 @@ uniform vec3 uHorizon;
 uniform vec3 uClouds;
 uniform float uStars;
 uniform float uTime;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
 varying vec3 vDir;
 float sHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float sNoise(vec2 p) {
@@ -778,12 +806,20 @@ void main() {
   vec3 d = normalize(vDir);
   float h = d.y;
   vec3 c = mix(uHorizon, uTop, smoothstep(0.0, 0.6, h));
+  // Sun (or moon) low over the far side of the arena: disk, halo and a warm horizon.
+  float g = max(dot(d, uSunDir), 0.0);
+  float halo = pow(g, 7.0) * 0.28 + pow(g, 48.0) * 0.45;
+  c += uSunColor * halo;
+  c = mix(c, uSunColor, smoothstep(0.9975, 0.999, g) * 0.95);
+  c += uSunColor * (1.0 - smoothstep(0.0, 0.25, abs(h))) * pow(g, 3.0) * 0.2;
   if (h > 0.0) {
     vec2 uv = d.xz / (h + 0.18) * 1.1 + vec2(uTime * 0.006, uTime * 0.002);
     float n = sFbm(uv);
     float cloud = smoothstep(0.55, 0.58, n) * smoothstep(0.0, 0.18, h);
     float lit = smoothstep(0.55, 0.7, sFbm(uv - vec2(0.04, 0.06)));
     vec3 cc = mix(mix(uClouds, uTop, 0.35), uClouds, lit);
+    // Silver linings: clouds near the sun catch its light.
+    cc += uSunColor * pow(g, 10.0) * (0.35 + lit * 0.4);
     c = mix(c, cc, cloud * 0.95);
     if (uStars > 0.5) {
       vec2 g = d.xz / (h + 0.25) * 70.0;
@@ -838,7 +874,10 @@ export class Landscape {
     this.door = null;
 
     this.skyMaterial = new THREE.ShaderMaterial({
-      uniforms: { uTop: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uClouds: { value: new THREE.Color() }, uStars: { value: 0 }, uTime: this.shared.uTime },
+      uniforms: {
+        uTop: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uClouds: { value: new THREE.Color() }, uStars: { value: 0 }, uTime: this.shared.uTime,
+        uSunDir: { value: new THREE.Vector3(0.32, 0.16, -1).normalize() }, uSunColor: { value: new THREE.Color() },
+      },
       vertexShader: SKY_VERTEX,
       fragmentShader: SKY_FRAGMENT,
       side: THREE.BackSide,
@@ -913,16 +952,23 @@ export class Landscape {
     sky.uTop.value.setHex(theme.skyTop ?? theme.sky);
     sky.uClouds.value.setHex(theme.clouds ?? 0xffffff);
     sky.uStars.value = theme.stars ? 1 : 0;
+    // The sky's light: the back light's colour, a pale moon at night.
+    sky.uSunColor.value.setHex(theme.stars ? 0xd8e4ff : theme.back[0]).lerp(new THREE.Color(0xffffff), 0.35).multiplyScalar(theme.stars ? 0.7 : 1);
     scene.fog = new THREE.Fog(theme.fog, theme.fogRange[0], theme.fogRange[1]);
     scene.environmentIntensity = theme.env;
     this.hemi.color.setHex(theme.hemi[0]);
     this.hemi.groundColor.setHex(theme.hemi[1]);
-    this.hemi.intensity = theme.hemiIntensity;
+    // A little less fill light than before: shadows and toon bands read more clearly.
+    this.hemi.intensity = theme.hemiIntensity * 0.85;
     this.sun.color.setHex(theme.sun);
     this.sun.intensity = theme.sunIntensity;
+    // Bright daylight themes were washing out under the toon bands: a touch less exposure.
+    this.scene.userData.exposure = theme.exposure ?? (theme.stars ? 1 : 0.9);
     this.back.color.setHex(theme.back[0]);
     this.back.intensity = theme.back[1];
     setRim(theme.rim[0], theme.rim[1]);
+    // Drifting cloud shadows by day, fainter at night, caustics under the sea.
+    setWorldLight({ clouds: theme.stars ? 0.18 : 0.42, dapple: theme.stars ? 0 : 0.2, ...theme.light });
     this.onTheme?.(theme);
 
     const W = arena.width;
@@ -1014,7 +1060,7 @@ export class Landscape {
     terrainGeometry.computeVertexNormals();
     const occlusion = occlusionTexture(arena, 6, 1, false);
     const court = theme.court ? { halfW: halfW - 1.1, halfH: halfH - 1.4, color: theme.court } : null;
-    const terrainMaterial = patchFloor(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() }), { style: theme.style, occlusion: occlusion.texture, bounds: occlusion.bounds, detail: 0.8, region: court, cracks: theme.cracks ?? null });
+    const terrainMaterial = patchFloor(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() }), { style: theme.style, occlusion: occlusion.texture, bounds: occlusion.bounds, detail: 0.8, region: court, cracks: theme.cracks ?? null, flecks: theme.flecks ?? theme.flowers.slice(0, 2), fleckAmount: theme.fleckAmount ?? Math.min(1.2, theme.flowerDensity) });
     const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
     terrain.receiveShadow = true;
     this.root.add(terrain);
@@ -1169,6 +1215,9 @@ export class Landscape {
         uDeep: { value: new THREE.Color(theme.water.deep) },
         uShallow: { value: new THREE.Color(theme.water.shallow) },
         uFoam: { value: new THREE.Color(theme.water.foam) },
+        uSky: { value: new THREE.Color(theme.skyTop ?? theme.sky).lerp(new THREE.Color(theme.fog), 0.5) },
+        uSun: { value: new THREE.Color(theme.sun) },
+        uSunDir: { value: new THREE.Vector3(0.32, 0.55, -1).normalize() },
         uHeight: { value: texture },
         uBounds: { value: new THREE.Vector4(x0, z0, arena.width + 2, arena.height + 2) },
         uRange: { value: new THREE.Vector2(range[0], range[1]) },
@@ -1230,7 +1279,7 @@ export class Landscape {
   /** Grass tufts and flowers as instanced meshes (one draw call each). */
   buildVegetation(arena, heightAt, meadow, theme, random, TW, TH) {
     const scale = Math.max(0.3, this.grass);
-    const grassCount = Math.round(6000 * theme.grassDensity * scale);
+    const grassCount = Math.round(8000 * theme.grassDensity * scale);
     const flowerCount = Math.round(420 * theme.flowerDensity * scale);
     if (!grassCount) return;
     const blocked = (x, z) => {
@@ -1311,6 +1360,30 @@ export class Landscape {
       make(this.flowerGeometry, flowerCount, flowerMaterial, flowerSpot, () => 0.85 + random() * 0.45, (c) => c.setHex(theme.flowers[Math.floor(random() * theme.flowers.length)]));
       this.disposables.push(flowerMaterial);
     }
+    // Pebbles scattered over the floor and the edges (little details the eye enjoys).
+    const pebbles = Math.round(110 * scale);
+    if (pebbles) {
+      this.pebbleGeometry ??= (() => {
+        const g = new THREE.DodecahedronGeometry(0.07, 0);
+        g.scale(1, 0.55, 0.8);
+        g.translate(0, 0.012, 0);
+        return g;
+      })();
+      this.pebbleMaterial ??= patchRim(new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: toonRamp() }));
+      const rock = new THREE.Color(theme.rock);
+      const pebbleSpot = () => {
+        for (let k = 0; k < 10; k++) {
+          const x = (random() - 0.5) * (arena.width + 3);
+          const z = (random() - 0.5) * (arena.height + 3);
+          const y = heightAt(x, z);
+          if (y < -0.06 || blocked(x, z)) continue;
+          return [x, y, z];
+        }
+        return null;
+      };
+      const mesh = make(this.pebbleGeometry, pebbles, this.pebbleMaterial, pebbleSpot, () => 0.6 + random() * 1.1, (c) => c.copy(rock).lerp(new THREE.Color(0xffffff), 0.15 + random() * 0.35));
+      mesh.castShadow = false;
+    }
   }
 
   /** The treasure chest of a treasure room (a golden chest with a glow under it). */
@@ -1343,6 +1416,7 @@ export class Landscape {
   update(dt, hero = null) {
     this.time += dt;
     this.shared.uTime.value = this.time;
+    WORLD.uCloudTime.value = this.time;
     if (hero) this.shared.uPush.value.set(hero.x, hero.z, 0.9);
     this.ambience.update(dt);
     for (let i = 0; i < this.torches.length; i++) {

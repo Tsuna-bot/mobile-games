@@ -19,10 +19,74 @@ float fFbm(vec2 p) { return fNoise(p) * 0.55 + fNoise(p * 2.1 + 3.1) * 0.3 + fNo
 export const FLOOR_STYLE = { grass: 0, stone: 1, flagstone: 2, soil: 3 };
 
 /**
+ * Light over the whole world, shared by every patched material: cloud shadows drifting
+ * across the land (mode 0), or dancing caustics under water (mode 1).
+ */
+export const WORLD = {
+  uCloudTime: { value: 0 },
+  uCloudStrength: { value: 0.4 },
+  uCloudMode: { value: 0 },
+  uDapple: { value: 0 },
+};
+
+/** Sets the world light of a theme: `clouds` 0..1 shadow strength, `caustics` for underwater. */
+export function setWorldLight({ clouds = 0.4, caustics = false, dapple = 0 } = {}) {
+  WORLD.uCloudStrength.value = clouds;
+  WORLD.uDapple.value = dapple;
+  WORLD.uCloudMode.value = caustics ? 1 : 0;
+}
+
+const CLOUD_GLSL = /* glsl */ `
+uniform float uCloudTime;
+uniform float uCloudStrength;
+uniform float uCloudMode;
+uniform float uDapple;
+float cHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float cNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(cHash(i), cHash(i + vec2(1.0, 0.0)), f.x), mix(cHash(i + vec2(0.0, 1.0)), cHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+// How much sunlight reaches this point of the world (clouds), or how much more (caustics).
+float worldLight(vec2 p) {
+  if (uCloudStrength <= 0.0) return 1.0;
+  if (uCloudMode > 0.5) {
+    vec2 q = p * 1.6 + vec2(uCloudTime * 0.35, uCloudTime * 0.22);
+    float a = cNoise(q + cNoise(q * 1.7 - uCloudTime * 0.4) * 1.4);
+    float c = 1.0 - abs(a - 0.5) * 2.0;
+    return 0.82 + pow(c, 6.0) * 1.1 * uCloudStrength;
+  }
+  vec2 q = p * 0.085 + vec2(uCloudTime * 0.018, uCloudTime * 0.011);
+  float n = cNoise(q) * 0.62 + cNoise(q * 2.3 + 5.0) * 0.28 + cNoise(q * 5.1 + 9.0) * 0.1;
+  float light = 1.0 - smoothstep(0.5, 0.6, n) * uCloudStrength;
+  // Sun through leaves: patches of dappled light that sway a little.
+  if (uDapple > 0.0) {
+    float mask = smoothstep(0.42, 0.62, cNoise(p * 0.22 + 3.0));
+    vec2 sway = vec2(sin(uCloudTime * 0.7), cos(uCloudTime * 0.55)) * 0.12;
+    float spots = smoothstep(0.52, 0.6, cNoise(p * 2.4 + sway)) * 0.7 + smoothstep(0.55, 0.62, cNoise(p * 5.1 - sway)) * 0.3;
+    light *= 1.0 - mask * (1.0 - spots) * uDapple;
+  }
+  return light;
+}
+`;
+
+/** Adds the world light (cloud shadows / caustics) to a patched shader; `pos` = GLSL world xz. */
+function injectWorldLight(shader, pos) {
+  Object.assign(shader.uniforms, WORLD);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>\n${CLOUD_GLSL}`)
+    .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+  reflectedLight.directDiffuse *= worldLight(${pos});`);
+}
+
+export { injectWorldLight };
+
+/**
  * Patches `material` (MeshStandardMaterial, instanced or not) with the painted floor.
  * `occlusion` is a texture from `occlusionTexture` (null outside the arena).
  */
-export function patchFloor(material, { style, occlusion = null, bounds = null, tint = 0xffffff, detail = 1, region = null, cracks = null }) {
+export function patchFloor(material, { style, occlusion = null, bounds = null, tint = 0xffffff, detail = 1, region = null, cracks = null, flecks = null, fleckAmount = 1 }) {
   const uniforms = {
     uStyle: { value: style },
     uOcc: { value: occlusion },
@@ -35,6 +99,10 @@ export function patchFloor(material, { style, occlusion = null, bounds = null, t
     uRegionColor: { value: new THREE.Color(region?.color ?? 0xffffff) },
     // Glowing cracks (volcano): their colour, black for none.
     uCracks: { value: new THREE.Color(cracks ?? 0x000000) },
+    // Tiny flower heads / fallen leaves speckled over the grass.
+    uFleckA: { value: new THREE.Color(flecks?.[0] ?? 0xffffff) },
+    uFleckB: { value: new THREE.Color(flecks?.[1] ?? flecks?.[0] ?? 0xffffff) },
+    uFleck: { value: flecks ? fleckAmount : 0 },
   };
   material.userData.floor = uniforms;
   material.onBeforeCompile = (shader) => {
@@ -59,7 +127,26 @@ uniform float uDetail;
 uniform vec4 uRegion;
 uniform vec3 uRegionColor;
 uniform vec3 uCracks;
-${NOISE}`)
+uniform vec3 uFleckA;
+uniform vec3 uFleckB;
+uniform float uFleck;
+${NOISE}
+// Distance to the nearest cell point (pebbles, cobbles) and that cell's id.
+vec2 fVoronoi(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float best = 8.0;
+  float id = 0.0;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 g = vec2(float(x), float(y));
+      vec2 o = vec2(fHash(i + g), fHash(i + g + 17.3));
+      float d = length(g + o - f);
+      if (d < best) { best = d; id = fHash(i + g + 5.1); }
+    }
+  }
+  return vec2(best, id);
+}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
   {
     vec2 p = vFloorWorld.xz;
@@ -67,11 +154,37 @@ ${NOISE}`)
     float mid = fFbm(p * 1.7);
     vec3 c = diffuseColor.rgb * uTint;
     if (uStyle < 0.5) {
-      // Grass: patches, fine blades, a few lighter tufts.
+      // Painted grass: warm and cool patches, brush strokes whose direction wanders,
+      // lighter tufts, and bare earth with pebbles here and there.
+      float hue = fFbm(p * 0.12 + 40.0);
+      c *= mix(vec3(0.92, 0.98, 1.08), vec3(1.1, 1.04, 0.84), smoothstep(0.3, 0.7, hue));
+      c *= 0.82 + big * 0.34;
+      float ang = fNoise(p * 0.5) * 3.14;
+      vec2 dir = vec2(cos(ang), sin(ang));
+      vec2 sp = vec2(dot(p, dir), dot(p, vec2(-dir.y, dir.x)));
+      float stroke = fNoise(vec2(sp.x * 5.0, sp.y * 26.0));
       float blades = fNoise(vec2(p.x * 38.0, p.y * 9.0 + fNoise(p * 6.0) * 3.0));
-      c *= 0.84 + big * 0.3;
-      c *= 0.93 + blades * 0.14 * uDetail;
-      c = mix(c, c * vec3(1.12, 1.08, 0.7), smoothstep(0.62, 0.8, mid) * 0.5);
+      c *= 0.9 + stroke * 0.16 * uDetail + blades * 0.08 * uDetail;
+      c = mix(c, c * vec3(1.14, 1.1, 0.72), smoothstep(0.62, 0.8, mid) * 0.5);
+      // Bare patches: earth tone with pebbles.
+      float bare = smoothstep(0.64, 0.74, fFbm(p * 0.32 + 23.0)) * uDetail;
+      if (bare > 0.01) {
+        vec3 earth = c * vec3(1.18, 0.95, 0.66) * 0.9;
+        vec2 v = fVoronoi(p * 5.5);
+        float pebble = 1.0 - smoothstep(0.18, 0.26, v.x);
+        vec3 stone = mix(vec3(0.62, 0.6, 0.56), vec3(0.8, 0.76, 0.68), v.y);
+        earth = mix(earth, stone * (0.8 + smoothstep(0.25, 0.0, v.x) * 0.35), pebble * step(0.45, v.y));
+        c = mix(c, earth, bare);
+      }
+      // Speckles: tiny flower heads, petals or leaves.
+      if (uFleck > 0.0) {
+        vec2 g = p * 9.0;
+        vec2 cell = floor(g);
+        float h = fHash(cell + 3.3);
+        vec2 dot2 = fract(g) - 0.5 - (vec2(fHash(cell + 1.1), fHash(cell + 2.2)) - 0.5) * 0.6;
+        float speck = (1.0 - smoothstep(0.07, 0.12, length(dot2))) * step(1.0 - 0.14 * uFleck * smoothstep(0.35, 0.6, big), h);
+        c = mix(c, mix(uFleckA, uFleckB, step(0.5, fHash(cell + 7.7))), speck * (1.0 - bare));
+      }
     } else if (uStyle < 1.5 || uStyle > 2.5) {
       // Stone slabs / soil: tone per slab, worn centre, cracks.
       vec2 cell = floor(p + 0.5);
@@ -102,7 +215,12 @@ ${NOISE}`)
       float slab = fHash(floor(g) + 3.7);
       float joint = min(min(f.x, 1.0 - f.x) / 1.1, min(f.y, 1.0 - f.y) / 1.45);
       vec3 stone = uRegionColor * uTint * (0.82 + slab * 0.26 + (mid - 0.5) * 0.2);
-      stone *= mix(0.6, 1.0, smoothstep(0.012, 0.05, joint));
+      // Bevelled slabs: the edge facing the light is brighter, the opposite one darker.
+      float lit = smoothstep(0.1, 0.0, f.x) + smoothstep(0.1, 0.0, 1.0 - f.y);
+      float dark = smoothstep(0.1, 0.0, 1.0 - f.x) + smoothstep(0.1, 0.0, f.y);
+      stone *= 1.0 + lit * 0.16 - dark * 0.2;
+      stone *= 0.94 + fNoise(p * 7.0 + slab * 13.0) * 0.12;
+      stone *= mix(0.55, 1.0, smoothstep(0.012, 0.05, joint));
       stone = mix(stone, c * 0.9, smoothstep(0.5, 0.78, fFbm(p * 1.4 + 9.0)) * 0.7);
       float keep = step(smoothstep(-1.8, 0.3, edge) * 0.9 + 0.06, slab);
       float m = keep * (1.0 - smoothstep(0.1, 0.35, edge)) * smoothstep(0.0, 0.025, joint);
@@ -125,6 +243,7 @@ ${NOISE}`)
     diffuseColor.rgb *= 1.0 - crack * 0.8;
     totalEmissiveRadiance += uCracks * crack * 1.6;
   }`);
+    injectWorldLight(shader, 'vFloorWorld.xz');
   };
   material.customProgramCacheKey = () => `floor-${style}-${region ? 'court' : 'open'}`;
   material.needsUpdate = true;
@@ -189,8 +308,17 @@ export function patchRim(material) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uRimColor = RIM_UNIFORMS.uRimColor;
     shader.uniforms.uRimStrength = RIM_UNIFORMS.uRimStrength;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRimWorld;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+  vec4 rimWorld = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+    rimWorld = instanceMatrix * rimWorld;
+  #endif
+  vRimWorld = (modelMatrix * rimWorld).xyz;`);
+    injectWorldLight(shader, 'vRimWorld.xz');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uRimColor;\nuniform float uRimStrength;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRimWorld;\nuniform vec3 uRimColor;\nuniform float uRimStrength;')
       .replace('#include <opaque_fragment>', `{
     float rim = 1.0 - max(dot(normal, normalize(vViewPosition)), 0.0);
     outgoingLight += uRimColor * pow(rim, 2.6) * uRimStrength;

@@ -61,6 +61,8 @@ export class Game {
     this.time = 0;
     this.slowMo = 0;
     this.hitStop = 0;
+    // Anime screen effects: speed lines and impact frames (decay every frame).
+    this.animeFx = { speed: 0, impact: 0, color: new THREE.Color(0xffffff) };
     this.tmp = new THREE.Vector3();
     this.fadeEl = document.createElement('div');
     this.fadeEl.style.cssText = 'position:absolute;inset:0;z-index:5;background:#000;opacity:0;pointer-events:none;transition:opacity .22s ease';
@@ -509,6 +511,7 @@ export class Game {
           this.snapCamera = true;
           if (boss) {
             ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', this.run.endless ? `Salle ${room}` : 'Le gardien du chapitre', 'danger');
+            this.anime(1.4, 0);
             audio.warning(true);
             this.haptics.pulse(HAPTIC.boss);
           } else if (kind === 'treasure') ui.banner('Salle au trésor', 'Nettoie la salle pour ouvrir le coffre', 'gold');
@@ -541,6 +544,7 @@ export class Game {
       },
       onExecute: (enemy, boss) => {
         fx.execute(enemy.x, enemy.z, boss);
+        if (boss) this.anime(0.5, 0.8, 0xd8b0ff);
         this.floatWorld(enemy.x, 1.6 + enemy.def.scale * 0.4, enemy.z, boss ? 'Coup fatal !' : 'Exécution !', 'crit');
         this.hitStop = Math.max(this.hitStop, 0.09);
         this.shake = Math.min(1, this.shake + (boss ? 0.6 : 0.3));
@@ -583,6 +587,7 @@ export class Game {
         if (enemy.def.boss) {
           this.shake = 1;
           this.slowMo = 0.9;
+          this.anime(1.1, 1, 0xfff0d0);
           ui.setBoss(null);
         }
       },
@@ -697,6 +702,7 @@ export class Game {
         const c = new THREE.Color(SPELLS[zone.spell]?.color ?? '#ffffff');
         fx.blast(zone.x, zone.z, zone.radius, c);
         if (zone.big) {
+          this.anime(0.3, 0.6, c.getHex());
           this.shake = Math.min(1, this.shake + 0.6);
           audio.explosion(true);
           this.haptics.pulse([30, 20, 50]);
@@ -732,12 +738,14 @@ export class Game {
     this.actors.heroShoot();
     switch (s.def.type) {
       case 'nova':
+        this.anime(0.35, 0);
         fx.nova(p.x, p.z, info.radius, c);
         this.shake = Math.min(1, this.shake + 0.45);
         this.audio.explosion(true);
         this.haptics.pulse([25, 20, 40]);
         break;
       case 'dash':
+        this.anime(0.45, 0);
         fx.trail(info.x, info.z, info.toX, info.toZ, c);
         fx.ring(info.toX, info.toZ, 1.2, 0.35, c);
         this.audio.whoosh();
@@ -752,6 +760,7 @@ export class Game {
         this.haptics.pulse([15, 30, 15]);
         break;
       case 'execute':
+        this.anime(0.5, 0.75, c.getHex());
         fx.trail(p.x, p.z, info.toX, info.toZ, c);
         fx.execute(info.toX, info.toZ, true);
         this.hitStop = Math.max(this.hitStop, 0.08);
@@ -818,8 +827,29 @@ export class Game {
     run.step(dt, this.joystick.read());
   }
 
+  /** Speed lines for `amount` (≈ seconds), an impact frame of `impact` strength. */
+  anime(speed = 0, impact = 0, color = null) {
+    const a = this.animeFx;
+    a.speed = Math.max(a.speed, speed);
+    if (impact > a.impact) {
+      a.impact = impact;
+      a.color.set(color ?? 0xffffff);
+    }
+  }
+
   render(dt) {
     this.time += dt;
+    const a = this.animeFx;
+    a.speed = Math.max(0, a.speed - dt);
+    a.impact = Math.max(0, a.impact - dt * 8);
+    this.view.setAnime(Math.min(1, a.speed * 1.4), a.impact > 0.05 ? Math.min(0.85, a.impact) : 0, a.color);
+    // Depth of field: the hero and the room sharp, the far hills soft; the menu focuses on the hero.
+    const focusMode = this.mode === MODE.MENU ? 'menu' : 'play';
+    if (this.focusMode !== focusMode) {
+      this.focusMode = focusMode;
+      if (focusMode === 'menu') this.view.setFocus(0.14, 0.7, 2.6);
+      else this.view.setFocus(0.08, 0.66, 3.2);
+    }
     const run = this.mode === MODE.MENU ? null : this.run;
     this.arenaView.update(dt, run?.player ?? (this.mode === MODE.MENU ? this.menuHero : null));
     if (this.mode === MODE.MENU) this.renderMenu(dt);
@@ -838,6 +868,17 @@ export class Game {
     hero.dirX = 0.5 + Math.sin(this.time * 0.35) * 0.2;
     hero.dirZ = 1;
     this.actors.update(dt, this.time, this.view.camera, fake);
+    // Motes of light spiral up around the hero, in the colour of their cape.
+    this.menuMotes = (this.menuMotes ?? 0) + dt;
+    if (this.menuMotes > 0.07) {
+      this.menuMotes = 0;
+      const heroDef = HEROES[this.save.heroes.selected] ?? HEROES.archer;
+      const c = (this.menuMoteColor ??= new THREE.Color()).setHex(heroDef.cape);
+      const a = this.time * 2.2;
+      const r = 0.55 + Math.sin(this.time * 0.9) * 0.1;
+      this.fx.sparks.emit(hero.x + Math.cos(a) * r, 0.05, hero.z + Math.sin(a) * r, -Math.sin(a) * 0.5, 0.9 + Math.random() * 0.4, Math.cos(a) * 0.5, c, 0.09, 1.6, { endSize: 0.02, drag: 0.3, brightness: 2.4 });
+      if (Math.random() < 0.35) this.fx.sparks.emit(hero.x + (Math.random() - 0.5) * 2.4, 0.1, hero.z + (Math.random() - 0.5) * 1.6, 0, 0.35, 0, c, 0.06, 2.2, { endSize: 0.01, drag: 0, brightness: 1.8 });
+    }
   }
 
   updateCamera(dt) {
@@ -851,7 +892,8 @@ export class Game {
     if (this.mode === MODE.MENU || !run) {
       // Close-up on the hero, from low: the landscape rises behind them.
       const hero = this.menuHero ?? { x: 0, z: 1.5 };
-      target = { x: hero.x, y: cfg.menu.lookY, z: hero.z, d: this.menuDistance, pitch: cfg.menu.pitchDeg };
+      // A slow drift from side to side: the landscape moves behind the hero (parallax).
+      target = { x: hero.x + Math.sin(this.time * 0.13) * 0.45, y: cfg.menu.lookY, z: hero.z, d: this.menuDistance, pitch: cfg.menu.pitchDeg + Math.sin(this.time * 0.09) * 1.5 };
     } else {
       // Follows the hero, a little ahead of them, never far past the arena's edges.
       const p = run.player;
