@@ -1,11 +1,14 @@
 import { writeSave } from '../core/storage.js';
 import { badge, icon } from '../ui/icons.js';
-import { LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
+import { BASES, LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
 import { CHAPTERS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
-import { CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_HERO_LEVEL, MAX_SPELL_RANK, SPELLS, SPELL_UNLOCK, classOf, heroLevelStats, heroXpNeeded, rankCooldown, spellUpgradeCost } from '../data/heroes.js';
-import { chooseClass, heroState, spellRank, spellUpgradeBlock, upgradeSpell } from '../meta/heroes.js';
+import {
+  CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_CLASS_RANK, MAX_HERO_LEVEL, MAX_SPELL_RANK, RECOMMENDED, RECOMMENDED_BONUS, SPELLS, SPELL_UNLOCK,
+  classOf, classUpgradeCost, heroLevelStats, heroXpNeeded, rankCooldown, spellUpgradeCost,
+} from '../data/heroes.js';
+import { chooseClass, classRank, classUpgradeBlock, heroState, spellRank, spellUpgradeBlock, upgradeClass, upgradeSpell } from '../meta/heroes.js';
 import { ACHIEVEMENTS, BRANCHES, TIER_NEEDS, TREE, TREE_BY_ID, accountXpNeeded } from '../data/progression.js';
 import {
   activeSets, awaken, buyHero, chestReady, equip, equippedSlotOf, grantChest, itemDef, merge, mergePartners, nextTalentCost, openChest, powerScore, rollTalent,
@@ -115,7 +118,7 @@ export class Menu {
     const heroes = document.querySelector('#nav [data-tab="heroes"]');
     const hid = save.heroes.selected;
     const hs = heroState(save, hid);
-    heroes.classList.toggle('badge-dot', [0, 1, 2].some((slot) => !spellUpgradeBlock(save, hid, slot)) || (hs.level >= CLASS_LEVEL && !hs.cls));
+    heroes.classList.toggle('badge-dot', [0, 1, 2].some((slot) => !spellUpgradeBlock(save, hid, slot)) || (hs.level >= CLASS_LEVEL && !hs.cls) || !classUpgradeBlock(save, hid));
     const gear = document.querySelector('#nav [data-tab="gear"]');
     gear.classList.toggle('badge-dot', save.inventory.some((it) => mergePartners(save, it.uid).length >= 2));
   }
@@ -176,6 +179,14 @@ export class Menu {
     }
   }
 
+  /** "Conseillée pour …" under a weapon, highlighted for the selected hero. */
+  recommendedLine(base) {
+    const fans = HERO_ORDER.filter((id) => RECOMMENDED[id]?.includes(base));
+    if (!fans.length) return '';
+    const mine = fans.includes(this.save.heroes.selected);
+    return `<p class="popup__reco${mine ? ' is-mine' : ''}">${icon('check')} Conseillée pour ${fans.map((id) => HEROES[id].name).join(', ')}${mine ? ` · +${Math.round(RECOMMENDED_BONUS * 100)} % d’attaque` : ''}</p>`;
+  }
+
   openItem(uid) {
     const save = this.save;
     const item = save.inventory.find((it) => it.uid === uid);
@@ -214,6 +225,7 @@ export class Menu {
       <h3 class="popup__name">${esc(def.name)}</h3>
       ${item.rarity >= 2 ? starRow : ''}
       <p class="popup__text">${esc(def.text)}</p>
+      ${this.recommendedLine(item.base)}
       <div class="popup__stats">${lines.map((l) => `<span>${l}</span>`).join('')}${next.length ? `<span class="next">Niveau suivant : ${next.join(' · ')}</span>` : ''}</div>
       ${powerBlock}${setBlock}
       <div class="popup__actions">${actions.join('')}</div>`, rarity.color);
@@ -453,6 +465,17 @@ export class Menu {
         <div class="spell-row__body"><b>${def.name}</b><span class="spell-row__pips">${pips}</span><small>${esc(def.text(shown))} Recharge ${Math.round(def.cd * rankCooldown(shown))} s.</small></div>
         ${action}</div>`;
     }).join('');
+    // The class spell, fourth button: learnt with the class, ranked with it.
+    const cur = h.cls ? classOf(id, h.cls) : null;
+    const curRank = cur ? classRank(save, id, cur.id) : 0;
+    const classSpellRow = (() => {
+      if (!cur?.classSpell) return '';
+      const def = SPELLS[cur.classSpell];
+      const pips = Array.from({ length: MAX_CLASS_RANK }, (_, i) => `<i class="${i < curRank ? 'is-on' : ''}"></i>`).join('');
+      return `<div class="spell-row spell-row--class" style="--spell:${def.color}">
+        <span class="spell-row__icon">${badge(def.icon, 'badge--md')}</span>
+        <div class="spell-row__body"><b>${def.name}</b><span class="spell-row__pips">${pips}</span><small>${esc(def.text(curRank))} Recharge ${Math.round(def.cd * rankCooldown(curRank))} s. Sort de classe : monte avec le rang de la classe.</small></div></div>`;
+    })();
     const classes = CLASSES[id];
     let classHtml;
     if (h.level < CLASS_LEVEL) classHtml = `<p class="panel-text">${icon('classes')} Au niveau ${CLASS_LEVEL}, ${hero.name} choisit une classe : ${classes.map((c) => `<b>${c.name}</b>`).join(' ou ')}.</p>`;
@@ -460,8 +483,23 @@ export class Menu {
       classHtml = `<div class="class-cards">${classes.map((c) => {
         const active = h.cls === c.id;
         const btn = active ? `<button type="button" class="btn" disabled>${icon('check')} Active</button>` : `<button type="button" class="btn ${h.cls ? 'btn--gold' : 'btn--primary'} btn--small" data-class="${c.id}" ${!owned || (h.cls && save.gems < CLASS_SWITCH_GEMS) ? 'disabled' : ''}>${h.cls ? `<i class="gem-icon"></i> ${CLASS_SWITCH_GEMS}` : 'Choisir'}</button>`;
-        return `<div class="class-card${active ? ' is-active' : ''}">${badge(c.icon, 'badge--md')}<b>${c.name}</b><small>${esc(c.text)}</small>${btn}</div>`;
+        const rank = h.clsRanks?.[c.id] ?? 1;
+        const spell = SPELLS[c.classSpell];
+        return `<div class="class-card${active ? ' is-active' : ''}">${badge(c.icon, 'badge--md')}<b>${c.name}${active ? ` · rang ${rank}` : ''}</b><small>${esc(c.text)}</small>${spell ? `<small class="class-card__spell">${icon(spell.icon)} Sort : ${spell.name}</small>` : ''}${btn}</div>`;
       }).join('')}</div>`;
+      // Ranking the active class up.
+      if (cur) {
+        const block = owned ? classUpgradeBlock(save, id) : 'owned';
+        const pips = Array.from({ length: MAX_CLASS_RANK }, (_, i) => `<i class="${i < curRank ? 'is-on' : ''}"></i>`).join('');
+        let action;
+        if (curRank >= MAX_CLASS_RANK) action = '<span class="spell-row__lock">Rang max</span>';
+        else {
+          const cost = classUpgradeCost(curRank);
+          const label = block === 'level' ? `Niv. ${cost.level} requis` : `<i class="coin-icon"></i>${cost.coins} · ${icon('rune')}${cost.runes}`;
+          action = `<button type="button" class="btn btn--gold btn--small" data-class-up ${block ? 'disabled' : ''}>${label}</button>`;
+        }
+        classHtml += `<div class="class-rank"><div><b>${cur.name} · rang ${curRank}/${MAX_CLASS_RANK}</b><span class="spell-row__pips">${pips}</span><small>Chaque rang : bonus de classe +25 %, sort renforcé +10 %, ${cur.classSpell ? `${SPELLS[cur.classSpell].name} un rang plus haut` : ''}.</small></div>${action}</div>`;
+      }
     }
     this.$('hero-detail').innerHTML = `
       <div class="hero-sheet" style="--hero:#${hero.cape.toString(16).padStart(6, '0')}">
@@ -473,8 +511,9 @@ export class Menu {
         <div class="hero-sheet__xp"><i style="width:${h.level >= MAX_HERO_LEVEL ? 100 : Math.round((h.xp / need) * 100)}%"></i><span>${h.level >= MAX_HERO_LEVEL ? 'Niveau max' : `${h.xp} / ${need} XP`}</span></div>
         <small class="hero-sheet__bonus">Bonus de niveau : attaque +${Math.round(bonus.damageMul * 100)} %, vie +${Math.round(bonus.hpMul * 100)} %${h.cls ? ` · Classe : ${classOf(id, h.cls).name}` : ''}</small>
       </div>
+      <p class="hero-sheet__reco">${icon('check')} Armes conseillées : ${(RECOMMENDED[id] ?? []).map((b) => `<b>${BASES[b].name}</b>`).join(' · ')} <small>(+${Math.round(RECOMMENDED_BONUS * 100)} % d’attaque)</small></p>
       <h3 class="panel-subtitle">Sorts <span class="runes-pill">${icon('rune')} ${save.runes} runes</span></h3>
-      <div class="spell-list">${spells}</div>
+      <div class="spell-list">${spells}${classSpellRow}</div>
       <h3 class="panel-subtitle">Classe</h3>
       ${classHtml}
       <p class="panel-text hero-sheet__tip">${owned ? 'Le héros gagne de l’expérience à chaque partie jouée avec lui. Les runes tombent des élites et des boss.' : `Recrute ${hero.name} pour le faire progresser.`}</p>`;
@@ -493,6 +532,16 @@ export class Menu {
         row?.classList.add('is-bumped');
       });
     }
+    this.$('hero-detail').querySelector('[data-class-up]')?.addEventListener('click', () => {
+      if (!upgradeClass(save, id)) {
+        this.game.audio.denied();
+        return;
+      }
+      this.game.audio.victory();
+      this.game.haptics.pulse([20, 40, 20, 40, 60]);
+      this.persist();
+      this.renderHeroes();
+    });
     for (const button of this.$('hero-detail').querySelectorAll('[data-class]')) {
       button.addEventListener('click', () => {
         if (!chooseClass(save, id, button.dataset.class)) {

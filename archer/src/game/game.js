@@ -841,6 +841,11 @@ export class Game {
         this.audio.upgrade();
         this.haptics.pulse([15, 30, 15]);
         break;
+      case 'shadow':
+        this.anime(0.5, 0);
+        this.audio.whoosh();
+        this.haptics.pulse([15, 25, 15]);
+        break;
       case 'execute':
         this.anime(0.5, 0.75, c.getHex());
         fx.trail(p.x, p.z, info.toX, info.toZ, c);

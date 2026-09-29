@@ -1,7 +1,10 @@
 // Hero growth on the save: level and experience per hero, spell ranks, class, runes.
 // Pure functions (no DOM), testable in Node.
 
-import { CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_HERO_LEVEL, MAX_SPELL_RANK, SPELLS, SPELL_UNLOCK, classOf, heroLevelStats, heroXpNeeded, spellUpgradeCost } from '../data/heroes.js';
+import {
+  CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_CLASS_RANK, MAX_HERO_LEVEL, MAX_SPELL_RANK, SPELLS, SPELL_UNLOCK,
+  classOf, classRankScale, classUpgradeCost, heroLevelStats, heroXpNeeded, spellUpgradeCost,
+} from '../data/heroes.js';
 import { HEROES } from '../data/meta.js';
 
 /** Fills in the hero growth fields (new player or older save). */
@@ -26,6 +29,11 @@ export function ensureHeroes(save) {
     if (!Array.isArray(h.spells)) h.spells = [1, 1, 1];
     h.spells = [0, 1, 2].map((i) => Math.max(1, Math.min(MAX_SPELL_RANK, Math.floor(h.spells[i]) || 1)));
     if (h.cls && !classOf(id, h.cls)) h.cls = null;
+    if (!h.clsRanks || typeof h.clsRanks !== 'object') h.clsRanks = {};
+    for (const [c, r] of Object.entries(h.clsRanks)) {
+      if (!classOf(id, c)) delete h.clsRanks[c];
+      else h.clsRanks[c] = Math.max(1, Math.min(MAX_CLASS_RANK, Math.floor(r) || 1));
+    }
   }
   if (!Number.isFinite(save.runes) || save.runes < 0) save.runes = 0;
   return save;
@@ -33,7 +41,8 @@ export function ensureHeroes(save) {
 
 export function heroState(save, id) {
   save.heroData ??= {};
-  save.heroData[id] ??= { level: 1, xp: 0, spells: [1, 1, 1], cls: null };
+  save.heroData[id] ??= { level: 1, xp: 0, spells: [1, 1, 1], cls: null, clsRanks: {} };
+  save.heroData[id].clsRanks ??= {};
   return save.heroData[id];
 }
 
@@ -92,20 +101,58 @@ export function chooseClass(save, heroId, classId) {
   return true;
 }
 
+/** Rank of a class for this hero (1 once chosen). */
+export function classRank(save, heroId, classId) {
+  return heroState(save, heroId).clsRanks[classId] ?? 1;
+}
+
+/** Why the class cannot rank up (null when it can). */
+export function classUpgradeBlock(save, heroId) {
+  const h = heroState(save, heroId);
+  if (!h.cls) return 'none';
+  const rank = classRank(save, heroId, h.cls);
+  if (rank >= MAX_CLASS_RANK) return 'max';
+  const cost = classUpgradeCost(rank);
+  if (h.level < cost.level) return 'level';
+  if (save.coins < cost.coins) return 'coins';
+  if ((save.runes ?? 0) < cost.runes) return 'runes';
+  return null;
+}
+
+export function upgradeClass(save, heroId) {
+  if (classUpgradeBlock(save, heroId)) return false;
+  const h = heroState(save, heroId);
+  const rank = classRank(save, heroId, h.cls);
+  const cost = classUpgradeCost(rank);
+  save.coins -= cost.coins;
+  save.runes -= cost.runes;
+  h.clsRanks[h.cls] = rank + 1;
+  return true;
+}
+
+/** Class stats at a rank (every number grows 25 % per rank). */
+export function classStats(cls, rank) {
+  const k = classRankScale(rank);
+  return Object.fromEntries(Object.entries(cls.stats).map(([key, v]) => [key, key === 'front' ? v : v * k]));
+}
+
 /** What the hero's level, class and spells bring to a run. */
 export function heroGear(save, heroId) {
   const h = heroState(save, heroId);
   const cls = h.cls ? classOf(heroId, h.cls) : null;
   const stats = [heroLevelStats(h.level)];
-  if (cls) stats.push(cls.stats);
+  const clsRank = cls ? classRank(save, heroId, cls.id) : 0;
+  if (cls) stats.push(classStats(cls, clsRank));
   const spells = [];
   (HERO_SPELLS[heroId] ?? []).forEach((id, slot) => {
     const rank = spellRank(save, heroId, slot);
     if (!rank || !SPELLS[id]) return;
     const boosted = cls?.spell === id;
-    spells.push({ id, rank, slot, power: boosted ? cls.power : 1, cdMul: boosted ? cls.cd : 1 });
+    spells.push({ id, rank, slot, power: boosted ? cls.power * (1 + (clsRank - 1) * 0.1) : 1, cdMul: boosted ? cls.cd : 1 });
   });
-  return { stats, spells, level: h.level, cls };
+  // The class spell, ranked with the class.
+  if (cls?.classSpell && SPELLS[cls.classSpell]) spells.push({ id: cls.classSpell, rank: clsRank, slot: 3, power: 1, cdMul: 1 });
+  return { stats, spells, level: h.level, cls, clsRank };
 }
 
 export { CLASSES, CLASS_LEVEL };

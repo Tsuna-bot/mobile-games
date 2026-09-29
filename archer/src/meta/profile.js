@@ -5,6 +5,7 @@ import { BASES, BASE_IDS, LEGENDARY, MAX_STARS, RARITIES, SETS, SLOTS, awakenCos
 import { CHESTS, FREE_HEROES, HEROES, PETS, TALENTS, petPower, talentCost } from '../data/meta.js';
 import { TREE } from '../data/progression.js';
 import { ensureHeroes, heroGear } from './heroes.js';
+import { RECOMMENDED, RECOMMENDED_BONUS } from '../data/heroes.js';
 import { ensureProgress, track } from './progress.js';
 
 const HOUR = 3600 * 1000;
@@ -333,6 +334,11 @@ export function runGear(save) {
   for (const stats of growth.stats) add(stats);
   gear.spells = growth.spells;
   gear.heroLevel = growth.level;
+  // A weapon the hero handles best: +12 % attack.
+  if (gear.weapon && RECOMMENDED[hero.id]?.includes(gear.weapon)) {
+    gear.damageMul += RECOMMENDED_BONUS;
+    gear.recommended = true;
+  }
   gear.armor = Math.min(0.6, gear.armor);
   gear.dodge = Math.min(0.5, gear.dodge);
   return gear;

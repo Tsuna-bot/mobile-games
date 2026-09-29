@@ -493,9 +493,11 @@ export class Run {
     if (e.dead || e.spawning > 0) return false;
     const share = e.hp / e.maxHp;
     if (e.def.boss) return share <= SHADOW.bossShare;
-    return share <= SHADOW.share || ((e.marks ?? 0) >= KUNAI.marks && share <= SHADOW.markedShare);
+    const limit = this.player.shadow?.cfg?.share ?? SHADOW.share;
+    return share <= limit || ((e.marks ?? 0) >= KUNAI.marks && share <= SHADOW.markedShare);
   }
 
+  /** A weak monster in reach; when cast as a spell, else the most hurt one around. */
   shadowTarget(x, z, exclude = null) {
     let best = null;
     let bestD = SHADOW.range * SHADOW.range;
@@ -504,6 +506,16 @@ export class Run {
       const d = (e.x - x) ** 2 + (e.z - z) ** 2;
       if (d < bestD) {
         bestD = d;
+        best = e;
+      }
+    }
+    if (best || !this.player.shadow?.cfg?.forced) return best;
+    let share = Infinity;
+    for (const e of this.enemies) {
+      if (e === exclude || e.dead || e.spawning > 0 || (e.x - x) ** 2 + (e.z - z) ** 2 > 64) continue;
+      const s = e.hp / e.maxHp;
+      if (s < share) {
+        share = s;
         best = e;
       }
     }
@@ -555,9 +567,11 @@ export class Run {
       if (!e.dead) {
         e.marks = 0;
         const boss = e.def.boss;
-        const damage = boss ? this.damage * SHADOW.bossHit * (1 + p.bossDamage) : e.hp + 1;
-        this.listener.onExecute?.(e, boss, damage);
-        this.damageEnemy(e, damage, true, { execute: true });
+        if (this.canExecute(e) || !sh.cfg) {
+          const damage = boss ? this.damage * SHADOW.bossHit * (1 + p.bossDamage) : e.hp + 1;
+          this.listener.onExecute?.(e, boss, damage);
+          this.damageEnemy(e, damage, true, { execute: true });
+        } else this.hitEnemy(e, sh.cfg.damage, { spell: 'shadowStrike' }, { noElements: true });
       }
       return this.shadowNext(b);
     }
@@ -565,7 +579,8 @@ export class Run {
     p.x = b.homeX;
     p.z = b.homeZ;
     sh.blink = null;
-    sh.cooldown = SHADOW.cooldown;
+    // Cast as a spell: it waits for the next cast.
+    sh.cooldown = sh.cfg ? Infinity : SHADOW.cooldown;
     p.invulnerable = Math.max(p.invulnerable, SHADOW.untouchable);
     p.cooldown = Math.min(p.cooldown, 0.1);
     this.listener.onShadow?.('back', p.x, p.z, null);
@@ -575,7 +590,8 @@ export class Run {
   /** After a strike: chain to another weak monster close by, else head back. */
   shadowNext(b) {
     const p = this.player;
-    const next = b.chain < SHADOW.chain - 1 && !b.target.def.boss && b.target.dead ? this.shadowTarget(p.x, p.z, b.target) : null;
+    const chain = p.shadow.cfg?.chain ?? SHADOW.chain;
+    const next = b.chain < chain - 1 && !b.target.def.boss && (b.target.dead || p.shadow.cfg) ? this.shadowTarget(p.x, p.z, b.target) : null;
     if (next && this.state === STATE.FIGHT) {
       b.chain++;
       b.target = next;
@@ -1180,10 +1196,11 @@ export class Run {
         const count = par.count + (def.id === 'arrowRain' ? Math.floor((s.rank - 1) / 2) : 0);
         for (let n = 0; n < count; n++) {
           const e = targets[n % targets.length];
-          if (n >= targets.length && n > 0) break;
+          // Most rains pick different monsters; a spread one falls again on the same ones.
+          if (n >= targets.length && n > 0 && !par.spread) break;
           const zone = {
             id: this.nextId++, spell: def.id, x: e.x, z: e.z, radius: par.radius * (par.big ? 1 : 1), delay: par.delay + n * 0.07, damage,
-            slow: par.slow, poison: par.poison ? damage * 0.3 : 0, burn: par.burn ? damage * 0.12 : 0, big: Boolean(par.big),
+            slow: par.slow, poison: par.poison ? damage * 0.3 : 0, burn: par.burn ? damage * 0.12 : 0, big: Boolean(par.big), freeze: par.freeze ?? 0,
           };
           zone.max = zone.delay;
           this.zones.push(zone);
@@ -1209,8 +1226,8 @@ export class Run {
         for (let n = 0; n < count; n++) {
           const a = (n / count) * Math.PI * 2;
           this.arrows.push({
-            id: this.nextId++, kind: 'bow', x: p.x, z: p.z, dx: Math.sin(a), dz: Math.cos(a), speed: P.arrowSpeed, damage, life: 1.4,
-            bounces: 0, ricochets: 0, hits: new Set(), view: null, pierceLeft: 1, homing: 0,
+            id: this.nextId++, kind: par.kunai ? 'kunai' : 'bow', x: p.x, z: p.z, dx: Math.sin(a), dz: Math.cos(a), speed: P.arrowSpeed * (par.kunai ? 1.3 : 1), damage, life: par.homing ? 2 : 1.4,
+            bounces: 0, ricochets: 0, hits: new Set(), view: null, pierceLeft: par.homing ? 0 : 1, homing: par.homing ?? 0,
           });
         }
         break;
@@ -1296,6 +1313,15 @@ export class Run {
         info.radius = r;
         break;
       }
+      case 'shadow': {
+        // Kaze's shadow strike: vanish, strike from behind, chain, come back.
+        if (p.shadow?.blink) return false;
+        p.shadow = {
+          cooldown: 0, blink: null,
+          cfg: { forced: true, chain: par.chain + Math.floor((s.rank - 1) / 2), share: par.execute + 0.03 * (s.rank - 1), damage },
+        };
+        break;
+      }
       case 'execute': {
         let t = targets[0];
         for (const e of targets) if (e.hp > t.hp) t = e;
@@ -1352,6 +1378,7 @@ export class Run {
           e.slow = Math.max(e.slow, 0.5);
           e.slowTimer = 2.5;
         }
+        if (z.freeze) this.stun(e, z.freeze);
         if (z.poison) {
           e.poison = Math.max(e.poison, z.poison);
           e.poisonTimer = 5;

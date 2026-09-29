@@ -57,11 +57,11 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 - **Niveau des héros** (1 à 50) : chaque héros gagne de l’expérience dans ses propres parties ; chaque niveau donne +2 % d’attaque et de vie.
 - **Sorts** : 3 par héros, appris aux niveaux 1, 4 et 8, améliorés jusqu’au rang 5 avec de l’or et des runes (le rang suivant demande aussi un niveau de héros). Plus de dégâts et une recharge plus courte à chaque rang.
   - Aren : Pluie de flèches, Flèche du vent (traverse tout), Œil du faucon (cadence et critique).
-  - Kaze : Pas de l’ombre (bond intouchable), Tempête de lames, Marque mortelle (frappe l’ennemi le plus robuste).
+  - Kaze : Pas de l’ombre (bond intouchable), Frappe de l’ombre (disparaît, achève les ennemis affaiblis dans leur dos, enchaîne), Marque mortelle (frappe l’ennemi le plus robuste).
   - Kael : Salve circulaire, Ronces (ralentit, empoisonne), Instinct sauvage.
   - Ilian : Nova de givre (gèle), Météore, Chaîne d’éclairs.
   - Bran : Frappe sismique (repousse, étourdit), Rempart sacré (intouchable, soin), Charge du lion.
-- **Classes** (niveau 12) : deux par héros, par exemple Tireur d’élite ou Maître des volées pour Aren, Pyromancien ou Cryomancien pour Ilian, Paladin ou Berserker pour Bran. Chaque classe donne des bonus et renforce un sort. Premier choix gratuit, changement pour 50 gemmes.
+- **Classes** (niveau 12, rangs 1 à 5 avec or et runes : bonus +25 % par rang ; chaque classe apprend un **4e sort** qui monte avec elle — Tir fatal, Déluge, Éventail de kunaïs, Faux du bourreau, Flèches chercheuses, Sève sacrée, Pluie de feu, Blizzard, Jugement, Tourbillon) : deux par héros, par exemple Tireur d’élite ou Maître des volées pour Aren, Pyromancien ou Cryomancien pour Ilian, Paladin ou Berserker pour Bran. Chaque classe donne des bonus et renforce un sort. Premier choix gratuit, changement pour 50 gemmes.
 - **Niveau de compte** : chaque partie donne de l'expérience (salles, monstres, victoires). Chaque niveau rapporte un point de talent, des gemmes et de l'or.
 - **Arbre de talents** : 3 branches (Guerre, Garde, Fortune) de 5 paliers, avec des capstones (une capacité de départ en plus, bouclier divin dès le départ, un deuxième ange). Réinitialisation gratuite.
 - **Missions du jour** : 3 missions par jour (monstres, salles, élites, boss, coffres, améliorations…) ; les 3 accomplies donnent un coffre doré.
@@ -80,7 +80,7 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 - **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
 - **Entraînement** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
 - **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
-- **Kaze l’assassin** : lance des éventails de 3 kunais (qui traversent un ennemi), se déplace 25 % plus vite. Chaque kunai pose une marque (3 au maximum). **Frappe de l’ombre** automatique : il disparaît, réapparaît derrière un monstre affaibli (moins de 20 % de vie, ou 3 marques et moins de 45 %), l’achève d’un coup, enchaîne jusqu’à 3 exécutions si d’autres sont à portée, puis revient à sa place. Intouchable pendant le saut et 1 s après. Sur un boss sous 30 % de vie : coup fatal (6 fois ses dégâts) au lieu d’une exécution. Recharge 5 s.
+- **Armes** : chaque arme tire de la même façon quel que soit le héros. Chaque héros a deux **armes conseillées** (+12 % d’attaque) : Aren arc et arc long, Kaze shurikens et lames, Kael arbalète et arc long, Ilian bâton et grimoire, Bran arbalète et arc.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
 - Un coffre de victoire à chaque chapitre gagné, en plus du butin ramassé en route. Le bouton **Recycler** de l’équipement démonte d’un coup les objets communs en trop.
 
