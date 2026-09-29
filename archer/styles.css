@@ -3173,3 +3173,35 @@ button:disabled {
 .hurt.is-low {
   background: radial-gradient(ellipse at center, transparent 48%, rgba(255, 20, 20, 0.62) 100%);
 }
+
+/* Arrows toward monsters out of view. */
+.markers {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  left: -11px;
+  top: -9px;
+  width: 22px;
+  height: 18px;
+  background: #ff4a3a;
+  clip-path: polygon(100% 50%, 0 0, 28% 50%, 0 100%);
+  filter: drop-shadow(0 0 6px rgba(255, 60, 40, 0.9));
+  animation: marker-pulse 0.8s ease-in-out infinite;
+}
+
+.marker.is-boss {
+  left: -16px;
+  top: -13px;
+  width: 32px;
+  height: 26px;
+  background: #ffb03a;
+}
+
+@keyframes marker-pulse {
+  50% { opacity: 0.55; }
+}

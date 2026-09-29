@@ -162,7 +162,9 @@ export class Game {
     const aspect = this.view.width / this.view.height;
     const vfov = THREE.MathUtils.degToRad(camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
-    this.camDistance = clamp(CONFIG.camera.halfWidth / Math.tan(hfov / 2), 11, 24);
+    // Distance per unit of half-width seen at the hero's depth (the view widens when monsters spread out).
+    this.camPerWidth = 1 / Math.tan(hfov / 2);
+    this.camDistance = clamp(CONFIG.camera.halfWidth * this.camPerWidth, 11, 34);
     // Wide screens see the whole arena anyway: the menu close-up backs off a little less.
     this.menuDistance = CONFIG.camera.menu.distance * clamp(0.62 / aspect, 0.8, 1.35);
     this.fx.setViewport(this.view.renderer.domElement.height, camera.fov);
@@ -412,6 +414,7 @@ export class Game {
     this.ui.setHud(false);
     this.ui.setLowHp(false);
     this.ui.setCombo(0, 0);
+    this.ui.setMarkers([]);
     this.ui.setBoss(null);
     const save = this.save;
     const coins = Math.floor(run.coins);
@@ -829,6 +832,85 @@ export class Game {
     }, 230);
   }
 
+  /** Camera target { x, y, z, d, pitch } that keeps the hero and the monsters on screen. */
+  frameFight(run, cfg) {
+    const p = run.player;
+    const pitch = THREE.MathUtils.degToRad(cfg.pitchDeg);
+    const cam = (this.frameCam ??= new THREE.PerspectiveCamera());
+    cam.fov = this.view.camera.fov;
+    cam.aspect = this.view.camera.aspect;
+    cam.near = 0.1;
+    cam.far = 200;
+    cam.updateProjectionMatrix();
+    const pts = (this.framePts ??= []);
+    pts.length = 0;
+    pts.push([p.x, p.z, 1.3]);
+    for (const e of run.enemies) if (!e.dead) pts.push([e.x, e.z, 0.8 + e.radius]);
+    const halfH = CONFIG.arena.height / 2;
+    // Safe box in normalised screen coordinates.
+    const safe = { x0: -0.84, x1: 0.84, y0: -0.7, y1: 0.58 };
+    let x = p.x * cfg.follow;
+    let z = p.z - 1.4;
+    let d = cfg.halfWidth * this.camPerWidth;
+    const dMax = cfg.maxHalfWidth * this.camPerWidth;
+    const v = this.tmp;
+    for (let iter = 0; iter < 4; iter++) {
+      cam.position.set(x, Math.sin(pitch) * d, z + Math.cos(pitch) * d);
+      cam.lookAt(x, 0, z);
+      cam.updateMatrixWorld();
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let y0 = Infinity;
+      let y1 = -Infinity;
+      for (const [px, pz, r] of pts) {
+        for (const [ox, oz] of [[-r, 0], [r, 0], [0, -r * 1.4], [0, r]]) {
+          v.set(px + ox, 0.4, pz + oz).project(cam);
+          x0 = Math.min(x0, v.x);
+          x1 = Math.max(x1, v.x);
+          y0 = Math.min(y0, v.y);
+          y1 = Math.max(y1, v.y);
+        }
+      }
+      // Too wide or too tall for the safe box: back off.
+      const scale = Math.max((x1 - x0) / (safe.x1 - safe.x0), (y1 - y0) / (safe.y1 - safe.y0));
+      if (scale > 1) d = Math.min(dMax, d * (1 + (scale - 1) * 0.9));
+      // Recentre on the group (screen offsets back to ground units at this distance).
+      const halfW = d / this.camPerWidth;
+      const halfHt = halfW / cam.aspect / Math.sin(pitch);
+      x += ((x0 + x1) / 2 - (safe.x0 + safe.x1) / 2) * halfW;
+      z -= ((y0 + y1) / 2 - (safe.y0 + safe.y1) / 2) * halfHt;
+    }
+    return {
+      x: clamp(x, -2.2, 2.2),
+      y: 0,
+      z: clamp(z, -halfH + 2.2, halfH - 2.6),
+      d,
+      pitch: cfg.pitchDeg,
+    };
+  }
+
+  /** Monsters out of view (or hidden under the HUD): an arrow on the edge toward each. */
+  offscreenMarkers(run) {
+    const out = [];
+    const w = this.view.width;
+    const h = this.view.height;
+    const top = 120;
+    const margin = 22;
+    for (const e of run.enemies) {
+      if (e.dead || e.spawning > 0) continue;
+      const s = this.screenOf(e.x, 0.6, e.z);
+      if (s.x > 8 && s.x < w - 8 && s.y > top - 20 && s.y < h - 8) continue;
+      const cx = w / 2;
+      const cy = h / 2;
+      const dx = s.x - cx;
+      const dy = s.y - cy;
+      const k = Math.min((cx - margin) / Math.max(1e-3, Math.abs(dx)), ((dy < 0 ? cy - top : h - cy - margin)) / Math.max(1e-3, Math.abs(dy)));
+      out.push({ x: cx + dx * k, y: cy + dy * k, angle: Math.atan2(dy, dx), boss: Boolean(e.def.boss) });
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+
   /** Screen position (CSS pixels) of a world point. */
   screenOf(x, y, z) {
     const rect = this.view.canvas.getBoundingClientRect();
@@ -933,15 +1015,9 @@ export class Game {
       // A slow drift from side to side: the landscape moves behind the hero (parallax).
       target = { x: hero.x + Math.sin(this.time * 0.13) * 0.45, y: cfg.menu.lookY, z: hero.z, d: this.menuDistance, pitch: cfg.menu.pitchDeg + Math.sin(this.time * 0.09) * 1.5 };
     } else {
-      // Follows the hero, a little ahead of them, never far past the arena's edges.
-      const p = run.player;
-      target = {
-        x: clamp(p.x * cfg.follow, -(halfW - cfg.halfWidth + 1), halfW - cfg.halfWidth + 1),
-        y: 0,
-        z: clamp(p.z - 2.1, -halfH + 2.4, halfH - 3.6),
-        d: this.camDistance,
-        pitch: cfg.pitchDeg,
-      };
+      // Frames the hero and every monster: recentres and backs off just enough that
+      // they all fit inside the safe part of the screen (under the HUD, above the thumbs).
+      target = this.frameFight(run, cfg);
     }
     // Position follows fast; distance and angle glide (the swoop from the menu to a room).
     if (this.snapCamera) {
@@ -977,6 +1053,7 @@ export class Game {
     }
     const p = run.player;
     ui.setLowHp(this.mode === MODE.PLAYING && p.hp > 0 && p.hp < p.maxHp * 0.3);
+    ui.setMarkers(this.mode === MODE.PLAYING ? this.offscreenMarkers(run) : []);
     // A boost glows around the hero while it lasts.
     if (this.aura && this.mode === MODE.PLAYING) {
       if (this.time > this.aura.until || !run.buffs.length && run.player.invulnerable <= 0) this.aura = null;

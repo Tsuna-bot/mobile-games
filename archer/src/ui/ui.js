@@ -214,6 +214,28 @@ export class UI {
     }
   }
 
+  /** Arrows on the screen edges toward monsters out of view: [{ x, y, angle, boss }]. */
+  setMarkers(list) {
+    this.markerPool ??= [];
+    const box = this.$('markers');
+    while (this.markerPool.length < list.length && this.markerPool.length < 12) {
+      const el = document.createElement('i');
+      el.className = 'marker';
+      box.append(el);
+      this.markerPool.push(el);
+    }
+    this.markerPool.forEach((el, i) => {
+      const m = list[i];
+      if (!m) {
+        if (el.style.display !== 'none') el.style.display = 'none';
+        return;
+      }
+      el.style.display = '';
+      el.classList.toggle('is-boss', Boolean(m.boss));
+      el.style.transform = `translate(${m.x.toFixed(1)}px, ${m.y.toFixed(1)}px) rotate(${m.angle.toFixed(3)}rad)`;
+    });
+  }
+
   /** A red heartbeat on the screen edges while the hero's life is low. */
   setLowHp(low) {
     if (this.shown.low === low) return;
