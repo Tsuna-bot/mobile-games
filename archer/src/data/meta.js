@@ -35,15 +35,15 @@ export function petPower(rarityMul, level) {
 
 /** Heroes: model, cape colour, passive, price in gems. */
 export const HEROES = {
-  archer: { id: 'archer', name: 'Lyra', role: 'Archère', model: 'rogue_hooded', show: ['1H_Crossbow'], shoot: '1H_Ranged_Shoot', cape: 0x3fa9ff, price: 0, text: 'Équilibrée. Critique +5 %.', stats: { crit: 0.05 } },
+  archer: { id: 'archer', name: 'Aren', role: 'Archer', anime: 'archer', outfit: { cape: 0x2f5a2a, capeLength: 0.7, belt: 0x5a3a22, strap: 0x6a4428, quiver: 0x6a4428, tassets: 0x3a6630 }, animeShoot: 'shoot', weapon3d: 'crossbow_1handed', model: 'rogue_hooded', show: ['1H_Crossbow'], shoot: '1H_Ranged_Shoot', cape: 0x3fa9ff, price: 0, text: 'Équilibrée. Critique +5 %.', stats: { crit: 0.05 } },
   assassin: {
-    id: 'assassin', name: 'Kaze', role: 'Assassin', model: 'rogue_hooded', show: ['Knife', 'Knife_Offhand'], shoot: 'Throw', tint: 0x6a5c96, cape: 0xa06bff, price: 0,
+    id: 'assassin', name: 'Kaze', role: 'Assassin', anime: 'assassin', outfit: { scarf: 0x6a3aa8, belt: 0x2a2238, buckle: 0xc0c8e0, tassets: 0x34284e, tassetLength: 0.36 }, animeShoot: 'jab', animeRun: 'sprint', weapon3d: 'sword_1handed', model: 'rogue_hooded', show: ['Knife', 'Knife_Offhand'], shoot: 'Throw', tint: 0x6a5c96, cape: 0xa06bff, price: 0,
     text: 'Kunais en éventail, très rapide. Se téléporte pour achever les ennemis affaiblis.',
     stats: { speedMul: 0.25, dodge: 0.05, kunai: 1, shadow: 1 },
   },
-  ranger: { id: 'ranger', name: 'Kael', role: 'Rôdeur', model: 'rogue', show: ['2H_Crossbow'], shoot: '2H_Ranged_Shoot', cape: 0x5fe06a, price: 250, text: 'Vitesse +12 %, esquive +6 %.', stats: { speedMul: 0.12, dodge: 0.06 } },
-  mage: { id: 'mage', name: 'Iris', role: 'Mage', model: 'mage', show: ['2H_Staff'], shoot: 'Spellcast_Shoot', cape: 0xc070ff, price: 450, text: 'Flèches de foudre dès le départ.', stats: { bolt: 1 } },
-  knight: { id: 'knight', name: 'Bran', role: 'Chevalier', model: 'knight', show: ['Round_Shield'], attach: 'crossbow_1handed', shoot: '1H_Ranged_Shoot', cape: 0xff5a4a, price: 700, text: 'Vie +30 %, dégâts subis −10 %.', stats: { hpMul: 0.3, armor: 0.1 } },
+  ranger: { id: 'ranger', name: 'Kael', role: 'Rôdeur', anime: 'ranger', outfit: { cape: 0x6a4a2a, capeLength: 0.85, capeWidth: 0.46, belt: 0x3a2a1a, strap: 0x4a3420, pauldrons: 0x6a5038, pauldronSide: 'L', tassets: 0x5a4028 }, animeShoot: 'shoot', weapon3d: 'crossbow_1handed', model: 'rogue', show: ['2H_Crossbow'], shoot: '2H_Ranged_Shoot', cape: 0x5fe06a, price: 250, text: 'Vitesse +12 %, esquive +6 %.', stats: { speedMul: 0.12, dodge: 0.06 } },
+  mage: { id: 'mage', name: 'Ilian', role: 'Mage', anime: 'mage', outfit: { cape: 0x2c2a6e, capeLength: 1.0, capeWidth: 0.46, belt: 0xd8b050, tassets: 0x34307a, tassetLength: 0.46 }, animeShoot: 'cast', weapon3d: 'staff', model: 'mage', show: ['2H_Staff'], shoot: 'Spellcast_Shoot', cape: 0xc070ff, price: 450, text: 'Flèches de foudre dès le départ.', stats: { bolt: 1 } },
+  knight: { id: 'knight', name: 'Bran', role: 'Chevalier', anime: 'knight', outfit: { cape: 0xa82a2a, capeLength: 0.9, capeWidth: 0.44, pauldrons: 0xb8c4d8, metal: true, belt: 0x3a3028, tassets: 0xb8c4d8 }, animeShoot: 'shoot', weapon3d: 'crossbow_1handed', model: 'knight', show: ['Round_Shield'], attach: 'crossbow_1handed', shoot: '1H_Ranged_Shoot', cape: 0xff5a4a, price: 700, text: 'Vie +30 %, dégâts subis −10 %.', stats: { hpMul: 0.3, armor: 0.1 } },
 };
 
 export const HERO_ORDER = ['archer', 'assassin', 'ranger', 'mage', 'knight'];

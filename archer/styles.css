@@ -670,6 +670,35 @@ button:disabled {
   color: var(--muted);
 }
 
+/* The play tab leaves the middle of the screen to the hero standing in the landscape. */
+#panel-play {
+  flex: 1 0 auto;
+  margin: 0;
+  padding-top: 30px;
+  gap: 12px;
+}
+
+#panel-play .brand {
+  margin-bottom: auto;
+}
+
+#panel-play .settings {
+  gap: 4px;
+}
+
+#panel-play .chip {
+  min-height: 28px;
+  padding: 0 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+#panel-play .credits {
+  font-size: 10px;
+  text-align: center;
+  opacity: 0.8;
+}
+
 /* Ability choice (1 of 3) */
 
 .screen--choose {

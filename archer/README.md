@@ -1,16 +1,18 @@
 # Sagittaire
 
-Roguelite d’archer en 3D pour mobile (Three.js), dans l’esprit d’Archero : **cours pour esquiver, arrête-toi pour tirer.** Chaque salle nettoyée ouvre la porte suivante ; à chaque niveau, tu choisis 1 capacité parmi 3 et ton archère devient de plus en plus folle.
+Roguelite d’archer en 3D pour mobile (Three.js), dans l’esprit d’Archero : **cours pour esquiver, arrête-toi pour tirer.** Chaque salle nettoyée ouvre le portail suivant ; à chaque niveau, tu choisis 1 capacité parmi 3 et ton héros devient de plus en plus fou. Style anime : héros en ombrage toon avec contours, paysages ouverts (herbe au vent, fleurs, étangs, ciel peint).
 
 Crédits :
 - Modèles 3D **KayKit** de Kay Lousberg (CC0) : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon, Forest Nature Pack ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).
 - Monstres animés **Ultimate Monsters** de Quaternius (CC0, [quaternius.com](https://quaternius.com)).
+- Héros : personnages d’exemple **VRoid** de pixiv ([vroid.com](https://vroid.com)) — HairSample_Male et Sakurada Fumiriya en CC0, AvatarSample_C selon les conditions d’utilisation VRoid (usage libre, y compris commercial) — recolorés et habillés en fantasy (capes, pans de tunique, épaulières). `tools/convert-vroid.mjs` refait la conversion.
+- Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
 - Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer et Darkzaitzev.
 
 ## Jouer
 
 - **Joystick flottant** : pose le pouce n’importe où et glisse pour courir. Lâche : le héros s’arrête et tire tout seul sur le monstre le plus proche.
-- **3 chapitres de 10 salles** : Forêt des murmures, Cachots oubliés, Cimetière maudit. Un ange après la salle 5 (soin ou capacité), un boss à la salle 10.
+- **3 chapitres de 10 salles** : Forêt des murmures (prairie ensoleillée), Ruines oubliées (ruines au crépuscule), Cimetière maudit (lande de nuit). Un ange après la salle 5 (soin ou capacité), un boss à la salle 10.
 - **Chaque attaque est annoncée** : ligne rouge avant un tir, couloir avant une charge, cercle rouge qui se remplit avant une bombe ou une frappe au sol.
 - **Une seconde chance** par partie (tu repars avec la moitié de ta vie).
 
@@ -22,7 +24,7 @@ Flèche frontale, tir multiple, flèches diagonales / latérales / arrière, reb
 
 Chaque chapitre a ses propres monstres (même comportement, autre apparence) :
 
-| Comportement | Forêt | Cachots | Cimetière |
+| Comportement | Forêt | Ruines | Cimetière |
 | --- | --- | --- | --- |
 | fonce sur toi | champignon | squelette | squelette |
 | vise (ligne rouge) puis tire | champignon cracheur | squelette archer | squelette archer |
@@ -45,7 +47,7 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
   - Améliorer avec l’or, **fusionner 3 exemplaires identiques** pour passer à la rareté suivante, démonter pour récupérer de l’or.
 - **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
 - **Talents** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
-- **Héros** : Lyra (archère encapuchonnée), **Kaze (assassin, gratuit)**, Kael (rôdeur), Iris (mage, flèches de foudre), Bran (chevalier), chacun avec son modèle, son arme et son bonus.
+- **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
 - **Kaze l’assassin** : lance des éventails de 3 kunais (qui traversent un ennemi), se déplace 25 % plus vite. Chaque kunai pose une marque (3 au maximum). **Frappe de l’ombre** automatique : il disparaît, réapparaît derrière un monstre affaibli (moins de 20 % de vie, ou 3 marques et moins de 45 %), l’achève d’un coup, enchaîne jusqu’à 3 exécutions si d’autres sont à portée, puis revient à sa place. Intouchable pendant le saut et 1 s après. Sur un boss sous 30 % de vie : coup fatal (6 fois ses dégâts) au lieu d’une exécution. Recharge 5 s.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
 - Un objet est trouvé à chaque chapitre gagné (et parfois après une bonne partie).
@@ -73,11 +75,12 @@ Un humain esquive mieux que le bot : c’est une borne basse.
 ## Technique
 
 - Simulation pure à pas fixe (60 Hz), sans Three.js ni DOM (`src/sim/`), testable dans Node.
-- Rendu : personnages KayKit (animations partagées) et monstres Quaternius, leurs morceaux fusionnés en un seul maillage ; décors d’une salle fusionnés en quelques maillages ; projectiles et bonus en InstancedMesh. Environ 65 à 95 appels de dessin par image dans une salle de boss chargée.
-- Image : éclairage d’environnement, lumière de contre-jour colorée, contour lumineux sur les personnages, sols peints dans le shader (herbe, pierre, dalles moussues, fissures) avec ombrage doux autour des obstacles, particules d’ambiance (pollen, braises, feux follets), rayons de lumière, brume au cimetière, halo lumineux (bloom) sur les projectiles, étalonnage des couleurs par chapitre.
+- Rendu : héros VRoid (un seul squelette, animations partagées), monstres Quaternius et KayKit, tous en ombrage toon (3 bandes de lumière) avec contour sombre d’épaisseur constante à l’écran ; décors d’une salle fusionnés en quelques maillages ; herbe, fleurs, projectiles et bonus en InstancedMesh. Environ 140 à 160 appels de dessin par image dans une salle de boss chargée.
+- Image : paysage sculpté autour de l’arène (collines, arbres, étangs là où la salle a des trous, avec eau animée et écume), herbe et fleurs qui ondulent au vent et s’écartent sous les pas du héros, dallage en ruine, ciel peint (dégradé, nuages aux bords nets, étoiles la nuit), portail lumineux, lumière de contre-jour colorée, contour lumineux sur les personnages, particules d’ambiance, brume au cimetière, halo lumineux (bloom), étalonnage des couleurs par chapitre.
+- Caméra : rapprochée et inclinée, elle suit le héros ; au menu, gros plan sur le héros devant le portail, puis plongée vers la salle au lancement.
 - Sensations : arrêt sur image quand un monstre meurt, écrasement des monstres à l’impact, tremblement de caméra.
 - Interface : icônes vectorielles (plus aucun emoji), badges colorés, boutons et panneaux en relief.
-- Modèles compressés (meshopt + quantification) : 5,6 Mo pour tout le jeu. `tools/convert-kaykit.mjs` refait la conversion depuis les packs.
+- Modèles compressés (meshopt + quantification, textures WebP) : environ 11 Mo pour tout le jeu. `tools/convert-kaykit.mjs` refait la conversion depuis les packs.
 - Résolution dynamique (baisse la netteté avant de couper des effets) et qualité automatique, comme Bastion.
 - Hors ligne après la première visite (service worker, cache d’abord) ; installable sur l’écran d’accueil.
 

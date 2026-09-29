@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { damp } from '../core/math.js';
 import { mergeSkinned } from './batch.js';
 import { skinOf } from '../data/skins.js';
-import { patchRim } from './surfaces.js';
+import { addOutlines, patchRim, toonCopy } from './surfaces.js';
 
 const TMP = new THREE.Color();
 
@@ -85,6 +85,15 @@ function radialTexture() {
   const texture = new THREE.CanvasTexture(canvas);
   return texture;
 }
+
+// Anime heroes' height in world units, and how each KayKit weapon sits in their hand.
+const ANIME_HEIGHT = 1.45;
+const WEAPON_GRIP = {
+  default: { scale: 0.32, rotation: [0, 0, 0], position: [0, 0, 0] },
+  crossbow_1handed: { scale: 0.55, rotation: [0, -Math.PI / 2, 0], position: [-0.06, -0.01, 0] },
+  staff: { scale: 0.62, rotation: [0, 0, 1.45], position: [-0.05, 0, 0] },
+  sword_1handed: { scale: 0.42, rotation: [0, 0, Math.PI / 2], position: [-0.05, 0, 0] },
+};
 
 // KayKit characters are ~2.5 units tall: this brings them to ~1.3.
 const CHARACTER_SCALE = 0.52;
@@ -172,10 +181,26 @@ export class Actors {
     const body = new THREE.Group();
     root.add(body);
     const gear = [];
-    const figure = dressCharacter(this.assets, def.model, def.show, def.attach);
+    const anime = def.anime && this.assets.anime.has(def.anime) ? this.assets.anime.create(def.anime, ANIME_HEIGHT, def.outfit) : null;
+    const figure = anime ? anime.figure : dressCharacter(this.assets, def.model, def.show, def.attach);
     body.add(figure);
+    // Anime heroes hold a KayKit weapon in the right hand.
+    if (anime && def.weapon3d && anime.hand) {
+      const weapon = this.assets.clone(def.weapon3d);
+      const grip = WEAPON_GRIP[def.weapon3d] ?? WEAPON_GRIP.default;
+      weapon.scale.setScalar(grip.scale);
+      weapon.rotation.set(...grip.rotation);
+      weapon.position.set(...grip.position);
+      weapon.traverse((o) => {
+        if (!o.isMesh) return;
+        o.material = toonCopy(o.material);
+        gear.push(o.material);
+      });
+      addOutlines(weapon);
+      anime.hand.add(weapon);
+    }
     // A tinted hero (the assassin) gets its own copies of the shared materials.
-    if (def.tint) {
+    if (def.tint && !anime) {
       const copies = new Map();
       figure.traverse((o) => {
         if (!o.isMesh) return;
@@ -204,10 +229,12 @@ export class Actors {
     bar.group.position.y = 1.35;
     root.add(bar.group);
 
-    const animator = new Animator(figure, this.assets.clips, { idle: 'Idle', run: 'Running_A', shoot: def.shoot ?? '1H_Ranged_Shoot', die: 'Death_A', hit: 'Hit_A', cheer: 'Cheer', slash: '2H_Melee_Attack_Spin' });
+    const animator = anime
+      ? new Animator(anime.model, this.assets.anime.clips, { idle: def.animeIdle ?? 'idle', run: def.animeRun ?? 'run', shoot: def.animeShoot ?? 'shoot', die: 'die', hit: 'hit', cheer: 'dance', slash: 'slash' })
+      : new Animator(figure, this.assets.clips, { idle: 'Idle', run: 'Running_A', shoot: def.shoot ?? '1H_Ranged_Shoot', die: 'Death_A', hit: 'Hit_A', cheer: 'Cheer', slash: '2H_Melee_Attack_Spin' });
     animator.play('idle');
     this.scene.add(root);
-    this.hero = { root, body, figure, ring, ringMaterial, bar, animator, gear, yaw: Math.PI, flash: 0, shieldMesh: null };
+    this.hero = { root, body, figure, ring, ringMaterial, bar, animator, gear, yaw: Math.PI, flash: 0, shieldMesh: null, face: anime?.face ?? null, blink: 2 };
     // Shield bubble (Bouclier divin).
     const shieldGeometry = new THREE.SphereGeometry(0.66, 24, 16);
     const shieldMaterial = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -277,6 +304,16 @@ export class Actors {
     if (phase === 'in') hero.animator.play('slash', true, 2.2);
   }
 
+  /** Anime heroes blink every few seconds. */
+  updateBlink(hero, dt) {
+    if (!hero.face) return;
+    hero.blink -= dt;
+    const index = hero.face.morphTargetDictionary.Fcl_EYE_Close;
+    const t = hero.blink < 0.14 ? Math.sin((Math.max(0, hero.blink) / 0.14) * Math.PI) : 0;
+    hero.face.morphTargetInfluences[index] = t;
+    if (hero.blink <= 0) hero.blink = 2.5 + Math.random() * 3;
+  }
+
   heroHurt() {
     if (this.hero) this.hero.flash = 0.25;
   }
@@ -314,16 +351,16 @@ export class Actors {
       o.castShadow = Boolean(def.boss);
       let copy = copies.get(o.material);
       if (!copy) {
-        copy = o.material.clone();
+        // Toon shading (hard light bands), like the heroes and the landscape.
+        copy = toonCopy(o.material);
         if (skin.tint && copy.map) copy.color.setHex(skin.tint);
-        copy.emissive = new THREE.Color(0x000000);
-        patchRim(copy);
         copies.set(o.material, copy);
         materials.push(copy);
       }
       o.material = copy;
     });
     gear.push(...materials);
+    const outlines = addOutlines(model);
     const scale = def.scale;
     body.add(model);
     root.add(blobShadow(def.radius, gear, this.shadowTexture));
@@ -356,7 +393,7 @@ export class Actors {
     // Skeletons climb out of the ground with their own animation; the others rise.
     body.position.y = animator.actions.spawn ? 0 : -1.2;
     this.scene.add(root);
-    const view = { enemy, root, body, model, materials, bar, mark, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
+    const view = { enemy, root, body, model, materials, outlines, bar, mark, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
     enemy.view = view;
     this.enemies.set(enemy.id, view);
     return view;
@@ -400,7 +437,9 @@ export class Actors {
       hero.root.position.z = damp(hero.root.position.z, p.z, 30, dt);
       const blink = p.shadow?.blink;
       const vanished = Boolean(blink && blink.phase !== 'strike');
-      hero.ring.visible = !vanished;
+      const menu = run.state === 'menu';
+      hero.ring.visible = !vanished && !menu;
+      hero.bar.group.visible = !menu;
       const desired = Math.atan2(p.dirX, p.dirZ);
       hero.yaw += shortestAngle(hero.yaw, desired) * Math.min(1, dt * 16);
       hero.body.rotation.y = hero.yaw;
@@ -418,6 +457,12 @@ export class Actors {
       hero.shieldMesh.visible = Boolean(p.shieldReady);
       if (hero.shieldMesh.visible) hero.shieldMesh.material.opacity = 0.18 + Math.sin(time * 6) * 0.06;
       hero.animator.mixer.update(dt);
+      this.updateBlink(hero, dt);
+      // Capes swing back when running and sway gently at rest.
+      if (hero.capeBone) {
+        const target = p.moving ? -0.75 - Math.sin(time * 14) * 0.08 : -0.12 - Math.sin(time * 1.8) * 0.05;
+        hero.capeBone.rotation.x += (target - hero.capeBone.rotation.x) * Math.min(1, dt * 8);
+      }
     }
 
     const pet = this.pet;
@@ -438,6 +483,7 @@ export class Actors {
         view.dying -= dt * 1.3;
         if (view.dying < 0.35) {
           view.root.position.y -= dt * 1.2;
+          for (const outline of view.outlines) outline.visible = false;
           for (const m of view.materials) {
             m.transparent = true;
             m.opacity = Math.max(0, view.dying / 0.35);

@@ -78,7 +78,7 @@ export const ALL_CHAPTERS = [
   },
   {
     id: 'dungeon',
-    name: 'Cachots oubliés',
+    name: 'Ruines oubliées',
     theme: 'dungeon',
     hp: 2.3,
     boss: 'skeletonKing',

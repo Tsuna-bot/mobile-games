@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'sagittaire-v6';
+const VERSION = 'sagittaire-v7';
 
 const APP_SHELL = [
   './',
@@ -105,6 +105,12 @@ const APP_SHELL = [
   './assets/kk/props/tree_pine_yellow_large.glb',
   './assets/kk/props/wall.glb',
   './assets/kk/props/wall_gated.glb',
+  './assets/anime/anims.glb',
+  './assets/anime/archer.glb',
+  './assets/anime/assassin.glb',
+  './assets/anime/knight.glb',
+  './assets/anime/mage.glb',
+  './assets/anime/ranger.glb',
   './src/audio/audio.js',
   './src/config.js',
   './src/core/loop.js',
@@ -124,10 +130,11 @@ const APP_SHELL = [
   './src/meta/profile.js',
   './src/render/actors.js',
   './src/render/ambience.js',
-  './src/render/arenaView.js',
+  './src/render/anime.js',
   './src/render/assets.js',
   './src/render/batch.js',
   './src/render/fx.js',
+  './src/render/landscape.js',
   './src/render/particles.js',
   './src/render/surfaces.js',
   './src/render/view.js',
@@ -140,7 +147,6 @@ const APP_SHELL = [
   './src/ui/ui.js',
   './vendor/three/build/three.core.js',
   './vendor/three/build/three.module.js',
-  './vendor/three/examples/jsm/geometries/RoundedBoxGeometry.js',
   './vendor/three/examples/jsm/libs/meshopt_decoder.module.js',
   './vendor/three/examples/jsm/loaders/GLTFLoader.js',
   './vendor/three/examples/jsm/math/SimplexNoise.js',

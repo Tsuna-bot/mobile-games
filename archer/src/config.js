@@ -20,7 +20,9 @@ export const CONFIG = {
   // Global difficulty: monster damage and health multipliers.
   difficulty: { damage: 0.8, health: 0.85, roomGrowth: 0.05 },
   pickupRadius: 1.4,
-  camera: { fov: 40, pitchDeg: 57, distance: 17.5 },
+  // Close, tilted view that follows the hero (`halfWidth`: half the width seen at the
+  // hero's depth on a portrait phone); the menu frames the hero from up close.
+  camera: { fov: 45, pitchDeg: 45, halfWidth: 3.2, follow: 0.45, menu: { distance: 5.5, pitchDeg: 12, lookY: 0.3 } },
   quality: {
     lowFps: 52,
     goodFps: 57,

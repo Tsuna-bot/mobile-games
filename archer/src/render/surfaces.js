@@ -22,7 +22,7 @@ export const FLOOR_STYLE = { grass: 0, stone: 1, flagstone: 2, soil: 3 };
  * Patches `material` (MeshStandardMaterial, instanced or not) with the painted floor.
  * `occlusion` is a texture from `occlusionTexture` (null outside the arena).
  */
-export function patchFloor(material, { style, occlusion = null, bounds = null, tint = 0xffffff, detail = 1 }) {
+export function patchFloor(material, { style, occlusion = null, bounds = null, tint = 0xffffff, detail = 1, region = null }) {
   const uniforms = {
     uStyle: { value: style },
     uOcc: { value: occlusion },
@@ -30,6 +30,9 @@ export function patchFloor(material, { style, occlusion = null, bounds = null, t
     uHasOcc: { value: occlusion ? 1 : 0 },
     uTint: { value: new THREE.Color(tint) },
     uDetail: { value: detail },
+    // Paved court (ruins): half size, enabled; colour of the slabs.
+    uRegion: { value: new THREE.Vector4(region?.halfW ?? 0, region?.halfH ?? 0, region ? 1 : 0, 0) },
+    uRegionColor: { value: new THREE.Color(region?.color ?? 0xffffff) },
   };
   material.userData.floor = uniforms;
   material.onBeforeCompile = (shader) => {
@@ -51,6 +54,8 @@ uniform vec4 uBounds;
 uniform float uHasOcc;
 uniform vec3 uTint;
 uniform float uDetail;
+uniform vec4 uRegion;
+uniform vec3 uRegionColor;
 ${NOISE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
   {
@@ -84,6 +89,22 @@ ${NOISE}`)
       float cracked = smoothstep(0.6, 0.75, fNoise(p * 0.7 + 5.0));
       c *= 1.0 - (1.0 - smoothstep(0.0, 0.03, crack)) * 0.25 * cracked;
     }
+    // Paved court: offset slabs with grass in the joints, thinning out at the edges.
+    if (uRegion.z > 0.5) {
+      vec2 q = abs(p) - uRegion.xy;
+      float edge = max(q.x, q.y) + (fFbm(p * 0.9 + 17.0) - 0.5) * 1.6;
+      vec2 g = p * vec2(1.1, 1.45);
+      g.x += floor(g.y) * 0.5;
+      vec2 f = fract(g);
+      float slab = fHash(floor(g) + 3.7);
+      float joint = min(min(f.x, 1.0 - f.x) / 1.1, min(f.y, 1.0 - f.y) / 1.45);
+      vec3 stone = uRegionColor * uTint * (0.82 + slab * 0.26 + (mid - 0.5) * 0.2);
+      stone *= mix(0.6, 1.0, smoothstep(0.012, 0.05, joint));
+      stone = mix(stone, c * 0.9, smoothstep(0.5, 0.78, fFbm(p * 1.4 + 9.0)) * 0.7);
+      float keep = step(smoothstep(-1.8, 0.3, edge) * 0.9 + 0.06, slab);
+      float m = keep * (1.0 - smoothstep(0.1, 0.35, edge)) * smoothstep(0.0, 0.025, joint);
+      c = mix(c, stone, m);
+    }
     // Soft occlusion around blocks, walls and the arena rim.
     if (uHasOcc > 0.5) {
       vec2 uv = (p - uBounds.xy) / uBounds.zw;
@@ -93,7 +114,7 @@ ${NOISE}`)
     diffuseColor.rgb = c;
   }`);
   };
-  material.customProgramCacheKey = () => `floor-${style}`;
+  material.customProgramCacheKey = () => `floor-${style}-${region ? 'court' : 'open'}`;
   material.needsUpdate = true;
   return material;
 }
@@ -102,7 +123,7 @@ ${NOISE}`)
  * Occlusion map of the arena: 1 near blocks and the rim, fading over ~1 cell.
  * Returns { texture, bounds } where bounds = (minX, minZ, sizeX, sizeZ).
  */
-export function occlusionTexture(arena, perCell = 6, pad = 1) {
+export function occlusionTexture(arena, perCell = 6, pad = 1, rimSolid = true) {
   const W = arena.width + pad * 2;
   const H = arena.height + pad * 2;
   const w = W * perCell;
@@ -110,7 +131,7 @@ export function occlusionTexture(arena, perCell = 6, pad = 1) {
   const solid = (c, r) => {
     const ac = c - pad;
     const ar = r - pad;
-    if (ac < 0 || ar < 0 || ac >= arena.width || ar >= arena.height) return true;
+    if (ac < 0 || ar < 0 || ac >= arena.width || ar >= arena.height) return rimSolid;
     return arena.cells[ar * arena.width + ac] === CELL.BLOCK;
   };
   const data = new Uint8Array(w * h);
@@ -168,4 +189,90 @@ export function patchRim(material) {
   material.customProgramCacheKey = () => 'rim';
   material.needsUpdate = true;
   return material;
+}
+
+let RAMP = null;
+
+/** Three light bands (shadow, mid-tone, lit), shared by every toon material. */
+export function toonRamp() {
+  if (RAMP) return RAMP;
+  const data = new Uint8Array([150, 150, 150, 255, 212, 212, 212, 255, 255, 255, 255, 255]);
+  RAMP = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+  RAMP.minFilter = THREE.NearestFilter;
+  RAMP.magFilter = THREE.NearestFilter;
+  RAMP.generateMipmaps = false;
+  RAMP.needsUpdate = true;
+  return RAMP;
+}
+
+/**
+ * Anime outline: the mesh drawn again, inflated along its normals, back faces only,
+ * in a dark tint. `width` is a fraction of the distance to the camera, so the line
+ * keeps about the same thickness on screen near and far; `skinned` for characters.
+ */
+export function outlineMaterial(color = 0x2a1a2e, width = 0.0018, skinned = false) {
+  const material = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uOutline = { value: width };
+    const inflate = (normal) => `{
+    float outlineScale = length(modelMatrix[0].xyz);
+    vec4 outlineView = modelViewMatrix * vec4(transformed, 1.0);
+    transformed += normalize(${normal}) * uOutline * max(-outlineView.z, 1.0) / outlineScale;
+  }`;
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform float uOutline;');
+    shader.vertexShader = skinned
+      ? shader.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>\n  ${inflate('objectNormal')}`)
+      : shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n  ${inflate('normal')}`);
+  };
+  material.customProgramCacheKey = () => (skinned ? 'outline-skinned' : 'outline-rigid');
+  return material;
+}
+
+/** Outline for rigid meshes (props, outfit pieces). */
+export function rigidOutlineMaterial(color = 0x2a1a2e, width = 0.0018) {
+  return outlineMaterial(color, width, false);
+}
+
+let SHARED_OUTLINES = null;
+
+/**
+ * Adds an outline copy to every opaque mesh of `model` (skinned ones bound to the same
+ * skeleton). `skip(mesh)` leaves some out. Returns the outline meshes.
+ */
+export function addOutlines(model, skip = null) {
+  SHARED_OUTLINES ??= { skinned: outlineMaterial(0x2a1a2e, 0.0018, true), rigid: outlineMaterial(0x2a1a2e, 0.0018, false) };
+  const meshes = [];
+  model.traverse((o) => {
+    if (!o.isMesh || o.userData.isOutline || o.material.transparent || skip?.(o)) return;
+    meshes.push(o);
+  });
+  const outlines = [];
+  for (const mesh of meshes) {
+    let outline;
+    if (mesh.isSkinnedMesh) {
+      outline = new THREE.SkinnedMesh(mesh.geometry, SHARED_OUTLINES.skinned);
+      outline.bind(mesh.skeleton, mesh.bindMatrix);
+      outline.position.copy(mesh.position);
+      outline.quaternion.copy(mesh.quaternion);
+      outline.scale.copy(mesh.scale);
+      mesh.parent.add(outline);
+    } else {
+      outline = new THREE.Mesh(mesh.geometry, SHARED_OUTLINES.rigid);
+      mesh.add(outline);
+    }
+    outline.userData.isOutline = true;
+    outline.frustumCulled = false;
+    outline.castShadow = false;
+    outlines.push(outline);
+  }
+  return outlines;
+}
+
+/** A toon copy of a lit material (same texture, colour and transparency), with rim light. */
+export function toonCopy(material) {
+  const toon = new THREE.MeshToonMaterial({
+    name: material.name, map: material.map, color: material.color, vertexColors: material.vertexColors, gradientMap: toonRamp(),
+    transparent: material.transparent, opacity: material.opacity, alphaTest: material.alphaTest, side: material.side, depthWrite: material.depthWrite,
+  });
+  return patchRim(toon);
 }

@@ -40,7 +40,8 @@ export function plainGeometry(geometry, keep, matrix = null) {
 /**
  * Static batching: every textured prop mesh under `root` (outside `skip`) is baked
  * into one mesh per material (and per shadow casting: objects under a node with
- * `userData.noShadow` do not cast). A room goes from ~150 draw calls to a handful.
+ * `userData.noShadow` do not cast; `userData.noOutline` is passed on to the merged
+ * mesh). A room goes from ~150 draw calls to a handful.
  */
 export function batchStatic(root, skip = new Set()) {
   root.updateMatrixWorld(true);
@@ -55,19 +56,24 @@ export function batchStatic(root, skip = new Set()) {
     const geometry = plainGeometry(object.geometry, ['position', 'normal', 'uv'], matrix.multiplyMatrices(inverse, object.matrixWorld));
     if (!geometry) return;
     let shadow = true;
-    for (let p = object; p && p !== root; p = p.parent) if (p.userData.noShadow) shadow = false;
-    const key = `${object.material.uuid}|${shadow}`;
-    if (!groups.has(key)) groups.set(key, { material: object.material, shadow, parts: [] });
+    let outline = true;
+    for (let p = object; p && p !== root; p = p.parent) {
+      if (p.userData.noShadow) shadow = false;
+      if (p.userData.noOutline) outline = false;
+    }
+    const key = `${object.material.uuid}|${shadow}|${outline}`;
+    if (!groups.has(key)) groups.set(key, { material: object.material, shadow, outline, parts: [] });
     groups.get(key).parts.push(geometry);
     drop.push(object);
   });
   for (const object of drop) object.removeFromParent();
   const created = [];
-  for (const { material, shadow, parts } of groups.values()) {
+  for (const { material, shadow, outline, parts } of groups.values()) {
     const merged = mergeGeometries(parts, false);
     for (const part of parts) part.dispose();
     const mesh = new THREE.Mesh(merged, material);
     mesh.castShadow = shadow;
+    mesh.userData.noOutline = !outline;
     mesh.receiveShadow = true;
     root.add(mesh);
     created.push(merged);

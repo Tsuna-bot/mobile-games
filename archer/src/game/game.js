@@ -7,7 +7,7 @@ import { ABILITIES } from '../data/abilities.js';
 import { CHAPTERS, LAYOUTS } from '../data/chapters.js';
 import { Joystick } from '../input/joystick.js';
 import { Actors } from '../render/actors.js';
-import { ArenaView } from '../render/arenaView.js';
+import { Landscape } from '../render/landscape.js';
 import { COLORS, Fx } from '../render/fx.js';
 import { ResolutionScaler, detectInitialQuality, lowerQuality } from '../render/view.js';
 import { HEROES } from '../data/meta.js';
@@ -34,7 +34,7 @@ export class Game {
     this.haptics = haptics;
     this.save = ensureProfile(save);
     const scene = view.scene;
-    this.arenaView = new ArenaView(scene, assets);
+    this.arenaView = new Landscape(scene, assets);
     this.arenaView.onTheme = (theme) => view.setGrade(theme.grade);
     this.actors = new Actors(scene, assets);
     this.fx = new Fx(scene);
@@ -114,6 +114,7 @@ export class Game {
     this.arenaView.setShadowSize(preset.shadowMapSize);
     this.fx.scale = preset.effects;
     this.arenaView.effects = preset.effects;
+    this.arenaView.grass = preset.grass;
     this.monitor.reset();
     this.fitCamera();
   }
@@ -137,14 +138,15 @@ export class Game {
     this.audio.click();
   }
 
-  /** Camera distance so the arena width fills the screen (portrait phones). */
+  /** Camera distance so `halfWidth` either side of the hero fills the screen (portrait phones). */
   fitCamera() {
     const camera = this.view.camera;
     const aspect = this.view.width / this.view.height;
     const vfov = THREE.MathUtils.degToRad(camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
-    const halfW = CONFIG.arena.width / 2 + 0.7;
-    this.camDistance = clamp(halfW / Math.tan(hfov / 2), 12, 26);
+    this.camDistance = clamp(CONFIG.camera.halfWidth / Math.tan(hfov / 2), 11, 24);
+    // Wide screens see the whole arena anyway: the menu close-up backs off a little less.
+    this.menuDistance = CONFIG.camera.menu.distance * clamp(0.62 / aspect, 0.8, 1.35);
     this.fx.setViewport(this.view.renderer.domElement.height, camera.fov);
   }
 
@@ -165,7 +167,7 @@ export class Game {
     this.arenaView.build(arena, chapter.theme, 7);
     this.arenaView.openDoor(true);
     this.refreshMenuHero();
-    this.menuHero = { x: 0, z: 6.2, dirX: 0, dirZ: 1, moving: false, hp: 1, maxHp: 1, invulnerable: 0 };
+    this.menuHero = { x: 0, z: 1.5, dirX: 0, dirZ: 1, moving: false, hp: 1, maxHp: 1, invulnerable: 0 };
     this.refreshMenu();
     this.ui.showScreen('menu');
     this.audio.setIntensity(0);
@@ -236,7 +238,6 @@ export class Game {
     writeSave(this.save);
     // The first ability comes for free.
     setTimeout(() => this.offerChoices('Début de l’aventure', 'Choisis ta capacité de départ'), 450);
-    this.camZ = this.run.player.z;
   }
 
   buildRoom() {
@@ -368,7 +369,7 @@ export class Game {
           fx.clear();
           this.buildRoom();
           for (const enemy of this.run.enemies) actors.addEnemy(enemy);
-          this.camZ = this.run.player.z;
+          this.snapCamera = true;
           if (boss) {
             ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', 'Le gardien du chapitre', 'danger');
             audio.warning(true);
@@ -576,7 +577,7 @@ export class Game {
   render(dt) {
     this.time += dt;
     const run = this.mode === MODE.MENU ? null : this.run;
-    this.arenaView.update(dt);
+    this.arenaView.update(dt, run?.player ?? (this.mode === MODE.MENU ? this.menuHero : null));
     if (this.mode === MODE.MENU) this.renderMenu(dt);
     else this.actors.update(dt, this.time, this.view.camera, run);
     this.fx.update(dt, run && !this.fading ? run : null);
@@ -589,7 +590,8 @@ export class Game {
     // The hero waits on the arena while the menu is open.
     const hero = this.menuHero;
     const fake = { player: hero, state: 'menu' };
-    hero.dirX = Math.sin(this.time * 0.4) * 0.3;
+    // Three-quarter view (the cape shows), turning slowly.
+    hero.dirX = 0.5 + Math.sin(this.time * 0.35) * 0.2;
     hero.dirZ = 1;
     this.actors.update(dt, this.time, this.view.camera, fake);
   }
@@ -597,20 +599,45 @@ export class Game {
   updateCamera(dt) {
     const camera = this.view.camera;
     const run = this.run;
+    const cfg = CONFIG.camera;
     const halfH = CONFIG.arena.height / 2;
-    let targetZ;
-    if (this.mode === MODE.MENU || !run) targetZ = 3.4;
-    // The view scrolls with the hero (a little ahead of them), like the original.
-    else targetZ = clamp(run.player.z - 1.6, -halfH + 3.4, halfH - 4.2);
-    this.camZ = damp(this.camZ, targetZ, 6, dt);
+    const halfW = CONFIG.arena.width / 2;
+    const cam = (this.cam ??= { x: 0, y: 0, z: 3.4, d: this.menuDistance, pitch: cfg.menu.pitchDeg });
+    let target;
+    if (this.mode === MODE.MENU || !run) {
+      // Close-up on the hero, from low: the landscape rises behind them.
+      const hero = this.menuHero ?? { x: 0, z: 1.5 };
+      target = { x: hero.x, y: cfg.menu.lookY, z: hero.z, d: this.menuDistance, pitch: cfg.menu.pitchDeg };
+    } else {
+      // Follows the hero, a little ahead of them, never far past the arena's edges.
+      const p = run.player;
+      target = {
+        x: clamp(p.x * cfg.follow, -(halfW - cfg.halfWidth + 1), halfW - cfg.halfWidth + 1),
+        y: 0,
+        z: clamp(p.z - 2.1, -halfH + 2.4, halfH - 3.6),
+        d: this.camDistance,
+        pitch: cfg.pitchDeg,
+      };
+    }
+    // Position follows fast; distance and angle glide (the swoop from the menu to a room).
+    if (this.snapCamera) {
+      // A new room (behind the fade): no glide.
+      this.snapCamera = false;
+      Object.assign(cam, target);
+    }
+    cam.x = damp(cam.x, target.x, 6, dt);
+    cam.z = damp(cam.z, target.z, 6, dt);
+    cam.y = damp(cam.y, target.y, 3, dt);
+    cam.d = damp(cam.d, target.d, 3, dt);
+    cam.pitch = damp(cam.pitch, target.pitch, 3, dt);
+    this.camZ = cam.z;
     this.shake = Math.max(0, this.shake - dt * 2.2);
     const s = this.shake * this.shake * 0.25;
-    const pitch = THREE.MathUtils.degToRad(CONFIG.camera.pitchDeg);
-    const d = this.mode === MODE.MENU ? this.camDistance * 0.62 : this.camDistance;
+    const pitch = THREE.MathUtils.degToRad(cam.pitch);
     const jx = s ? (Math.random() - 0.5) * s : 0;
     const jz = s ? (Math.random() - 0.5) * s : 0;
-    camera.position.set(jx, Math.sin(pitch) * d, this.camZ + Math.cos(pitch) * d + jz);
-    camera.lookAt(jx, 0, this.camZ + jz);
+    camera.position.set(cam.x + jx, cam.y + Math.sin(pitch) * cam.d, cam.z + Math.cos(pitch) * cam.d + jz);
+    camera.lookAt(cam.x + jx, cam.y, cam.z + jz);
   }
 
   updateHud() {

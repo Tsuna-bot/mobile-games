@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { patchRim } from './surfaces.js';
+import { AnimeLibrary } from './anime.js';
 
 const BASE_URL = 'assets/kk/';
 
@@ -39,6 +40,7 @@ export class Assets {
     this.clips = [];
     this.monsterClips = new Map();
     this.mergedCache = new Map();
+    this.anime = new AnimeLibrary();
   }
 
   async load(onProgress) {
@@ -47,6 +49,8 @@ export class Assets {
     const bundleUrl = window.ARCHER_MODEL_BUNDLE;
     const bundle = bundleUrl ? await (await fetch(bundleUrl)).json() : null;
     let loaded = 0;
+    const total = MODELS.length + this.anime.count;
+    const animeJob = bundle ? Promise.resolve() : this.anime.load(loader, 'assets/anime/', () => onProgress?.(++loaded / total));
     await Promise.all(MODELS.map(async (path) => {
       const gltf = bundle
         ? await loader.parseAsync(Uint8Array.from(atob(bundle[path]), (c) => c.charCodeAt(0)).buffer, BASE_URL)
@@ -56,8 +60,9 @@ export class Assets {
       // All the KayKit characters share one rig: their clips live in skeleton_minion.
       if (name === 'skeleton_minion') this.clips = gltf.animations;
       else if (gltf.animations.length) this.monsterClips.set(name, gltf.animations);
-      onProgress?.(++loaded / MODELS.length);
+      onProgress?.(++loaded / total);
     }));
+    await animeJob;
   }
 
   register(name, scene) {
