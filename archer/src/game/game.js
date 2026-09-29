@@ -5,6 +5,8 @@ import { clamp, damp } from '../core/math.js';
 import { writeSave } from '../core/storage.js';
 import { ABILITIES } from '../data/abilities.js';
 import { CHAPTERS, LAYOUTS } from '../data/chapters.js';
+import { ENDLESS, HEROIC, runAccountXp } from '../data/progression.js';
+import { addAccountXp, endlessOpen, ensureDaily, heroicOpen, track } from '../meta/progress.js';
 import { Joystick } from '../input/joystick.js';
 import { Actors } from '../render/actors.js';
 import { Landscape } from '../render/landscape.js';
@@ -19,6 +21,7 @@ import { Run, STATE } from '../sim/run.js';
 
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
 const ROOMS = 10;
+const ENDLESS_GEMS = ENDLESS.gemsPerBoss;
 const HAPTIC = { hit: 10, hurt: [30, 20, 40], kill: 6, level: [15, 40, 15], boss: [40, 30, 60, 30, 90] };
 
 /**
@@ -80,6 +83,7 @@ export class Game {
   bindUi() {
     const ui = this.ui;
     ui.on('btn-play', () => this.startRun(this.save.chapter));
+    ui.on('mode', (mode) => this.pickMode(mode));
     ui.on('btn-prev', () => this.pickChapter(-1));
     ui.on('btn-next', () => this.pickChapter(1));
     ui.on('btn-pause', () => this.pause());
@@ -162,9 +166,9 @@ export class Game {
     this.joystick.enabled = false;
     this.fx.clear();
     this.actors.clearEnemies();
-    const chapter = CHAPTERS[this.save.chapter];
+    ensureDaily(this.save);
     const arena = new Arena(LAYOUTS[0]);
-    this.arenaView.build(arena, chapter.theme, 7);
+    this.arenaView.build(arena, this.menuTheme(), 7);
     this.arenaView.openDoor(true);
     this.refreshMenuHero();
     this.menuHero = { x: 0, z: 1.5, dirX: 0, dirZ: 1, moving: false, hp: 1, maxHp: 1, invulnerable: 0 };
@@ -181,21 +185,43 @@ export class Game {
     this.actors.removePet();
   }
 
+  /** The play mode picked in the menu, if it is open for the shown chapter. */
+  currentMode() {
+    const save = this.save;
+    if (save.mode === 'endless' && endlessOpen(save)) return 'endless';
+    if (save.mode === 'heroic') return 'heroic';
+    return 'normal';
+  }
+
+  /** Landscape behind the menu: the shown chapter's (Endless: the last one opened). */
+  menuTheme() {
+    const save = this.save;
+    return this.currentMode() === 'endless' ? CHAPTERS[save.unlocked].theme : CHAPTERS[save.chapter].theme;
+  }
+
   refreshMenu() {
     const save = this.save;
     this.menu.refreshWallet();
     this.menu.refreshBadges();
+    const mode = this.currentMode();
     const chapter = CHAPTERS[save.chapter];
-    const best = save.best[chapter.id];
+    const key = mode === 'heroic' ? `${chapter.id}:heroic` : chapter.id;
+    const best = save.best[key];
+    const heroicLocked = mode === 'heroic' && !heroicOpen(save, save.chapter);
     this.ui.setMenu({
       coins: Math.floor(save.coins),
       gems: save.gems,
-      chapterNumber: save.chapter + 1,
-      chapterName: chapter.name,
-      best: best ? (best > ROOMS ? 'Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
-      locked: save.chapter > save.unlocked,
-      canPrev: save.chapter > 0,
-      canNext: save.chapter < CHAPTERS.length - 1,
+      kicker: mode === 'endless' ? 'Mode Infini' : `Chapitre ${save.chapter + 1}${mode === 'heroic' ? ' · Héroïque' : ''}`,
+      chapterName: mode === 'endless' ? 'Les portails sans fin' : chapter.name,
+      best: mode === 'endless'
+        ? (save.endless.best ? `Record : salle ${save.endless.best}` : 'Un boss toutes les 5 salles')
+        : best ? (best > ROOMS ? 'Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
+      locked: mode !== 'endless' && (save.chapter > save.unlocked || heroicLocked),
+      lockText: heroicLocked ? 'Termine ce chapitre en Normal' : 'Termine le chapitre précédent',
+      canPrev: mode !== 'endless' && save.chapter > 0,
+      canNext: mode !== 'endless' && save.chapter < CHAPTERS.length - 1,
+      mode,
+      modes: { heroic: heroicOpen(save, 0), endless: endlessOpen(save) },
     });
   }
 
@@ -205,8 +231,32 @@ export class Game {
     this.save.chapter = next;
     writeSave(this.save);
     this.audio.click();
-    this.arenaView.build(new Arena(LAYOUTS[0]), CHAPTERS[next].theme, 7);
+    this.arenaView.build(new Arena(LAYOUTS[0]), this.menuTheme(), 7);
     this.arenaView.openDoor(true);
+    this.refreshMenu();
+  }
+
+  pickMode(mode) {
+    const save = this.save;
+    if (mode === 'endless' && !endlessOpen(save)) {
+      this.audio.denied();
+      this.ui.banner('Mode Infini', 'Termine le chapitre 1 pour l’ouvrir');
+      return;
+    }
+    if (mode === 'heroic' && !heroicOpen(save, 0)) {
+      this.audio.denied();
+      this.ui.banner('Héroïque', 'Termine le chapitre 1 pour l’ouvrir');
+      return;
+    }
+    if (save.mode === mode) return;
+    const theme = this.menuTheme();
+    save.mode = mode;
+    writeSave(save);
+    this.audio.click();
+    if (this.menuTheme() !== theme) {
+      this.arenaView.build(new Arena(LAYOUTS[0]), this.menuTheme(), 7);
+      this.arenaView.openDoor(true);
+    }
     this.refreshMenu();
   }
 
@@ -218,13 +268,19 @@ export class Game {
   }
 
   startRun(chapterIndex) {
-    if (chapterIndex > this.save.unlocked) return;
+    const save = this.save;
+    const mode = this.currentMode();
+    if (mode !== 'endless' && chapterIndex > save.unlocked) return;
+    if (mode === 'heroic' && !heroicOpen(save, chapterIndex)) return;
     this.audio.unlock();
     this.audio.click();
     this.fx.clear();
     this.actors.clearEnemies();
     const gear = this.gearStats();
-    this.run = new Run(chapterIndex, gear, this.createListener());
+    // Endless goes through the landscapes of the chapters already opened.
+    const themes = CHAPTERS.slice(0, save.unlocked + 1).map((c) => c.theme);
+    this.run = new Run(chapterIndex, gear, this.createListener(), undefined, { mode, themes });
+    this.runGear = gear;
     this.actors.createHero(gear.hero);
     if (this.run.pet) this.actors.createPet(this.run.pet.def.color);
     else this.actors.removePet();
@@ -242,9 +298,10 @@ export class Game {
 
   buildRoom() {
     const run = this.run;
-    this.actors.theme = run.chapter.theme;
-    this.arenaView.build(run.arena, run.chapter.theme, run.chapterIndex * 100 + run.room * 7 + 3);
+    this.actors.theme = run.theme;
+    this.arenaView.build(run.arena, run.theme, run.chapterIndex * 100 + run.room * 7 + 3);
     this.arenaView.openDoor(false);
+    if (run.chest) this.arenaView.addChest(run.chest.x, run.chest.z);
   }
 
   offerChoices(kicker, title) {
@@ -308,7 +365,7 @@ export class Game {
     this.finishRun(false);
   }
 
-  /** End of a run: rewards, record, next chapter. */
+  /** End of a run: rewards, record, next chapter, account level, missions. */
   finishRun(won) {
     const run = this.run;
     this.mode = MODE.END;
@@ -319,35 +376,65 @@ export class Game {
     const coins = Math.floor(run.coins);
     save.coins += coins;
     save.kills += run.kills;
-    const gems = won ? 10 + run.chapterIndex * 10 : 0;
+    let gems = run.gems;
+    if (won) gems += (10 + run.chapterIndex * 10) * (run.heroic ? HEROIC.gems : 1) + (this.runGear?.gemBonus ?? 0);
     save.gems += gems;
     const reached = won ? ROOMS + 1 : run.room;
-    const id = run.chapter.id;
-    const record = reached > (save.best[id] ?? 0);
-    save.best[id] = Math.max(save.best[id] ?? 0, reached);
+    let record = false;
     let unlocked = false;
-    if (won && run.chapterIndex === save.unlocked && save.unlocked < CHAPTERS.length - 1) {
-      save.unlocked++;
-      save.chapter = save.unlocked;
-      unlocked = true;
+    if (run.endless) {
+      // The room reached counts once it is cleared.
+      const cleared = run.roomsCleared;
+      record = cleared > (save.endless.best ?? 0);
+      save.endless.best = Math.max(save.endless.best ?? 0, cleared);
+    } else {
+      const key = run.heroic ? `${run.chapter.id}:heroic` : run.chapter.id;
+      record = reached > (save.best[key] ?? 0);
+      save.best[key] = Math.max(save.best[key] ?? 0, reached);
+      if (won && !run.heroic && run.chapterIndex === save.unlocked && save.unlocked < CHAPTERS.length - 1) {
+        save.unlocked++;
+        save.chapter = save.unlocked;
+        unlocked = true;
+      }
     }
     save.tutorial = false;
-    const drop = runDrop(save, run.chapterIndex, won, run.room);
+    // Counters for the missions and achievements.
+    ensureDaily(save);
+    track(save, 'runs', 1);
+    track(save, 'kills', run.kills);
+    track(save, 'rooms', run.roomsCleared);
+    track(save, 'elites', run.eliteKills);
+    track(save, 'bosses', run.bossKills);
+    track(save, 'abilities', Object.values(run.taken).reduce((a, b) => a + b, 0));
+    if (won) track(save, 'wins', 1);
+    if (run.endless) track(save, 'endlessRooms', run.roomsCleared);
+    if (run.heroic) track(save, 'heroicRooms', run.roomsCleared);
+    // Account experience.
+    const xp = runAccountXp({ rooms: run.roomsCleared, kills: run.kills, won, chapterIndex: run.chapterIndex, mode: run.mode });
+    const levels = addAccountXp(save, xp);
+    const drop = runDrop(save, run.chapterIndex, won, run.endless ? run.roomsCleared : run.room, Math.random, run.mode);
     this.pendingDrop = drop;
     writeSave(save);
     const loot = [`<span class="pill"><i class="coin-icon"></i><b>+${coins}</b></span>`];
     if (drop) loot.push(`<span class="pill">${icon('gift')} Objet trouvé</span>`);
     if (gems) loot.push(`<span class="pill"><i class="gem-icon"></i><b>+${gems}</b></span>`);
+    loot.push(`<span class="pill">${icon('level')} +${xp} XP</span>`);
+    for (const l of levels) loot.push(`<span class="pill pill--gold">${icon('level')} Niveau ${l.level} · +1 point de talent</span>`);
+    if (record && !won) loot.push(`<span class="pill">${icon('trophy')} Nouveau record</span>`);
+    if (unlocked) loot.push(`<span class="pill">${icon('crown')} Chapitre suivant</span>`);
+    const done = save.daily?.missions.filter((m) => !m.claimed && m.progress >= (this.menu.missionGoal(m.id) ?? Infinity)).length ?? 0;
+    if (done) loot.push(`<span class="pill pill--gold">${icon('quests')} Mission accomplie</span>`);
+    const title = run.endless ? 'Mode Infini' : `Chapitre ${run.chapterIndex + 1}${run.heroic ? ' · Héroïque' : ''} · ${run.chapter.name}`;
     this.ui.showEnd(
-      `Chapitre ${run.chapterIndex + 1} · ${run.chapter.name}`,
-      won ? 'Victoire !' : 'Défaite',
+      title,
+      run.endless ? `Salle ${run.roomsCleared}` : won ? 'Victoire !' : 'Défaite',
       [
-        ['Salle', won ? `${ROOMS}/${ROOMS}` : `${run.room}/${ROOMS}`],
+        ['Salle', run.endless ? run.room : won ? `${ROOMS}/${ROOMS}` : `${run.room}/${ROOMS}`],
         ['Niveau', run.level],
         ['Monstres', run.kills],
-        ['Capacités', Object.values(run.taken).reduce((a, b) => a + b, 0)],
+        ['Élites', run.eliteKills],
       ],
-      loot.join('') + (record && !won ? `<span class="pill">${icon('trophy')} Nouveau record</span>` : '') + (unlocked ? `<span class="pill">${icon('crown')} Chapitre suivant</span>` : ''),
+      loot.join(''),
     );
     if (won) this.audio.victory();
     else this.audio.defeat();
@@ -362,7 +449,7 @@ export class Game {
     const audio = this.audio;
     const ui = this.ui;
     return {
-      onRoom: (room, boss) => {
+      onRoom: (room, boss, kind) => {
         if (!this.run) return;
         this.fade(() => {
           actors.clearEnemies();
@@ -371,11 +458,25 @@ export class Game {
           for (const enemy of this.run.enemies) actors.addEnemy(enemy);
           this.snapCamera = true;
           if (boss) {
-            ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', 'Le gardien du chapitre', 'danger');
+            ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', this.run.endless ? `Salle ${room}` : 'Le gardien du chapitre', 'danger');
             audio.warning(true);
             this.haptics.pulse(HAPTIC.boss);
+          } else if (kind === 'treasure') ui.banner('Salle au trésor', 'Nettoie la salle pour ouvrir le coffre', 'gold');
+          else if (kind === 'challenge') {
+            ui.banner('Salle de défi', 'Monstres d’élite · une capacité en récompense', 'danger');
+            audio.warning(false);
           } else ui.banner(`Salle ${room}`);
         });
+      },
+      onChestOpen: (chest) => {
+        this.arenaView.openChest();
+        fx.chest(chest.x, chest.z);
+        audio.victory();
+        this.haptics.pulse([20, 30, 20, 30, 50]);
+      },
+      onExplosion: (x, z) => {
+        fx.blast(x, z, 1.4, COLORS.fire);
+        audio.explosion(false);
       },
       onEnemySpawn: (enemy) => {
         // Enemies of a new room are added once the fade has rebuilt it.
@@ -457,10 +558,12 @@ export class Game {
         const p = this.run.player;
         if (ability.id === 'heal' || ability.id === 'vitality') fx.heal(p.x, p.z);
       },
-      onClear: (boss) => {
+      onClear: (boss, kind) => {
         this.arenaView.openDoor(true);
         audio.waveCleared();
-        if (!boss) ui.banner('Salle nettoyée !', 'La porte est ouverte');
+        if (kind === 'challenge') ui.banner('Défi réussi !', '+3 gemmes · choisis une capacité', 'gold');
+        else if (boss) ui.banner('Boss vaincu !', `+${ENDLESS_GEMS} gemmes · le portail est ouvert`, 'gold');
+        else if (kind !== 'treasure') ui.banner('Salle nettoyée !', 'Le portail est ouvert');
       },
       onAngel: () => {
         this.mode = MODE.CHOOSING;
@@ -643,7 +746,8 @@ export class Game {
   updateHud() {
     const run = this.run;
     const ui = this.ui;
-    ui.setRoom(run.chapterIndex + 1, run.room, ROOMS);
+    if (run.endless) ui.setRoom('Mode Infini', run.isBossRoom ? `Boss · salle ${run.room}` : `Salle ${run.room}`);
+    else ui.setRoom(`Chapitre ${run.chapterIndex + 1}${run.heroic ? ' · Héroïque' : ''}`, run.room >= ROOMS ? 'Boss !' : `Salle ${run.room}/${ROOMS}`);
     ui.setCoins(run.coins);
     ui.setXp(run.level, run.xp / run.xpNeeded);
     const boss = run.enemies.find((e) => e.def.boss && !e.dead);

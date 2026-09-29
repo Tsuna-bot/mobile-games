@@ -1,5 +1,6 @@
 // Balance bot: plays chapters with the real simulation.
-//   node tools/bot.mjs [runs] [chapter 1..3] [--verbose]
+//   node tools/bot.mjs [runs] [chapter 1..8] [--gear=start|early|mid|late] [--hero=id]
+//     [--mode=heroic|endless] [--weapon=bow|crossbow|staff|blades|longbow|shuriken|tome] [--verbose]
 import { Run, STATE } from '../src/sim/run.js';
 import { defaultSave } from '../src/core/storage.js';
 import { addItem, ensureProfile, equip, runGear } from '../src/meta/profile.js';
@@ -13,6 +14,9 @@ const VERBOSE = ARGV.includes('--verbose');
 const GEAR = ARGV.find((a) => a.startsWith('--gear='))?.slice(7);
 // --hero=assassin: plays with another hero.
 const HERO = ARGV.find((a) => a.startsWith('--hero='))?.slice(7);
+// --mode=heroic / endless; --weapon=shuriken: another weapon in place of the bow.
+const MODE = ARGV.find((a) => a.startsWith('--mode='))?.slice(7) ?? 'normal';
+const WEAPON = ARGV.find((a) => a.startsWith('--weapon='))?.slice(9);
 
 function gearPreset(name) {
   if (!name) return {};
@@ -20,11 +24,12 @@ function gearPreset(name) {
   save.inventory = [];
   save.equipped = {};
   const late = name === 'late';
-  const put = (base, rarity, level) => equip(save, addItem(save, base, rarity, level).uid);
+  const put = (base, rarity, level) => equip(save, addItem(save, base === 'bow' && WEAPON ? WEAPON : base, rarity, level).uid);
   // The kit every new player starts with.
   if (name === 'start') {
     const fresh = ensureProfile(defaultSave());
     if (HERO) fresh.heroes.selected = HERO;
+    if (WEAPON) fresh.inventory.find((it) => it.uid === fresh.equipped.weapon).base = WEAPON;
     return runGear(fresh);
   }
   if (name === 'early') {
@@ -127,31 +132,33 @@ export function pick(run) {
   return [...run.choices].sort((a, b) => (PREFER.indexOf(a) + 99) % 99 - (PREFER.indexOf(b) + 99) % 99)[0];
 }
 
-export function play(chapter, gear = {}, seed = undefined) {
+export function play(chapter, gear = {}, seed = undefined, mode = 'normal') {
   const events = { hits: 0, damageTaken: 0, by: {}, executions: 0 };
   const run = new Run(chapter, gear, {
     onExecute: () => { events.executions++; },
     onPlayerHit: (d, e) => { events.hits++; events.damageTaken += d; const k = e ? `touch:${e.def.id}` : 'shot/zone'; events.by[k] = (events.by[k] ?? 0) + d; },
-  }, seed);
+  }, seed, { mode, themes: ['forest', 'dungeon', 'graveyard'] });
   run.begin(pick(run));
   let t = 0;
-  while (t < 1800 && run.state !== STATE.DEAD && run.state !== STATE.WON) {
+  const limit = mode === 'endless' ? 5400 : 1800;
+  while (t < limit && run.state !== STATE.DEAD && run.state !== STATE.WON) {
     if (run.state === STATE.CHOOSE || run.state === STATE.ANGEL) run.choose(pick(run));
     run.step(DT, botInput(run));
     t += DT;
   }
-  if (run.state === STATE.FIGHT && t >= 1800) events.stuck = run.enemies.filter((e) => !e.dead).map((e) => `${e.def.id}@${e.x.toFixed(1)},${e.z.toFixed(1)} ${e.state}`).join(' ') + ` hero@${run.player.x.toFixed(1)},${run.player.z.toFixed(1)} layout ${run.layout.join('|')}`;
-  return { state: run.state, room: run.room, level: run.level, coins: Math.round(run.coins), kills: run.kills, time: Math.round(t), hp: Math.round(run.player.hp), ...events, abilities: Object.keys(run.taken).join(',') };
+  if (run.state === STATE.FIGHT && t >= limit) events.stuck = run.enemies.filter((e) => !e.dead).map((e) => `${e.def.id}@${e.x.toFixed(1)},${e.z.toFixed(1)} ${e.state}`).join(' ') + ` hero@${run.player.x.toFixed(1)},${run.player.z.toFixed(1)} layout ${run.layout.join('|')}`;
+  return { state: run.state, room: run.room, level: run.level, coins: Math.round(run.coins), kills: run.kills, elites: run.eliteKills, gems: run.gems, time: Math.round(t), hp: Math.round(run.player.hp), ...events, abilities: Object.keys(run.taken).join(',') };
 }
 
 if (ARGV[1]?.endsWith('bot.mjs')) {
   const gear = gearPreset(GEAR);
-  const results = Array.from({ length: RUNS }, (_, i) => play(CHAPTER, gear, 1000 + i));
+  const results = Array.from({ length: RUNS }, (_, i) => play(CHAPTER, gear, 1000 + i, MODE));
   for (const r of results) if (VERBOSE) console.log(JSON.stringify(r));
   const won = results.filter((r) => r.state === STATE.WON).length;
   const by = {};
   for (const r of results) for (const [k, v] of Object.entries(r.by)) by[k] = (by[k] ?? 0) + v;
   console.log('damage by source', JSON.stringify(Object.fromEntries(Object.entries(by).sort((a, b) => b[1] - a[1]))));
   console.log(`executions per run ${(results.reduce((a, r) => a + r.executions, 0) / RUNS).toFixed(1)}`);
-  console.log(`chapter ${CHAPTER + 1}: won ${won}/${RUNS}, reached rooms [${results.map((r) => r.room).join(',')}], levels [${results.map((r) => r.level).join(',')}], minutes [${results.map((r) => (r.time / 60).toFixed(1)).join(',')}]`);
+  console.log(`elites per run ${(results.reduce((a, r) => a + r.elites, 0) / RUNS).toFixed(1)}, gems ${(results.reduce((a, r) => a + r.gems, 0) / RUNS).toFixed(1)}`);
+  console.log(`${MODE === 'normal' ? '' : `${MODE} `}chapter ${CHAPTER + 1}: won ${won}/${RUNS}, reached rooms [${results.map((r) => r.room).join(',')}], levels [${results.map((r) => r.level).join(',')}], minutes [${results.map((r) => (r.time / 60).toFixed(1)).join(',')}]`);
 }

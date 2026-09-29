@@ -619,6 +619,7 @@ export class Landscape {
     this.torches = [];
     this.door = null;
     this.water = null;
+    this.chest = null;
   }
 
   /**
@@ -1067,6 +1068,28 @@ export class Landscape {
     }
   }
 
+  /** The treasure chest of a treasure room (a golden chest with a glow under it). */
+  addChest(x, z) {
+    const chest = this.toonize(this.assets.fitted('chest_gold', 0.95));
+    chest.position.set(x, this.heightAt?.(x, z) ?? 0, z);
+    chest.rotation.y = 0.35;
+    chest.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.9, 32), new THREE.MeshBasicMaterial({ color: 0xffc84a, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = 0.04;
+    chest.add(glow);
+    this.root.add(chest);
+    this.disposables.push(glow.geometry, glow.material);
+    this.chest = chest;
+  }
+
+  openChest() {
+    this.chest?.removeFromParent();
+    this.chest = null;
+  }
+
   openDoor(open) {
     if (this.door) this.door.target = open ? 1 : 0;
   }
@@ -1085,6 +1108,12 @@ export class Landscape {
     if (door) {
       door.open += (door.target - door.open) * Math.min(1, dt * 3);
       door.glow.uniforms.uOpen.value = door.open;
+    }
+    // The chest bobs and glows.
+    if (this.chest) {
+      const k = Math.sin(this.time * 3);
+      this.chest.children[0].position.y = 0.04 * k;
+      this.chest.children.at(-1).material.opacity = 0.28 + 0.12 * k;
     }
   }
 }

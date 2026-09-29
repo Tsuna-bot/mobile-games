@@ -6,6 +6,7 @@ import { CONFIG } from '../config.js';
 import { ABILITIES, rollAbilities } from '../data/abilities.js';
 import { ALL_CHAPTERS, ANGEL_AFTER, BOSS_LAYOUT, LAYOUTS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
+import { ENDLESS, HEROIC, SPECIAL_ROOMS, eliteChance } from '../data/progression.js';
 import { seededRandom } from '../core/random.js';
 import { Arena, CELL } from './arena.js';
 import { updateEnemy } from './enemies.js';
@@ -31,16 +32,33 @@ const ORB_SPEED = 3.2;
 const ORB_HIT_EVERY = 0.45;
 const DOOR_HALF = 0.9;
 const HEART_CHANCE = 0.06;
+// Elite monsters: tougher, hit harder, drop more.
+const ELITE = { health: 2.6, power: 1.3, radius: 1.12, coins: 3, xp: 2, heart: 0.4 };
+// Shurikens fly out this long, then come back to the hero.
+const BOOMERANG_OUT = 0.62;
 
 /**
  * @param chapterIndex which chapter
  * @param gear player stats from equipment and talents: { hp, damage, rate, crit, critDamage, speed, dodge, ... }
+ * @param options { mode: 'normal' | 'heroic' | 'endless', themes: landscapes the Endless mode goes through }
  */
 export class Run {
-  constructor(chapterIndex = 0, gear = {}, listener = {}, seed = (Math.random() * 2 ** 31) >>> 0) {
-    this.chapterIndex = chapterIndex;
-    this.chapter = ALL_CHAPTERS[chapterIndex];
+  constructor(chapterIndex = 0, gear = {}, listener = {}, seed = (Math.random() * 2 ** 31) >>> 0, options = {}) {
+    this.mode = options.mode ?? 'normal';
+    this.endless = this.mode === 'endless';
+    this.heroic = this.mode === 'heroic';
+    this.themes = options.themes?.length ? options.themes : ['forest'];
+    this.chapterIndex = this.endless ? 0 : chapterIndex;
+    this.chapter = this.endless ? { id: 'endless', name: 'Mode Infini', theme: this.themes[0], hp: 1, rooms: [] } : ALL_CHAPTERS[chapterIndex];
+    this.theme = this.chapter.theme;
+    this.roomCount = this.endless ? Infinity : ROOMS;
     this.listener = listener;
+    // Counters for the rewards, missions and achievements.
+    this.gems = 0;
+    this.eliteKills = 0;
+    this.bossKills = 0;
+    this.roomsCleared = 0;
+    this.roomKind = 'normal';
     this.random = seededRandom(seed);
     this.time = 0;
     this.roomIndex = 0;
@@ -55,6 +73,8 @@ export class Run {
     // Weapons change the shot: rate, speed, piercing, homing, bounces.
     const w = this.player.weapon;
     if (w === 'crossbow') this.player.rateMul *= 0.72;
+    if (w === 'longbow') this.player.rateMul *= 0.8;
+    if (w === 'tome') this.player.rateMul *= 0.85;
     if (w === 'blades') {
       this.player.rateMul *= 1.35;
       this.player.ricochet += 1;
@@ -70,6 +90,8 @@ export class Run {
     // Archero opens with a free ability.
     this.state = STATE.START;
     this.choices = rollAbilities(this.taken, this.random, 1).filter((id) => id !== 'heal');
+    // Talent "Maître d'armes": more abilities to pick before the first room.
+    this.pendingLevels += gear.startAbilities ?? 0;
   }
 
   createPlayer(gear) {
@@ -77,15 +99,18 @@ export class Run {
     return {
       x: 0, z: 0, radius: P.radius, dirX: 0, dirZ: -1,
       hp: maxHp, maxHp,
-      baseDamage: P.damage * (gear.damageMul ?? 1) + (gear.damage ?? 0),
+      baseDamage: (P.damage + (gear.damage ?? 0)) * (gear.damageMul ?? 1),
       damageMul: 1, rateMul: gear.rateMul ?? 1, speedMul: gear.speedMul ?? 1,
       crit: P.crit + (gear.crit ?? 0), critDamage: P.critDamage + (gear.critDamage ?? 0),
       dodge: gear.dodge ?? 0, armor: gear.armor ?? 0,
-      front: 0, multishot: 0, diagonal: 0, side: 0, rear: 0, wallBounce: 0, ricochet: 0, pierce: false,
+      front: gear.front ?? 0, multishot: gear.multishot ?? 0, diagonal: gear.diagonal ?? 0, side: 0, rear: 0, wallBounce: 0, ricochet: gear.ricochet ?? 0, pierce: Boolean(gear.pierce),
       burn: gear.burn ?? 0, frost: gear.frost ?? 0, poison: gear.poison ?? 0, bolt: gear.bolt ?? 0,
       orbs: [...(gear.orbs ?? [])], orbAngle: 0,
-      lifeOnKill: gear.lifeOnKill ?? 0, deathBlast: 0,
-      shieldMax: 0, shieldTimer: 0, shieldReady: false,
+      lifeOnKill: gear.lifeOnKill ?? 0, deathBlast: gear.deathBlast ?? 0,
+      shieldMax: gear.shield ?? 0, shieldTimer: 0, shieldReady: Boolean(gear.shield),
+      // Legendary powers and talents.
+      explosive: gear.explosive ?? 0, fury: gear.fury ?? 0, veil: gear.veil ?? 0, xpMul: gear.xpMul ?? 1,
+      magnet: 1 + (gear.magnet ?? 0), bossHeal: gear.bossHeal ?? 0, reviveShare: gear.reviveShare ?? 0.5, extraAngel: gear.extraAngel ?? 0,
       moving: false, still: 0, cooldown: 0, invulnerable: 0, volley: null, target: null,
       bossDamage: gear.bossDamage ?? 0,
       healOnRoom: gear.healOnRoom ?? 0,
@@ -104,7 +129,10 @@ export class Run {
   }
 
   get damage() {
-    return this.player.baseDamage * this.player.damageMul;
+    const p = this.player;
+    // Legendary "Furie": stronger when badly hurt.
+    const fury = p.fury && p.hp < p.maxHp * 0.4 ? 1 + p.fury : 1;
+    return p.baseDamage * p.damageMul * fury;
   }
 
   get room() {
@@ -112,7 +140,38 @@ export class Run {
   }
 
   get isBossRoom() {
-    return this.roomIndex === ROOMS - 1;
+    return this.endless ? this.room % ENDLESS.bossEvery === 0 : this.roomIndex === ROOMS - 1;
+  }
+
+  /** Monster health multiplier of the current room. */
+  healthScale() {
+    const d = CONFIG.difficulty;
+    if (this.endless) return ENDLESS.health(this.roomIndex) * d.health;
+    const base = this.chapter.hp * d.health * (1 + d.roomGrowth * this.roomIndex);
+    return this.heroic ? base * HEROIC.health : base;
+  }
+
+  /** Chance for a room monster to be elite. */
+  eliteChance() {
+    if (this.endless) return ENDLESS.elites(this.roomIndex);
+    return this.heroic ? HEROIC.elites : eliteChance(this.chapterIndex);
+  }
+
+  /** Endless mode: the monsters of room `index` (a boss every few rooms). */
+  endlessRoom(index) {
+    const room = index + 1;
+    if (room % ENDLESS.bossEvery === 0) {
+      const boss = ENDLESS.bosses[(room / ENDLESS.bossEvery - 1) % ENDLESS.bosses.length];
+      return [[boss, 1]];
+    }
+    const pool = ENDLESS.pool.filter(([, from]) => index >= from).map(([type]) => type);
+    const count = Math.min(9, 3 + Math.floor(index / 3));
+    const spec = new Map();
+    for (let i = 0; i < count; i++) {
+      const type = pool[Math.floor(this.random() * pool.length)];
+      spec.set(type, (spec.get(type) ?? 0) + 1);
+    }
+    return [...spec];
   }
 
   get xpNeeded() {
@@ -123,7 +182,21 @@ export class Run {
 
   loadRoom(index) {
     this.roomIndex = index;
-    const boss = index === ROOMS - 1;
+    const boss = this.isBossRoom;
+    // Endless: the landscape changes after each boss.
+    if (this.endless) {
+      this.theme = this.themes[Math.floor(index / ENDLESS.bossEvery) % this.themes.length];
+      this.chapter.theme = this.theme;
+    }
+    // Now and then a treasure room or a challenge room (never twice in a row).
+    const previous = this.roomKind;
+    this.roomKind = 'normal';
+    this.chest = null;
+    if (!boss && index >= 1 && previous === 'normal') {
+      const r = this.random();
+      if (r < SPECIAL_ROOMS.treasure) this.roomKind = 'treasure';
+      else if (r < SPECIAL_ROOMS.treasure + SPECIAL_ROOMS.challenge) this.roomKind = 'challenge';
+    }
     const layout = boss ? BOSS_LAYOUT : LAYOUTS[Math.floor(this.random() * LAYOUTS.length)];
     this.arena = new Arena(layout);
     this.layout = layout;
@@ -144,28 +217,37 @@ export class Run {
     }
     this.flowTimer = 0;
     this.doorOpen = false;
-    const spec = this.chapter.rooms[index];
+    const spec = this.endless ? this.endlessRoom(index) : this.chapter.rooms[index];
     // Monsters appear in the top part, away from the hero.
     const free = this.arena.freeCells(1, boss ? 5 : 8);
-    for (const [type, count] of spec) {
+    const elites = this.roomKind === 'challenge' ? 1 : this.eliteChance();
+    for (const [type, full] of spec) {
+      // A treasure room is lightly guarded.
+      const count = this.roomKind === 'treasure' ? Math.ceil(full / 2) : full;
       for (let i = 0; i < count; i++) {
         const cell = free.length ? free.splice(Math.floor(this.random() * free.length), 1)[0] : 0;
         const at = this.arena.centerOf(cell);
-        this.spawn(type, boss ? 0 : at.x, boss ? -3.5 : at.z, SPAWN_DELAY + i * 0.08);
+        const elite = !boss && this.random() < elites;
+        this.spawn(type, boss ? 0 : at.x, boss ? -3.5 : at.z, SPAWN_DELAY + i * 0.08, { elite });
       }
     }
+    if (this.roomKind === 'treasure') this.chest = this.freeSpotNear(0, -1.5, 0.5);
     if (p.healOnRoom && index > 0) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.healOnRoom);
-    this.listener.onRoom?.(this.room, boss);
+    // Legendary "Renouveau": a heal at the boss's door.
+    if (boss && p.bossHeal) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.bossHeal);
+    this.listener.onRoom?.(this.room, boss, this.roomKind);
   }
 
-  spawn(type, x, z, delay = SPAWN_DELAY) {
+  spawn(type, x, z, delay = SPAWN_DELAY, { elite = false } = {}) {
     const def = ENEMIES[type];
     // Summons and split blobs must not appear inside a block or a pit (they would be stuck).
-    if (!def.flying) ({ x, z } = this.freeSpotNear(x, z, def.radius));
-    const scale = this.chapter.hp * CONFIG.difficulty.health * (1 + CONFIG.difficulty.roomGrowth * this.roomIndex);
+    const radius = def.radius * (elite ? ELITE.radius : 1);
+    if (!def.flying) ({ x, z } = this.freeSpotNear(x, z, radius));
+    const scale = this.healthScale() * (elite ? ELITE.health : 1);
+    const power = this.healthScale() ** (this.endless ? ENDLESS.damage : 0.5) * (this.heroic ? HEROIC.damage : 1) * (elite ? ELITE.power : 1);
     const enemy = {
-      id: this.nextId++, def, x, z, radius: def.radius, dirX: 0, dirZ: 1,
-      hp: Math.round(def.hp * scale), maxHp: Math.round(def.hp * scale), power: Math.sqrt(scale),
+      id: this.nextId++, def, x, z, radius, dirX: 0, dirZ: 1, elite,
+      hp: Math.round(def.hp * scale), maxHp: Math.round(def.hp * scale), power,
       spawning: delay, state: 'idle', timer: 1 + this.random() * 1.5, phase: 0, step: 0,
       aimX: 0, aimZ: 0, vx: 0, vz: 0,
       slow: 0, slowTimer: 0, frozen: 0, burn: 0, burnTimer: 0, poison: 0, poisonTimer: 0, orbHit: 0,
@@ -199,12 +281,14 @@ export class Run {
   /** The hero walks through the open door at the top. */
   enterDoor() {
     this.listener.onDoor?.();
-    if (this.isBossRoom) {
+    if (this.isBossRoom && !this.endless) {
       this.state = STATE.WON;
       this.listener.onWin?.();
       return;
     }
-    if (ANGEL_AFTER.includes(this.room)) {
+    // An angel after room 5 (and 8 with the "Ange gardien" talent); in Endless, after each boss.
+    const angel = this.endless ? this.isBossRoom : ANGEL_AFTER.includes(this.room) || (this.player.extraAngel && this.room === 8);
+    if (angel) {
       this.state = STATE.ANGEL;
       this.choices = rollAbilities(this.taken, this.random, 1, 2).filter((id) => id !== 'heal');
       this.listener.onAngel?.(this.choices);
@@ -239,7 +323,7 @@ export class Run {
   }
 
   addXp(amount) {
-    this.xp += amount;
+    this.xp += amount * this.player.xpMul;
     while (this.xp >= this.xpNeeded) {
       this.xp -= this.xpNeeded;
       this.level++;
@@ -286,8 +370,9 @@ export class Run {
   }
 
   clearRoom() {
+    this.roomsCleared++;
     // The boss is down: the chapter is won right away (no door, no last ability).
-    if (this.isBossRoom) {
+    if (this.isBossRoom && !this.endless) {
       for (const item of this.pickups) if (item.kind === 'coin') this.coins += item.value;
       this.pickups = [];
       this.shots = [];
@@ -301,8 +386,24 @@ export class Run {
     this.doorOpen = true;
     this.shots = [];
     this.hazards = [];
+    if (this.endless && this.isBossRoom) this.gems += ENDLESS.gemsPerBoss;
+    // Treasure: the chest bursts into gold (and a heart).
+    if (this.roomKind === 'treasure' && this.chest) {
+      const { x, z } = this.chest;
+      const value = 6 + this.chapterIndex * 4 + (this.endless ? Math.floor(this.roomIndex / 5) * 4 : 0);
+      for (let i = 0; i < 14; i++) this.pickups.push({ id: this.nextId++, kind: 'coin', value: value * this.player.coinMul, x: x + (this.random() - 0.5) * 1.6, z: z + (this.random() - 0.5) * 1.6, magnet: false, view: null });
+      this.pickups.push({ id: this.nextId++, kind: 'heart', value: 0.2, x, z: z + 0.4, magnet: false, view: null });
+      this.listener.onChestOpen?.(this.chest);
+      this.chest = null;
+    }
     for (const pickup of this.pickups) pickup.magnet = true;
-    this.listener.onClear?.(this.isBossRoom);
+    this.listener.onClear?.(this.isBossRoom, this.roomKind);
+    // Challenge won: 3 gems and a free ability.
+    if (this.roomKind === 'challenge') {
+      this.gems += 3;
+      this.pendingLevels++;
+      this.addXp(0);
+    }
   }
 
   updatePlayer(dt, input) {
@@ -509,13 +610,17 @@ export class Run {
         });
         continue;
       }
+      const speed = { crossbow: 1.4, staff: 0.75, longbow: 1.25, tome: 0.7, shuriken: 1.05 }[w] ?? 1;
       this.arrows.push({
         id: this.nextId++, kind: w,
         x: p.x + dx * 0.35 + dz * offset, z: p.z + dz * 0.35 - dx * offset,
-        dx, dz, speed: w === 'crossbow' ? P.arrowSpeed * 1.4 : w === 'staff' ? P.arrowSpeed * 0.75 : P.arrowSpeed,
+        dx, dz, speed: P.arrowSpeed * speed,
         damage: this.damage, life: 2.2,
         bounces: p.wallBounce, ricochets: p.ricochet, hits: new Set(), view: null,
-        pierceLeft: w === 'crossbow' ? 1 : 0, homing: w === 'staff' ? 7 : 0,
+        // Crossbow bolts go through one monster, long bow arrows through all of them.
+        pierceLeft: w === 'crossbow' ? 1 : w === 'longbow' ? 99 : 0,
+        homing: w === 'staff' ? 7 : w === 'tome' ? 5 : 0,
+        boomerang: w === 'shuriken', age: 0, explosive: p.explosive > 0,
       });
     }
     this.listener.onShoot?.(angles.length);
@@ -531,6 +636,24 @@ export class Run {
       if (arrow.life <= 0) {
         arrow.dead = true;
         continue;
+      }
+      // Shurikens turn back after a while and fly home, through walls.
+      if (arrow.boomerang) {
+        arrow.age += dt;
+        if (arrow.grace > 0) arrow.grace -= dt;
+        if (!arrow.returning && arrow.age > BOOMERANG_OUT) this.turnBack(arrow);
+        if (arrow.returning) {
+          const p = this.player;
+          const hx = p.x - arrow.x;
+          const hz = p.z - arrow.z;
+          const d = Math.hypot(hx, hz);
+          if (d < 0.45) {
+            arrow.dead = true;
+            continue;
+          }
+          arrow.dx = hx / d;
+          arrow.dz = hz / d;
+        }
       }
       // Staff orbs curve toward the nearest monster in front of them.
       if (arrow.homing) {
@@ -553,7 +676,11 @@ export class Run {
         const nz = arrow.z + (arrow.dz * arrow.speed * dt) / n;
         // Monsters first: a ghost floating over a block can still be hit.
         if (this.arrowHits(arrow, nx, nz)) continue;
-        if (arena.wall(nx, nz)) {
+        if (arena.wall(nx, nz) && !arrow.returning) {
+          if (arrow.boomerang && arrow.bounces <= 0) {
+            this.turnBack(arrow);
+            continue;
+          }
           if (arrow.bounces > 0) {
             arrow.bounces--;
             // Reflect on the axis that hit.
@@ -581,10 +708,30 @@ export class Run {
     });
   }
 
+  /** A shuriken heads back to the hero (it may hit the same monsters again). */
+  turnBack(arrow, from = null) {
+    arrow.returning = true;
+    arrow.life = 2;
+    arrow.hits.clear();
+    arrow.graceId = from?.id ?? null;
+    arrow.grace = 0.18;
+    arrow.speed *= 1.1;
+  }
+
+  /** Legendary crossbow: a small blast around the impact. */
+  explode(x, z, damage, except) {
+    for (const e of this.enemies) {
+      if (e.dead || e === except || e.spawning > 0 || (e.x - x) ** 2 + (e.z - z) ** 2 > 1.4 ** 2) continue;
+      this.damageEnemy(e, damage, false, null);
+    }
+    this.listener.onExplosion?.(x, z);
+  }
+
   /** Arrow at (x, z) touching a monster: damage, then ricochet, pierce or stop. Returns true when it redirected or stopped. */
   arrowHits(arrow, x, z) {
     for (const e of this.enemies) {
       if (e.dead || e.spawning > 0 || arrow.hits.has(e.id)) continue;
+      if (arrow.grace > 0 && arrow.graceId === e.id) continue;
       const r = e.radius + 0.12;
       if ((e.x - x) ** 2 + (e.z - z) ** 2 > r * r) continue;
       arrow.hits.add(e.id);
@@ -603,6 +750,18 @@ export class Run {
       }
       if (arrow.marks && !e.dead) e.marks = Math.min(KUNAI.marks, (e.marks ?? 0) + 1);
       this.hitEnemy(e, arrow.damage, arrow);
+      // Grimoire: every hit throws a chain of lightning.
+      if (arrow.kind === 'tome') this.lightning(e, 2, arrow.damage * 0.4);
+      if (arrow.explosive) this.explode(e.x, e.z, arrow.damage * 0.45, e);
+      if (arrow.boomerang) {
+        // Out: back to the hero after the first hit (unless the legendary lets it pierce);
+        // on the way back it goes through everything.
+        if (!arrow.returning && !this.player.pierce) {
+          this.turnBack(arrow, e);
+          return true;
+        }
+        return false;
+      }
       if (arrow.pierceLeft > 0) {
         arrow.pierceLeft--;
         return false;
@@ -696,6 +855,8 @@ export class Run {
     enemy.dead = true;
     enemy.hp = 0;
     this.kills++;
+    if (enemy.elite) this.eliteKills++;
+    if (enemy.def.boss) this.bossKills++;
     const p = this.player;
     this.listener.onEnemyDie?.(enemy);
     if (p.lifeOnKill) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.lifeOnKill);
@@ -708,11 +869,13 @@ export class Run {
     }
     // Drops: experience, coins, sometimes a heart.
     const drop = (kind, value) => this.pickups.push({ id: this.nextId++, kind, value, x: enemy.x + (this.random() - 0.5) * 0.8, z: enemy.z + (this.random() - 0.5) * 0.8, magnet: this.state === STATE.CLEARED, view: null });
-    const orbs = Math.min(6, Math.ceil(enemy.def.xp / 3));
-    for (let i = 0; i < orbs; i++) drop('xp', enemy.def.xp / orbs);
-    const coins = Math.max(1, Math.round(enemy.def.coins * (1 + this.chapterIndex * 0.5) * p.coinMul));
+    const xp = enemy.def.xp * (enemy.elite ? ELITE.xp : 1);
+    const orbs = Math.min(6, Math.ceil(xp / 3));
+    for (let i = 0; i < orbs; i++) drop('xp', xp / orbs);
+    const tier = this.endless ? Math.min(7, Math.floor(this.roomIndex / 5)) : this.chapterIndex;
+    const coins = Math.max(1, Math.round(enemy.def.coins * (1 + tier * 0.5) * (this.heroic ? 1.5 : 1) * (enemy.elite ? ELITE.coins : 1) * p.coinMul));
     for (let i = 0; i < Math.min(5, coins); i++) drop('coin', coins / Math.min(5, coins));
-    if (this.random() < HEART_CHANCE) drop('heart', 0.12);
+    if (this.random() < (enemy.elite ? ELITE.heart : HEART_CHANCE)) drop('heart', 0.12);
     // Blobs split in two when they die.
     if (enemy.def.split) {
       for (const side of [-1, 1]) {
@@ -901,7 +1064,7 @@ export class Run {
       const dx = p.x - item.x;
       const dz = p.z - item.z;
       const d = Math.hypot(dx, dz);
-      if (item.magnet || d < CONFIG.pickupRadius) {
+      if (item.magnet || d < CONFIG.pickupRadius * p.magnet) {
         item.magnet = true;
         const speed = 9 + (item.flyTime = (item.flyTime ?? 0) + dt) * 14;
         const step = Math.min(d, speed * dt);
@@ -937,6 +1100,8 @@ export class Run {
     }
     const damage = Math.round(amount * CONFIG.difficulty.damage * (1 - Math.min(0.6, p.armor)));
     p.hp -= damage;
+    // Legendary "Voile d'ombre": untouchable a little longer.
+    if (p.veil) p.invulnerable += p.veil;
     this.listener.onPlayerHit?.(damage, enemy);
     if (p.hp <= 0) {
       p.hp = 0;
@@ -950,7 +1115,7 @@ export class Run {
     if (this.state !== STATE.DEAD || this.revived) return false;
     this.revived = true;
     const p = this.player;
-    p.hp = Math.round(p.maxHp * 0.5);
+    p.hp = Math.round(p.maxHp * p.reviveShare);
     p.invulnerable = 2.5;
     this.shots = [];
     this.hazards = [];

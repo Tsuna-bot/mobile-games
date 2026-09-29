@@ -28,6 +28,7 @@ export class UI {
     for (const id of ['btn-pause', 'btn-resume', 'btn-quit', 'btn-revive', 'btn-giveup', 'btn-end', 'btn-play', 'btn-prev', 'btn-next']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
+    for (const button of doc.querySelectorAll('#modes [data-mode]')) button.addEventListener('click', () => this.handlers.mode?.(button.dataset.mode));
     this.settingButtons = [...doc.querySelectorAll('[data-setting]')];
     for (const button of this.settingButtons) button.addEventListener('click', () => this.handlers.setting?.(button.dataset.setting));
   }
@@ -61,12 +62,13 @@ export class UI {
 
   // ------------------------------------------------------------ HUD
 
-  setRoom(chapterNumber, room, rooms) {
-    const key = `${chapterNumber}|${room}`;
+  /** `title` above (chapter, mode), `room` below (room number or "Boss !"). */
+  setRoom(title, room) {
+    const key = `${title}|${room}`;
     if (this.shown.room === key) return;
     this.shown.room = key;
-    this.$('hud-chapter').textContent = `Chapitre ${chapterNumber}`;
-    this.$('hud-room').textContent = room >= rooms ? 'Boss !' : `Salle ${room}/${rooms}`;
+    this.$('hud-chapter').textContent = title;
+    this.$('hud-room').textContent = room;
   }
 
   setCoins(coins) {
@@ -189,16 +191,23 @@ export class UI {
 
   // ------------------------------------------------------------ menu
 
-  setMenu({ coins, gems, chapterNumber, chapterName, best, locked, canPrev, canNext }) {
+  setMenu({ coins, gems, kicker, chapterName, best, locked, lockText, canPrev, canNext, mode, modes }) {
     this.$('menu-coins').textContent = coins;
     this.$('menu-gems').textContent = gems;
-    this.$('chapter-kicker').textContent = `Chapitre ${chapterNumber}`;
+    this.$('chapter-kicker').textContent = kicker;
     this.$('chapter-name').textContent = chapterName;
-    this.$('chapter-best').textContent = locked ? 'Termine le chapitre précédent' : best;
-    this.$('chapter-card').classList.toggle('is-locked', locked);
+    this.$('chapter-best').textContent = locked ? lockText : best;
+    const card = this.$('chapter-card');
+    card.classList.toggle('is-locked', locked);
+    card.dataset.mode = mode;
     this.$('btn-play').disabled = locked;
     this.$('btn-prev').disabled = !canPrev;
     this.$('btn-next').disabled = !canNext;
+    for (const button of this.$('modes').querySelectorAll('[data-mode]')) {
+      const id = button.dataset.mode;
+      button.classList.toggle('is-active', id === mode);
+      button.classList.toggle('is-locked', id !== 'normal' && !modes[id]);
+    }
   }
 
   renderSettings(settings, hapticsSupported) {

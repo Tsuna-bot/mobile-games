@@ -5,12 +5,12 @@ import { ICON_PATHS } from './iconPaths.js';
 
 // Colour family of each icon, used for the badges behind them.
 const TONES = {
-  gold: ['front', 'multishot', 'diagonal', 'side', 'rear', 'bounce', 'ricochet', 'pierce', 'attack', 'speed', 'crit', 'strength', 'power', 'bow', 'crossbow', 'blades', 'slot-weapon', 'chest-gold', 'gold-bag', 'looting', 'fortune', 'trophy', 'crown', 'upgrade'],
-  fire: ['fire', 'fireOrb', 'deathBlast', 'rage', 'salamander'],
-  ice: ['ice', 'iceOrb', 'frostling', 'shield', 'guard', 'mail', 'slot-armor', 'hero-knight'],
-  poison: ['poison', 'recovery', 'luck', 'serpent', 'heal', 'life'],
-  arcane: ['bolt', 'boltOrb', 'staff', 'robe', 'agility', 'bat', 'hero-mage', 'hero-assassin', 'shuriken', 'slot-amulet', 'chest-pet'],
-  blood: ['vitality', 'bloodthirst', 'vigor'],
+  gold: ['longbow', 'elite', 'star', 'level', 'quests', 'treasure', 'front', 'multishot', 'diagonal', 'side', 'rear', 'bounce', 'ricochet', 'pierce', 'attack', 'speed', 'crit', 'strength', 'power', 'bow', 'crossbow', 'blades', 'slot-weapon', 'chest-gold', 'gold-bag', 'looting', 'fortune', 'trophy', 'crown', 'upgrade'],
+  fire: ['heroic', 'fire', 'fireOrb', 'deathBlast', 'rage', 'salamander'],
+  ice: ['reset', 'calendar', 'ice', 'iceOrb', 'frostling', 'shield', 'guard', 'mail', 'slot-armor', 'hero-knight'],
+  poison: ['tree', 'poison', 'recovery', 'luck', 'serpent', 'heal', 'life'],
+  arcane: ['tome', 'shadowgarb', 'infinity', 'bolt', 'boltOrb', 'staff', 'robe', 'agility', 'bat', 'hero-mage', 'hero-assassin', 'shuriken', 'slot-amulet', 'chest-pet'],
+  blood: ['fang', 'vitality', 'bloodthirst', 'vigor'],
   wind: ['dodge', 'haste', 'swift', 'falcon', 'owl', 'wolf', 'bear', 'leather', 'slot-pet', 'slot-ring', 'hero-ranger', 'hero-archer', 'chest-free'],
 };
 const TONE_OF = {};

@@ -1,8 +1,10 @@
 // Progression between runs, on the save object: inventory, equipment, chests,
 // upgrades, merges, talents, heroes, pets. Pure functions (no DOM), testable in Node.
 
-import { BASES, BASE_IDS, RARITIES, SLOTS, itemStats, upgradeCost } from '../data/gear.js';
+import { BASES, BASE_IDS, LEGENDARY, MAX_STARS, RARITIES, SETS, SLOTS, awakenCost, canAwaken, itemStats, upgradeCost } from '../data/gear.js';
 import { CHESTS, FREE_HEROES, HEROES, PETS, TALENTS, petPower, talentCost } from '../data/meta.js';
+import { TREE } from '../data/progression.js';
+import { ensureProgress, track } from './progress.js';
 
 const HOUR = 3600 * 1000;
 
@@ -26,7 +28,10 @@ export function ensureProfile(save) {
     seen.add(it.uid);
   }
   save.nextUid = Math.max(save.nextUid, top + 1);
-  for (const it of save.inventory) it.level = Math.max(1, Math.min(RARITIES[it.rarity].cap, Math.floor(it.level) || 1));
+  for (const it of save.inventory) {
+    it.level = Math.max(1, Math.min(RARITIES[it.rarity].cap, Math.floor(it.level) || 1));
+    it.stars = Math.max(0, Math.min(MAX_STARS, Math.floor(it.stars) || 0));
+  }
   for (const [slot, uid] of Object.entries(save.equipped)) if (!save.inventory.some((it) => it.uid === uid)) delete save.equipped[slot];
   save.heroes.owned = save.heroes.owned.filter((id) => HEROES[id]);
   for (const id of [...FREE_HEROES].reverse()) if (!save.heroes.owned.includes(id)) save.heroes.owned.unshift(id);
@@ -54,12 +59,14 @@ export function ensureProfile(save) {
     candidates.sort((a, b) => b.rarity - a.rarity || b.level - a.level);
     if (candidates[0]) save.equipped[slot.id] = candidates[0].uid;
   }
+  ensureProgress(save);
   return save;
 }
 
 export function addItem(save, base, rarity, level = 1) {
-  const item = { uid: save.nextUid++, base, rarity, level };
+  const item = { uid: save.nextUid++, base, rarity, level, stars: 0 };
   save.inventory.push(item);
+  if (rarity === RARITIES.length - 1) track(save, 'legendaries', 1);
   return item;
 }
 
@@ -124,6 +131,15 @@ export function openChest(save, chestId, random = Math.random, now = Date.now())
     if (save.gems < chest.gems) return null;
     save.gems -= chest.gems;
   }
+  track(save, 'chests', 1);
+  return rollItem(save, chest.odds, random, Boolean(chest.pet));
+}
+
+/** A chest given for free (daily bonus): its item. */
+export function grantChest(save, chestId, random = Math.random) {
+  const chest = CHESTS[chestId];
+  if (!chest) return null;
+  track(save, 'chests', 1);
   return rollItem(save, chest.odds, random, Boolean(chest.pet));
 }
 
@@ -134,6 +150,20 @@ export function upgradeItem(save, uid) {
   if (save.coins < cost) return false;
   save.coins -= cost;
   item.level++;
+  track(save, 'upgrades', 1);
+  return true;
+}
+
+/** Awakening: one more star (+15 % stats) for gems and gold. */
+export function awaken(save, uid) {
+  const item = save.inventory.find((it) => it.uid === uid);
+  if (!item || !canAwaken(item)) return false;
+  const cost = awakenCost(item);
+  if (save.gems < cost.gems || save.coins < cost.coins) return false;
+  save.gems -= cost.gems;
+  save.coins -= cost.coins;
+  item.stars = (item.stars ?? 0) + 1;
+  track(save, 'awakenings', 1);
   return true;
 }
 
@@ -164,12 +194,14 @@ export function merge(save, uid) {
   save.inventory = save.inventory.filter((it) => !partners.includes(it));
   item.rarity++;
   item.level = Math.min(level, RARITIES[item.rarity].cap);
+  item.stars = Math.max(item.stars ?? 0, ...partners.map((p) => p.stars ?? 0));
+  if (item.rarity === RARITIES.length - 1) track(save, 'legendaries', 1);
   return item;
 }
 
 /** Scrapping gives back gold (never the equipped weapon). */
 export function salvageValue(item) {
-  return Math.round(15 * (item.rarity + 1) ** 2 + item.level * 8 * (item.rarity + 1));
+  return Math.round(15 * (item.rarity + 1) ** 2 + item.level * 8 * (item.rarity + 1) + (item.stars ?? 0) * 600);
 }
 
 export function salvage(save, uid) {
@@ -220,12 +252,50 @@ export function selectHero(save, id) {
 
 // ------------------------------------------------------------ run stats
 
-/** Everything the equipment, talents, hero and pet give, in the Run's `gear` format. */
+/** Items equipped in the weapon, armour, ring and amulet slots. */
+export function equippedItems(save) {
+  const out = [];
+  for (const [slot, uid] of Object.entries(save.equipped)) {
+    if (slot === 'pet') continue;
+    const item = save.inventory.find((it) => it.uid === uid);
+    if (item) out.push(item);
+  }
+  return out;
+}
+
+/** Sets and how many of their distinct pieces are equipped: [{ set, count, active: [bonus...] }]. */
+export function activeSets(save) {
+  const bases = new Set(equippedItems(save).map((it) => it.base));
+  const out = [];
+  for (const set of Object.values(SETS)) {
+    const count = set.pieces.filter((b) => bases.has(b)).length;
+    if (count) out.push({ set, count, active: set.bonuses.filter(([need]) => count >= need) });
+  }
+  return out;
+}
+
+/** Points of the talent tree spent in each node. */
+export function treeStats(save) {
+  const stats = [];
+  for (const node of TREE) {
+    const n = save.tree?.[node.id] ?? 0;
+    if (n) stats.push(node.stats(n));
+  }
+  return stats;
+}
+
+// Stats that multiply (1 + sum) rather than add up.
+const MULTIPLIERS = ['rateMul', 'speedMul', 'coinMul', 'hpMul', 'damageMul', 'xpMul'];
+
+/** Everything the equipment, sets, talents, tree, hero and pet give, in the Run's `gear` format. */
 export function runGear(save) {
-  const gear = { damage: 0, hp: 0, hpMul: 1, rateMul: 1, speedMul: 1, crit: 0, critDamage: 0, dodge: 0, armor: 0, bossDamage: 0, healOnRoom: 0, coinMul: 1, bolt: 0 };
+  const gear = { damage: 0, hp: 0, hpMul: 1, damageMul: 1, xpMul: 1, rateMul: 1, speedMul: 1, crit: 0, critDamage: 0, dodge: 0, armor: 0, bossDamage: 0, healOnRoom: 0, coinMul: 1, bolt: 0, orbs: [], powers: [] };
   const add = (stats) => {
     for (const [key, value] of Object.entries(stats)) {
-      if (key === 'rateMul' || key === 'speedMul' || key === 'coinMul' || key === 'hpMul') gear[key] += value;
+      if (Array.isArray(value)) gear[key] = [...(gear[key] ?? []), ...value];
+      else if (MULTIPLIERS.includes(key)) gear[key] += value;
+      else if (key === 'shield') gear.shield = gear.shield ? Math.min(gear.shield, value) : value;
+      else if (key === 'reviveShare') gear.reviveShare = Math.max(gear.reviveShare ?? 0, value);
       else gear[key] = (gear[key] ?? 0) + value;
     }
   };
@@ -234,16 +304,24 @@ export function runGear(save) {
     if (!item) continue;
     if (slot === 'pet') {
       const pet = PETS[item.base];
-      gear.pet = { ...pet, power: petPower(RARITIES[item.rarity].mul, item.level) };
+      gear.pet = { ...pet, power: petPower(RARITIES[item.rarity].mul, item.level) * (1 + 0.15 * (item.stars ?? 0)) };
       continue;
     }
     add(itemStats(item));
     if (slot === 'weapon') gear.weapon = BASES[item.base].weapon;
+    // Legendary power (once per kind: two identical legendary rings do not stack it).
+    const power = item.rarity === RARITIES.length - 1 ? LEGENDARY[item.base] : null;
+    if (power && !gear.powers.includes(item.base)) {
+      gear.powers.push(item.base);
+      add(power.stats);
+    }
   }
+  for (const { active } of activeSets(save)) for (const [, , stats] of active) add(stats);
   for (const talent of TALENTS) {
     const n = save.talents[talent.id] ?? 0;
     if (n) add(talent.stats(n));
   }
+  for (const stats of treeStats(save)) add(stats);
   const hero = HEROES[save.heroes.selected] ?? HEROES.archer;
   add(hero.stats);
   gear.hero = hero;
@@ -255,16 +333,28 @@ export function runGear(save) {
 /** A single "power" number for the menu (like the original's). */
 export function powerScore(save) {
   const g = runGear(save);
-  const attack = (85 + g.damage) * g.rateMul * (1 + g.crit);
+  const attack = (85 + g.damage) * g.damageMul * g.rateMul * (1 + g.crit);
   const life = (600 + g.hp) * g.hpMul / (1 - g.armor);
   return Math.round(attack * 4 + life * 0.6);
 }
 
-/** End of run: an item drop on a win (and sometimes after a good run). */
-export function runDrop(save, chapterIndex, won, room, random = Math.random) {
-  if (!won && (room < 6 || random() > 0.5)) return null;
-  const odds = won
-    ? [[0.75, 0.25, 0, 0], [0.55, 0.38, 0.07, 0], [0.35, 0.47, 0.16, 0.02]][chapterIndex] ?? [0.3, 0.45, 0.2, 0.05]
-    : [0.9, 0.1, 0, 0];
+/**
+ * End of run: an item drop on a win (and sometimes after a good run). Heroic wins drop
+ * better items; Endless runs drop one past room 10, better the further they went.
+ */
+export function runDrop(save, chapterIndex, won, room, random = Math.random, mode = 'normal') {
+  let odds;
+  if (mode === 'endless') {
+    if (room < 10) return null;
+    odds = room >= 30 ? [0, 0.4, 0.45, 0.15] : room >= 20 ? [0.1, 0.5, 0.33, 0.07] : [0.4, 0.45, 0.14, 0.01];
+  } else if (mode === 'heroic') {
+    if (!won && (room < 6 || random() > 0.5)) return null;
+    odds = won ? [0, 0.45, 0.42, 0.13] : [0.4, 0.5, 0.1, 0];
+  } else {
+    if (!won && (room < 6 || random() > 0.5)) return null;
+    odds = won
+      ? [[0.75, 0.25, 0, 0], [0.55, 0.38, 0.07, 0], [0.35, 0.47, 0.16, 0.02]][chapterIndex] ?? [0.3, 0.45, 0.2, 0.05]
+      : [0.9, 0.1, 0, 0];
+  }
   return rollItem(save, odds, random, random() < 0.15);
 }

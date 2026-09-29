@@ -354,6 +354,8 @@ export class Actors {
     const height = skin.height ?? 1.3 * def.scale;
     if (skin.height) model.scale.setScalar(height / this.assets.height(skin.model));
     else model.scale.setScalar(CHARACTER_SCALE * def.scale);
+    // Elites are bigger, stand on a golden ring and glow.
+    if (enemy.elite) model.scale.multiplyScalar(1.22);
     // Own materials so each monster can flash and be tinted.
     const copies = new Map();
     model.traverse((o) => {
@@ -376,10 +378,22 @@ export class Actors {
     const scale = def.scale;
     body.add(model);
     root.add(blobShadow(def.radius, gear, this.shadowTexture));
+    let eliteRing = null;
+    if (enemy.elite) {
+      this.eliteRing ??= {
+        geometry: new THREE.RingGeometry(0.72, 0.9, 40).rotateX(-Math.PI / 2),
+        material: new THREE.MeshBasicMaterial({ color: 0xffc23a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+      };
+      eliteRing = new THREE.Mesh(this.eliteRing.geometry, this.eliteRing.material);
+      eliteRing.scale.setScalar(Math.max(0.7, enemy.radius * 1.6));
+      eliteRing.position.y = 0.03;
+      eliteRing.renderOrder = 2;
+      root.add(eliteRing);
+    }
     let bar = null;
     if (!def.boss) {
-      bar = makeBar(0.7 * Math.max(0.8, def.scale), 0xff5a4a, gear);
-      bar.group.position.y = height + (skin.hover ? 0.55 : 0.25);
+      bar = makeBar(0.7 * Math.max(0.8, def.scale) * (enemy.elite ? 1.3 : 1), enemy.elite ? 0xffb02e : 0xff5a4a, gear);
+      bar.group.position.y = height * (enemy.elite ? 1.22 : 1) + (skin.hover ? 0.55 : 0.25);
       bar.group.visible = false;
       root.add(bar.group);
     }
@@ -405,7 +419,7 @@ export class Actors {
     // Skeletons climb out of the ground with their own animation; the others rise.
     body.position.y = animator.actions.spawn ? 0 : -1.2;
     this.scene.add(root);
-    const view = { enemy, root, body, model, materials, outlines, bar, mark, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
+    const view = { enemy, root, body, model, materials, outlines, eliteRing, bar, mark, animator, gear, yaw: Math.atan2(enemy.dirX, enemy.dirZ), dying: 0, scale, floaty: skin.hover, risesByAnim: Boolean(animator.actions.spawn) };
     enemy.view = view;
     this.enemies.set(enemy.id, view);
     return view;
@@ -497,6 +511,7 @@ export class Actors {
         if (view.dying < 0.35) {
           view.root.position.y -= dt * 1.2;
           for (const outline of view.outlines) outline.visible = false;
+          if (view.eliteRing) view.eliteRing.visible = false;
           for (const m of view.materials) {
             m.transparent = true;
             m.opacity = Math.max(0, view.dying / 0.35);
@@ -533,6 +548,7 @@ export class Actors {
         if (flash > 0) m.emissive.setRGB(flash, flash, flash);
         else if (e.frozen > 0) m.emissive.setHex(0x3a8fd6);
         else if (e.state === 'aim' || e.state === 'slam') m.emissive.copy(TMP.setHex(0xff2a1a).multiplyScalar(0.35 + Math.sin(time * 30) * 0.2));
+        else if (e.elite) m.emissive.copy(TMP.setHex(0xffa020).multiplyScalar(0.16 + Math.sin(time * 4 + e.id) * 0.08));
         else m.emissive.setRGB(0, 0, 0);
       }
       const marks = e.marks ?? 0;

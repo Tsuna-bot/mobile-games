@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v9';
+const VERSION = 'aetherfall-v10';
 
 const APP_SHELL = [
   './',
@@ -134,12 +134,14 @@ const APP_SHELL = [
   './src/data/enemies.js',
   './src/data/gear.js',
   './src/data/meta.js',
+  './src/data/progression.js',
   './src/data/skins.js',
   './src/game/game.js',
   './src/game/menu.js',
   './src/input/joystick.js',
   './src/main.js',
   './src/meta/profile.js',
+  './src/meta/progress.js',
   './src/render/actors.js',
   './src/render/ambience.js',
   './src/render/anime.js',

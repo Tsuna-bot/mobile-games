@@ -1656,3 +1656,454 @@ button:disabled {
   background: none;
   box-shadow: none;
 }
+
+/* ---------------------------------------------------------------- progression (v3) */
+
+.banner[data-variant='gold'] {
+  background: linear-gradient(180deg, #ffd66a, #d88a1c);
+  color: #3a2000;
+}
+
+.banner[data-variant='gold'] small {
+  color: #5a3400;
+}
+
+/* Account level: laurel, level number and a thin experience bar. */
+.pill--level {
+  position: relative;
+  gap: 4px;
+  padding-right: 10px;
+  overflow: hidden;
+}
+
+.pill--level .ico {
+  color: var(--gold);
+}
+
+.level-bar {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  left: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.level-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #8af07a, #3fd0ff);
+}
+
+.pill--gold {
+  background: linear-gradient(180deg, #ffd66a, #c88418);
+  color: #3a2000;
+}
+
+/* Side button on the play screen (quests). */
+.side-btn {
+  position: absolute;
+  top: 34%;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 64px;
+  padding: 8px 0 6px;
+  border-radius: 18px;
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1.5px var(--frame), inset 0 -3px 0 rgba(0, 0, 0, 0.3), 0 8px 18px rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--cream);
+}
+
+.side-btn .ico {
+  width: 30px;
+  height: 30px;
+  color: var(--gold);
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
+}
+
+.side-btn.badge-dot::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px rgba(14, 18, 40, 0.8);
+}
+
+/* Mode selector (Normal / Héroïque / Infini). */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: min(100%, 360px);
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(14, 18, 40, 0.72);
+  box-shadow: inset 0 0 0 1px var(--frame-soft);
+}
+
+.modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.modes button .ico {
+  width: 16px;
+  height: 16px;
+}
+
+.modes button.is-active {
+  background: linear-gradient(180deg, #4a5ab0, #2a3470);
+  color: var(--cream);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.modes button[data-mode='heroic'].is-active {
+  background: linear-gradient(180deg, #e0603a, #8a2020);
+}
+
+.modes button[data-mode='endless'].is-active {
+  background: linear-gradient(180deg, #9a6aff, #4a2a9a);
+}
+
+.modes button.is-locked {
+  opacity: 0.45;
+}
+
+.chapter-card[data-mode='heroic'] {
+  background: linear-gradient(160deg, rgba(255, 110, 70, 0.4), rgba(40, 18, 30, 0.96) 55%);
+}
+
+.chapter-card[data-mode='endless'] {
+  background: linear-gradient(160deg, rgba(160, 110, 255, 0.4), rgba(22, 16, 56, 0.96) 55%);
+}
+
+/* Tabs inside a panel (talents, quests). */
+.tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.tabs button {
+  min-height: 34px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.tabs button.is-active {
+  background: linear-gradient(180deg, #4a5ab0, #2a3470);
+  color: var(--cream);
+}
+
+.talent-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.talent-view[hidden] {
+  display: none;
+}
+
+/* Talent tree: three columns of five nodes. */
+.tree {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 10px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--branch) 22%, transparent), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--branch) 45%, transparent);
+}
+
+.branch__name {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 17px;
+  color: var(--branch);
+}
+
+.branch__name small {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 2px 5px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.node .ico {
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+}
+
+.node small {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.node em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.node.is-learned {
+  background: color-mix(in srgb, var(--branch) 30%, rgba(0, 0, 0, 0.3));
+  box-shadow: inset 0 0 0 1.5px var(--branch);
+}
+
+.node.is-learned .ico {
+  color: var(--branch);
+}
+
+.node.is-max em {
+  color: var(--gold);
+}
+
+.node.is-ready {
+  box-shadow: inset 0 0 0 1.5px var(--gold), 0 0 12px rgba(255, 200, 60, 0.35);
+}
+
+.node.is-closed {
+  opacity: 0.5;
+}
+
+.node.is-new {
+  animation: talent-pop 0.5s var(--ease-out);
+}
+
+.node__need {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 9px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+/* Quests: missions and achievements. */
+.quests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.quest {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.quest b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.quest small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.quest__text {
+  display: block;
+}
+
+.quest__bar {
+  display: block;
+  height: 7px;
+  margin: 5px 0 2px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.quest__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ffd66a, #ff9a3a);
+}
+
+.quest.is-done {
+  opacity: 0.6;
+}
+
+.quest .btn {
+  min-width: 74px;
+  min-height: 40px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.quest--bonus {
+  background: linear-gradient(135deg, rgba(255, 200, 60, 0.22), rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 0 0 1px rgba(255, 200, 60, 0.4);
+}
+
+.quest__tiers {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.quest__tiers i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.quest__tiers i.is-on {
+  background: var(--gold);
+}
+
+/* Sets being worn (equipment tab) and in the item sheet. */
+.sets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.sets:empty {
+  display: none;
+}
+
+.set,
+.popup__set,
+.popup__power {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 3px 0 0 var(--set, var(--gold));
+  font-size: 12px;
+  text-align: left;
+  color: var(--muted);
+}
+
+.set b,
+.popup__set b,
+.popup__power b {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--set, var(--gold));
+}
+
+.set b small {
+  color: var(--muted);
+}
+
+.set .is-on,
+.popup__set .is-on {
+  color: var(--cream);
+  font-weight: 800;
+}
+
+.popup__power span {
+  color: var(--muted);
+}
+
+.popup__power.is-on span {
+  color: var(--cream);
+  font-weight: 800;
+}
+
+.popup__power .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.popup__stars {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.popup__stars i {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.popup__stars i.is-on {
+  color: var(--gold);
+  filter: drop-shadow(0 0 4px rgba(255, 200, 60, 0.6));
+}
+
+.popup__stars .ico {
+  width: 20px;
+  height: 20px;
+}
+
+.item__stars {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  display: flex;
+  transform: translateX(-50%);
+  color: var(--gold);
+}
+
+.item__stars .ico {
+  width: 11px;
+  height: 11px;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+}

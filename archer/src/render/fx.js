@@ -189,6 +189,13 @@ export class Fx {
     this.ring(x, z, 1.2, 0.45, COLORS.spark);
   }
 
+  /** A treasure chest bursting open: a fountain of gold. */
+  chest(x, z) {
+    this.sparks.burst(x, 0.5, z, this.count(70), 4.2, COLORS.coin, 0.18, 1.3, { upward: 0.98, gravity: -5, drag: 0.6, brightness: 2 });
+    this.ring(x, z, 2.4, 0.7, COLORS.coin);
+    this.flash(x, 0.6, z, 2.2, COLORS.coin);
+  }
+
   heal(x, z) {
     this.sparks.burst(x, 0.3, z, this.count(26), 1.8, COLORS.heal, 0.14, 0.9, { upward: 0.95, gravity: -1.5, brightness: 1.6 });
     this.ring(x, z, 1, 0.5, COLORS.heal);
@@ -227,6 +234,8 @@ export class Fx {
 
   lightning(x0, z0, x1, z1) {
     let b = this.bolts.find((item) => item.life <= 0);
+    // A storm of chains: reuse the oldest line rather than adding more.
+    if (!b && this.bolts.length >= 24) b = this.bolts.reduce((a, c) => (c.life < a.life ? c : a));
     if (!b) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
@@ -326,15 +335,15 @@ export class Fx {
     let no = 0;
     let nk = 0;
     for (const a of run.arrows) {
-      if (a.kind === 'staff' || a.kind === 'pet') {
+      if (a.kind === 'staff' || a.kind === 'tome' || a.kind === 'pet') {
         if (no >= 120) continue;
-        const size = a.kind === 'pet' ? 0.9 : 1.3;
+        const size = a.kind === 'pet' ? 0.9 : a.kind === 'tome' ? 1.45 : 1.3;
         dummy.position.set(a.x, Y, a.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.setScalar(size * (1 + Math.sin(t * 25 + a.id) * 0.12));
         dummy.updateMatrix();
         this.heroOrbs.setMatrixAt(no, dummy.matrix);
-        color.setHex(a.kind === 'pet' ? a.color : 0xb890ff);
+        color.setHex(a.kind === 'pet' ? a.color : a.kind === 'tome' ? 0xffe066 : 0xb890ff);
         this.heroOrbs.setColorAt(no++, hdrColor.copy(color).multiplyScalar(HDR.orb));
         this.sparks.emit(a.x, Y, a.z, 0, 0, 0, color, a.kind === 'pet' ? 0.2 : 0.3, 0.22, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.8 });
         continue;
@@ -351,12 +360,14 @@ export class Fx {
       }
       if (n >= 240) break;
       dummy.position.set(a.x, Y, a.z);
-      if (a.kind === 'blades') {
-        dummy.rotation.set(0, t * 25 + a.id, Math.PI / 2);
-        dummy.scale.set(1, 0.6, 0.6);
+      if (a.kind === 'blades' || a.kind === 'shuriken') {
+        // Spinning blades; shurikens a little bigger, spinning faster.
+        dummy.rotation.set(0, t * (a.kind === 'shuriken' ? 32 : 25) + a.id, Math.PI / 2);
+        if (a.kind === 'shuriken') dummy.scale.set(1.2, 0.8, 0.8);
+        else dummy.scale.set(1, 0.6, 0.6);
       } else {
         dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
-        dummy.scale.setScalar(a.kind === 'crossbow' ? 1.35 : 1);
+        dummy.scale.setScalar(a.kind === 'crossbow' ? 1.35 : a.kind === 'longbow' ? 1.55 : 1);
       }
       dummy.updateMatrix();
       this.arrowMesh.setMatrixAt(n++, dummy.matrix);

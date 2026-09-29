@@ -7,7 +7,7 @@ Crédits :
 - Monstres animés **Ultimate Monsters** de Quaternius (CC0, [quaternius.com](https://quaternius.com)).
 - Héros : personnages d’exemple **VRoid** de pixiv ([vroid.com](https://vroid.com)) — HairSample_Male et Sakurada Fumiriya en CC0, AvatarSample_C selon les conditions d’utilisation VRoid (usage libre, y compris commercial) — recolorés et habillés en fantasy (capes, pans de tunique, épaulières). `tools/convert-vroid.mjs` refait la conversion.
 - Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
-- Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer et Darkzaitzev.
+- Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer, Darkzaitzev et Lucas.
 
 ## Jouer
 
@@ -39,16 +39,33 @@ Chapitres 4 à 8 : blobs qui se divisent en deux en mourant, et de nouveaux boss
 
 Les boss deviennent plus agressifs sous la moitié de leur vie.
 
+## Modes de jeu
+
+- **Normal** : les 8 chapitres, l'un après l'autre.
+- **Héroïque** (ouvert chapitre par chapitre, une fois le chapitre gagné en Normal) : monstres 3 fois plus résistants, 60 % plus forts, beaucoup plus d'élites ; meilleur butin (épique et légendaire), gemmes doublées.
+- **Infini** (ouvert après le chapitre 1) : des salles sans fin, un boss toutes les 5 salles (les 8 boss à tour de rôle), un ange après chaque boss, le paysage change à chaque boss ; 5 gemmes par boss, un objet à partir de la salle 10 (meilleur plus on va loin). Record gardé.
+- **Monstres d'élite** (dès le chapitre 2) : plus grands, dorés, 2,6 fois plus de vie, frappent plus fort, lâchent 3 fois plus d'or et souvent un cœur.
+- **Salles spéciales** : *salle au trésor* (peu de monstres, un coffre qui explose en pièces d'or) et *salle de défi* (que des élites ; récompense : 3 gemmes et une capacité).
+
 ## Progression (entre les parties)
+
+- **Niveau de compte** : chaque partie donne de l'expérience (salles, monstres, victoires). Chaque niveau rapporte un point de talent, des gemmes et de l'or.
+- **Arbre de talents** : 3 branches (Guerre, Garde, Fortune) de 5 paliers, avec des capstones (une capacité de départ en plus, bouclier divin dès le départ, un deuxième ange). Réinitialisation gratuite.
+- **Missions du jour** : 3 missions par jour (monstres, salles, élites, boss, coffres, améliorations…) ; les 3 accomplies donnent un coffre doré.
+- **Succès** : 12 succès à plusieurs paliers (monstres, salles, chapitres, boss, élites, Infini, Héroïque, légendaires, éveils, niveau, héros), récompensés en gemmes.
+- **Ensembles** : Chasseur, Rempart, Arcane, Ombre ; bonus à 2 et 4 pièces différentes (cadence, vie, attaque, critique ; flèche frontale, bouclier divin, orbe de foudre, explosions).
+- **Pouvoirs légendaires** : chaque objet légendaire a son pouvoir (volée, carreaux explosifs, orbes jumeaux, tempête, venin, furie, voile d'ombre…).
+- **Éveil** : un objet épique ou légendaire à son niveau maximum peut être éveillé 3 fois (gemmes et or), +15 % de stats par étoile.
 
 - **Départ** : arc et tunique rares, anneau du loup, chouette, 2 000 pièces d’or et 300 gemmes (les joueurs des versions précédentes reçoivent aussi l’or et les gemmes, une fois).
 
 - **Équipement** (6 emplacements) : arme, armure, 2 anneaux, amulette, familier.
-  - 4 armes qui changent le tir : **Arc** (équilibré), **Arbalète** (lente, carreaux qui traversent un ennemi), **Bâton arcanique** (orbes à tête chercheuse), **Lames tournoyantes** (très rapides, rebondissent).
+  - 7 armes qui changent le tir : **Arc** (équilibré), **Arbalète** (lente, carreaux qui traversent un ennemi), **Bâton arcanique** (orbes à tête chercheuse), **Lames tournoyantes** (très rapides, rebondissent), **Arc long** (lent, traverse tous les ennemis), **Shurikens** (reviennent vers toi et frappent deux fois), **Grimoire de foudre** (orbes lents, éclair en chaîne à chaque coup).
+  - Armures et amulettes en plus : **Tenue de l'ombre** (esquive, vitesse), **Croc de l'ombre** (dégâts critiques).
   - 4 raretés : Commun, Rare, Épique, Légendaire (niveau max 10 / 20 / 30 / 40).
   - Améliorer avec l’or, **fusionner 3 exemplaires identiques** pour passer à la rareté suivante, démonter pour récupérer de l’or.
 - **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
-- **Talents** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
+- **Entraînement** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
 - **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
 - **Kaze l’assassin** : lance des éventails de 3 kunais (qui traversent un ennemi), se déplace 25 % plus vite. Chaque kunai pose une marque (3 au maximum). **Frappe de l’ombre** automatique : il disparaît, réapparaît derrière un monstre affaibli (moins de 20 % de vie, ou 3 marques et moins de 45 %), l’achève d’un coup, enchaîne jusqu’à 3 exécutions si d’autres sont à portée, puis revient à sa place. Intouchable pendant le saut et 1 s après. Sur un boss sous 30 % de vie : coup fatal (6 fois ses dégâts) au lieu d’une exécution. Recharge 5 s.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
@@ -63,6 +80,9 @@ cd archer
 node tools/bot.mjs 20 1 --gear=start   # chapitre 1 avec l’équipement de départ
 node tools/bot.mjs 16 2 --gear=start   # chapitre 2, équipement de départ jamais amélioré
 node tools/bot.mjs 16 3 --gear=mid     # chapitre 3 avec l’équipement de ~25 parties
+node tools/bot.mjs 6 1 --gear=mid --mode=endless    # mode Infini
+node tools/bot.mjs 6 2 --gear=late --mode=heroic    # chapitre 2 en Héroïque
+node tools/bot.mjs 8 2 --gear=start --weapon=shuriken   # une autre arme
 ```
 
 Réglage global dans `src/config.js` (`difficulty` : dégâts et vie des monstres, hausse par salle).
@@ -72,7 +92,9 @@ Réglage global dans `src/config.js` (`difficulty` : dégâts et vie des monstre
 | départ, jamais amélioré | gagne ~95 % | gagne ~60 % | atteint le boss, gagne ~20 % |
 | moyen (~25 parties) | — | — | gagne ~80 % |
 
-Chapitres 4 à 8 avec l’équipement avancé : gagnés ~90 à 100 % (4 à 7), ~50 % (8, le dernier).
+Chapitres 4 à 8 avec l’équipement avancé : gagnés ~90 à 100 % (4 à 7), ~50 % (8, le dernier). Infini : le bot atteint en général les salles 10 à 35 avec un équipement moyen.
+
+Armes au chapitre 2 avec l'équipement de départ : arc ~5/6, arbalète 6/6, arc long 6/6, grimoire 5/6, shurikens 6/8.
 
 Un humain esquive mieux que le bot : c’est une borne basse.
 

@@ -61,6 +61,7 @@
 
     <section id="screen-menu" class="screen screen--menu" aria-label="Menu">
       <div class="menu-top">
+        <span class="pill pill--level" title="Niveau de compte"><svg class="ico" aria-hidden="true"><use href="#i-level"></use></svg><b id="menu-level">1</b><i class="level-bar"><i id="menu-level-bar"></i></i></span>
         <span class="pill pill--power" title="Puissance"><svg class="ico" aria-hidden="true"><use href="#i-power"></use></svg> <b id="menu-power">0</b></span>
         <span class="pill"><i class="coin-icon" aria-hidden="true"></i><b id="menu-coins">0</b></span>
         <span class="pill"><i class="gem-icon" aria-hidden="true"></i><b id="menu-gems">0</b></span>
@@ -70,6 +71,12 @@
         <div class="brand">
           <p class="brand__kicker">Roguelite d’aventure</p>
           <h1 id="title" class="brand__title">Aetherfall</h1>
+        </div>
+        <button id="btn-quests" class="side-btn" type="button" aria-label="Quêtes"><svg class="ico" aria-hidden="true"><use href="#i-quests"></use></svg><span>Quêtes</span></button>
+        <div class="modes" id="modes" role="group" aria-label="Mode de jeu">
+          <button type="button" data-mode="normal" class="is-active">Normal</button>
+          <button type="button" data-mode="heroic"><svg class="ico" aria-hidden="true"><use href="#i-heroic"></use></svg>Héroïque</button>
+          <button type="button" data-mode="endless"><svg class="ico" aria-hidden="true"><use href="#i-infinity"></use></svg>Infini</button>
         </div>
         <div class="chapter-card" id="chapter-card">
           <button id="btn-prev" class="chapter-card__nav" type="button" aria-label="Chapitre précédent">‹</button>
@@ -87,22 +94,43 @@
           <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
           <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
         </div>
-        <p class="credits">Version 3 · Héros VRoid (pixiv) · Modèles KayKit (Kay Lousberg) et Quaternius, CC0 · Icônes game-icons.net (Lorc, Delapouite, Darkzaitzev et al., CC BY 3.0)</p>
+        <p class="credits">Version 4 · Héros VRoid (pixiv) · Modèles KayKit (Kay Lousberg) et Quaternius, CC0 · Icônes game-icons.net (Lorc, Delapouite, Darkzaitzev et al., CC BY 3.0)</p>
       </div>
 
       <div class="panel-view" id="panel-gear">
         <h2 class="panel-title">Équipement</h2>
         <div class="slots" id="slots"></div>
         <div class="stat-line" id="gear-stats"></div>
+        <div class="sets" id="gear-sets"></div>
         <h3 class="panel-subtitle">Inventaire <span id="inventory-count"></span></h3>
         <div class="inventory" id="inventory"></div>
       </div>
 
       <div class="panel-view" id="panel-talents">
         <h2 class="panel-title">Talents</h2>
-        <p class="panel-text">Chaque achat améliore un talent au hasard.</p>
-        <div class="talents" id="talents"></div>
-        <button id="btn-talent" class="btn btn--gold btn--wide" type="button">Améliorer</button>
+        <div class="tabs" id="talent-tabs" role="tablist">
+          <button type="button" data-view="tree" class="is-active">Arbre</button>
+          <button type="button" data-view="train">Entraînement</button>
+        </div>
+        <div class="talent-view" id="view-tree">
+          <p class="panel-text" id="tree-points">Points : 0</p>
+          <div class="tree" id="tree"></div>
+          <button id="btn-tree-reset" class="btn btn--ghost" type="button">Réinitialiser</button>
+        </div>
+        <div class="talent-view" id="view-train" hidden>
+          <p class="panel-text">Chaque achat améliore un talent au hasard.</p>
+          <div class="talents" id="talents"></div>
+          <button id="btn-talent" class="btn btn--gold btn--wide" type="button">Améliorer</button>
+        </div>
+      </div>
+
+      <div class="panel-view" id="panel-quests">
+        <h2 class="panel-title">Quêtes</h2>
+        <div class="tabs" id="quest-tabs" role="tablist">
+          <button type="button" data-view="daily" class="is-active">Missions du jour</button>
+          <button type="button" data-view="achievements">Succès</button>
+        </div>
+        <div class="quests" id="quests"></div>
       </div>
 
       <div class="panel-view" id="panel-heroes">
