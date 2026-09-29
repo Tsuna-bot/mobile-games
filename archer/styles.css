@@ -1001,7 +1001,8 @@ button:disabled {
 }
 
 .nav {
-  position: absolute;
+  /* Fixed to the screen: the menu content scrolls under it. */
+  position: fixed;
   left: 0;
   right: 0;
   bottom: 0;

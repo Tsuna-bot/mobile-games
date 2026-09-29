@@ -22,11 +22,94 @@ export const COLORS = {
 };
 
 const SHOT_COLORS = { orb: 0xff3a6a, arrow: 0xf4ecd8, bone: 0xf4f0e0, rock: 0xa07a50 };
-const SHOT_GLOW = { orb: 0xff4a8a, arrow: 0xffe0a0, bone: 0xfff0c0, rock: 0xffb060 };
+const SHOT_GLOW = { orb: 0xff3a9a, arrow: 0xffc070, bone: 0xd8f0ff, rock: 0xff8a2a };
 const ORB_COLORS = { fire: 0xff8a2a, ice: 0x8fe0ff, bolt: 0xc9a0ff };
 const Y = 0.55;
 // Above 1: these glow through the bloom pass.
 const HDR = { core: 2.2, halo: 1.5, orb: 2.4 };
+
+// Monster spells: a camera-facing glow with slowly turning rays around each shot.
+const GLOW_VERTEX = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  vUv = position.xy;
+  vTint = instanceColor;
+  vec4 center = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  float size = length(instanceMatrix[0].xyz);
+  center.xy += position.xy * size;
+  gl_Position = projectionMatrix * center;
+}`;
+
+const GLOW_FRAGMENT = /* glsl */ `
+uniform float uTime;
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  float r = length(vUv) * 2.0;
+  if (r > 1.0) discard;
+  float a = atan(vUv.y, vUv.x);
+  float rays = pow(max(0.0, cos(a * 3.0 + uTime * 4.0)), 8.0) + pow(max(0.0, cos(a * 5.0 - uTime * 6.0)), 12.0) * 0.6;
+  float glow = pow(1.0 - r, 2.2);
+  float core = smoothstep(0.35, 0.0, r);
+  vec3 c = vTint * (glow * 1.2 + rays * (1.0 - r) * 0.9) + vec3(1.0) * core * 0.9;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+// Danger circles: a rune circle with a turning dashed ring, filling up to the blast.
+const RUNE_VERTEX = /* glsl */ `
+varying vec2 vP;
+void main() {
+  vP = position.xz;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const RUNE_FRAGMENT = /* glsl */ `
+uniform float uTime;
+uniform float uProgress;
+uniform vec3 uColor;
+varying vec2 vP;
+void main() {
+  float r = length(vP);
+  if (r > 1.0) discard;
+  float a = atan(vP.y, vP.x);
+  float urgent = smoothstep(0.6, 1.0, uProgress);
+  float edge = smoothstep(0.9, 0.95, r) * (1.0 - smoothstep(0.985, 1.0, r));
+  float dashes = step(0.45, fract(a * 16.0 / 6.2832 + uTime * 0.35)) * smoothstep(0.78, 0.8, r) * (1.0 - smoothstep(0.84, 0.86, r));
+  float inner = smoothstep(0.47, 0.49, r) * (1.0 - smoothstep(0.51, 0.53, r)) * 0.6;
+  float spokes = pow(max(0.0, cos(a * 3.0 - uTime * 1.2)), 60.0) * smoothstep(0.5, 0.55, r) * (1.0 - smoothstep(0.78, 0.8, r));
+  float fill = (1.0 - step(uProgress, r)) * (0.22 + 0.18 * r);
+  float front = exp(-abs(r - uProgress) * 28.0) * step(0.02, uProgress);
+  float pulse = 0.75 + 0.25 * sin(uTime * (8.0 + urgent * 22.0));
+  float alpha = (edge * 0.95 + dashes * 0.7 + inner + spokes * 0.8) * pulse + fill + front * 0.9;
+  vec3 c = mix(uColor, vec3(1.0, 0.95, 0.8), front * 0.6 + urgent * 0.15);
+  gl_FragColor = vec4(c * (1.0 + urgent * 0.6), clamp(alpha, 0.0, 1.0));
+}`;
+
+// Aim lines: a soft lane with chevrons running toward the target.
+const LANE_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const LANE_FRAGMENT = /* glsl */ `
+uniform float uTime;
+uniform float uOpacity;
+uniform float uLength;
+uniform vec3 uColor;
+varying vec2 vUv;
+void main() {
+  float across = abs(vUv.x - 0.5) * 2.0;
+  float along = 1.0 - vUv.y;
+  float sides = smoothstep(0.75, 1.0, across);
+  float body = (1.0 - across) * 0.35;
+  float chevron = step(0.72, fract(along * uLength * 0.9 - uTime * 3.0 - across * 0.6)) * (1.0 - across);
+  float fade = smoothstep(0.0, 0.08, along) * (1.0 - smoothstep(0.7, 1.0, along));
+  float a = (body + sides * 0.8 + chevron * 0.9) * fade * uOpacity;
+  gl_FragColor = vec4(uColor * 1.4, a);
+}`;
 
 const dummy = new THREE.Object3D();
 const color = new THREE.Color();
@@ -74,7 +157,12 @@ export class Fx {
     // Monster shots: a bright core and an additive halo.
     const sphere = new THREE.SphereGeometry(1, 12, 8);
     this.shotCore = new THREE.InstancedMesh(sphere, new THREE.MeshBasicMaterial({ toneMapped: false }), 300);
-    this.shotHalo = new THREE.InstancedMesh(sphere, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), 300);
+    this.glowTime = { value: 0 };
+    this.shotHalo = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+      uniforms: { uTime: this.glowTime }, vertexShader: GLOW_VERTEX, fragmentShader: GLOW_FRAGMENT,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }), 300);
+    this.shotHalo.renderOrder = 25;
     for (const m of [this.shotCore, this.shotHalo]) {
       m.frustumCulled = false;
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(300 * 3), 3);
@@ -263,31 +351,38 @@ export class Fx {
   addHazard(h) {
     let item = this.hazardPool.find((x) => !x.active);
     if (!item) {
-      const ring = new THREE.Mesh(this.hazardGeometry.ring, new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
-      const disc = new THREE.Mesh(this.hazardGeometry.disc, new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.25, depthWrite: false, toneMapped: false }));
-      const fill = new THREE.Mesh(this.hazardGeometry.disc, new THREE.MeshBasicMaterial({ color: 0xff6a3a, transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }));
-      for (const m of [ring, disc, fill]) {
-        m.renderOrder = 2;
-        this.scene.add(m);
-      }
-      item = { ring, disc, fill, active: false };
+      const material = new THREE.ShaderMaterial({
+        uniforms: { uTime: this.glowTime, uProgress: { value: 0 }, uColor: { value: new THREE.Color() } },
+        vertexShader: RUNE_VERTEX, fragmentShader: RUNE_FRAGMENT,
+        transparent: true, depthWrite: false, toneMapped: false,
+      });
+      const mesh = new THREE.Mesh(this.hazardGeometry.disc, material);
+      // Above the water of the ponds.
+      mesh.renderOrder = 5;
+      this.scene.add(mesh);
+      item = { mesh, active: false };
       this.hazardPool.push(item);
     }
     item.active = true;
     item.hazard = h;
-    for (const m of [item.ring, item.disc, item.fill]) {
-      m.visible = true;
-      m.position.set(h.x, 0.03, h.z);
-      m.scale.setScalar(h.radius);
-    }
+    item.mesh.visible = true;
+    item.mesh.position.set(h.x, 0.04, h.z);
+    item.mesh.scale.setScalar(h.radius);
+    item.mesh.rotation.y = Math.random() * Math.PI * 2;
+    // Bombs red, ground slams and rocks amber.
+    item.mesh.material.uniforms.uColor.value.setHex(h.kind === 'bomb' ? 0xff3a2a : 0xff8a1a);
   }
 
   /** Aim line in front of a monster ('line' thin, 'dash' wide). */
   addLine(enemy, kind, duration) {
     let item = this.lines.find((x) => !x.active);
     if (!item) {
-      const mesh = new THREE.Mesh(this.lineGeometry, new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }));
-      mesh.renderOrder = 2;
+      const mesh = new THREE.Mesh(this.lineGeometry, new THREE.ShaderMaterial({
+        uniforms: { uTime: this.glowTime, uOpacity: { value: 1 }, uLength: { value: 10 }, uColor: { value: new THREE.Color(0xff3a2a) } },
+        vertexShader: LANE_VERTEX, fragmentShader: LANE_FRAGMENT,
+        transparent: true, depthWrite: false, toneMapped: false,
+      }));
+      mesh.renderOrder = 5;
       this.scene.add(mesh);
       item = { mesh, active: false };
       this.lines.push(item);
@@ -303,6 +398,8 @@ export class Fx {
 
   update(dt, run) {
     this.time += dt;
+    this.frame = (this.frame ?? 0) + 1;
+    this.glowTime.value = this.time;
     const t = this.time;
     this.sparks.update(dt);
     this.puffs.update(dt);
@@ -393,10 +490,15 @@ export class Fx {
       dummy.updateMatrix();
       this.shotCore.setMatrixAt(n, dummy.matrix);
       this.shotCore.setColorAt(n, color.setHex(SHOT_COLORS[s.kind] ?? 0xffffff).multiplyScalar(HDR.core));
-      dummy.scale.multiplyScalar(2.1 + Math.sin(t * 20 + s.id) * 0.2);
+      // Glow sprite (size in world units, taken from the matrix scale).
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar((s.kind === 'orb' ? 0.95 : s.kind === 'rock' ? 0.7 : 0.5) * (1 + Math.sin(t * 18 + s.id) * 0.08));
       dummy.updateMatrix();
       this.shotHalo.setMatrixAt(n, dummy.matrix);
-      this.shotHalo.setColorAt(n, color.setHex(SHOT_GLOW[s.kind] ?? 0xffffff).multiplyScalar(HDR.halo));
+      color.setHex(SHOT_GLOW[s.kind] ?? 0xffffff);
+      this.shotHalo.setColorAt(n, hdrColor.copy(color).multiplyScalar(HDR.halo));
+      // A short trail of embers behind the spell.
+      if ((s.id + this.frame) % 3 === 0 && this.scale > 0.4) this.sparks.emit(s.x - s.dx * 0.15, Y, s.z - s.dz * 0.15, (Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4, color, s.kind === 'orb' ? 0.16 : 0.1, 0.35, { endSize: 0.02, drag: 1.5, brightness: 1.6, opacity: 0.85 });
       n++;
     }
     this.shotCore.count = this.shotHalo.count = n;
@@ -446,12 +548,10 @@ export class Fx {
       const h = item.hazard;
       if (h.dead || h.delay <= 0 || !run.hazards.includes(h)) {
         item.active = false;
-        item.ring.visible = item.disc.visible = item.fill.visible = false;
+        item.mesh.visible = false;
         continue;
       }
-      const k = 1 - h.delay / h.max;
-      item.fill.scale.setScalar(h.radius * Math.max(0.02, k));
-      item.ring.material.opacity = 0.6 + Math.sin(t * (10 + k * 20)) * 0.3;
+      item.mesh.material.uniforms.uProgress.value = 1 - h.delay / h.max;
     }
     // Aim lines follow their monster.
     for (const item of this.lines) {
@@ -466,8 +566,11 @@ export class Fx {
       const wide = item.kind === 'dash';
       item.mesh.position.set(e.x, 0.035, e.z);
       item.mesh.rotation.y = Math.atan2(e.aimX, e.aimZ);
-      item.mesh.scale.set(wide ? e.radius * 2 : 0.08, 1, wide ? 9 : 14);
-      item.mesh.material.opacity = (wide ? 0.3 : 0.55) * (0.6 + 0.4 * Math.sin(t * 25));
+      const length = wide ? 9 : 14;
+      item.mesh.scale.set(wide ? e.radius * 2.2 : 0.22, 1, length);
+      const u = item.mesh.material.uniforms;
+      u.uLength.value = length / (wide ? 2 : 1.2);
+      u.uOpacity.value = (wide ? 0.75 : 0.9) * (0.75 + 0.25 * Math.sin(t * 20));
     }
   }
 }
