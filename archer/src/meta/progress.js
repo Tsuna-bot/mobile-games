@@ -36,6 +36,14 @@ export function ensureProgress(save) {
   if (!save.endless || typeof save.endless !== 'object') save.endless = { best: 0 };
   if (!Number.isFinite(save.endless.best)) save.endless.best = 0;
   if (!save.daily || typeof save.daily !== 'object') save.daily = null;
+  // A chapter won while it was the last one never opened the next: chapters added
+  // later stayed locked. Open everything after the chapters already won.
+  if (!Number.isFinite(save.unlocked) || save.unlocked < 0) save.unlocked = 0;
+  const opened = save.unlocked;
+  while (save.unlocked < ALL_CHAPTERS.length - 1 && (save.best?.[ALL_CHAPTERS[save.unlocked].id] ?? 0) > 10) save.unlocked++;
+  // The menu shows the newly opened chapter.
+  if (save.unlocked > opened) save.chapter = save.unlocked;
+  save.unlocked = Math.min(save.unlocked, ALL_CHAPTERS.length - 1);
   return save;
 }
 
