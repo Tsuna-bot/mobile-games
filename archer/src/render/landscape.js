@@ -1018,6 +1018,8 @@ export class Landscape {
     this.back.color.setHex(theme.back[0]);
     this.back.intensity = theme.back[1];
     this.heroLightLevel = theme.stars ? 10 : 0;
+    // Only lit by night: an unused light still costs every lit pixel.
+    this.heroLight.visible = this.heroLightLevel > 0;
     this.heroLight.color.setHex(theme.heroLight ?? 0xffd8a8);
     setRim(theme.rim[0], theme.rim[1]);
     // Drifting cloud shadows by day, fainter at night, caustics under the sea.
@@ -1196,6 +1198,8 @@ export class Landscape {
     for (const child of this.root.children) {
       // Leaf cards get no outline (an inflated card would draw a dark slab).
       if (child.isMesh && merged.includes(child.geometry) && !child.userData.noOutline && !(child.material.alphaTest > 0)) child.add(new THREE.Mesh(child.geometry, this.outline));
+      // Leaves cast no shadow: alpha-tested cards are costly in the shadow pass on phones.
+      if (child.isMesh && child.material.alphaTest > 0) child.castShadow = false;
     }
 
     this.buildVegetation(arena, heightAt, meadow, theme, random, TW, TH);

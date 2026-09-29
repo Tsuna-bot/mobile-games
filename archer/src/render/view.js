@@ -13,8 +13,8 @@ export const QUALITY_LEVELS = ['low', 'medium', 'high', 'ultra'];
 // ultra adds ambient occlusion (GTAO), the most expensive effect.
 export const QUALITY_PRESETS = {
   ultra: { maxPixelRatio: 2, shadows: true, shadowMapSize: 2048, effects: 1, bloom: true, grade: true, ao: true, grass: 1, msaa: 4, lens: 1 },
-  high: { maxPixelRatio: 2, shadows: true, shadowMapSize: 2048, effects: 1, bloom: true, grade: true, ao: false, grass: 1, msaa: 4, lens: 1 },
-  medium: { maxPixelRatio: 1.5, shadows: true, shadowMapSize: 1024, effects: 0.75, bloom: true, grade: true, ao: false, grass: 0.6, msaa: 2, lens: 0 },
+  high: { maxPixelRatio: 2, shadows: true, shadowMapSize: 1024, effects: 1, bloom: true, grade: true, ao: false, grass: 0.75, msaa: 2, lens: 0 },
+  medium: { maxPixelRatio: 1.5, shadows: true, shadowMapSize: 1024, effects: 0.7, bloom: true, grade: true, ao: false, grass: 0.5, msaa: 0, lens: 0 },
   low: { maxPixelRatio: 1, shadows: false, shadowMapSize: 1024, effects: 0.5, bloom: false, grade: false, ao: false, grass: 0, msaa: 0, lens: 0 },
 };
 
@@ -73,16 +73,14 @@ const GradeShader = {
       if (uFocus.w > 0.5) blur = smoothstep(uFocus.y, 1.0, vUv.y) + smoothstep(uFocus.x, 0.0, vUv.y) * 0.6;
       if (blur > 0.01) {
         float r = blur * uFocus.z;
+        // Four diagonal taps between texels (linear filtering blends 4 each): cheap and soft.
+        float rr = r * 1.4;
         vec3 acc = c;
-        acc += texture2D(tDiffuse, vUv + vec2(1.0, 0.0) * r * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(-1.0, 0.0) * r * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(0.0, 1.0) * r * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(0.0, -1.0) * r * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(0.7, 0.7) * r * 1.8 * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(-0.7, 0.7) * r * 1.8 * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(0.7, -0.7) * r * 1.8 * px).rgb;
-        acc += texture2D(tDiffuse, vUv + vec2(-0.7, -0.7) * r * 1.8 * px).rgb;
-        c = acc / 9.0;
+        acc += texture2D(tDiffuse, vUv + vec2(0.7, 0.7) * rr * px).rgb;
+        acc += texture2D(tDiffuse, vUv + vec2(-0.7, 0.7) * rr * px).rgb;
+        acc += texture2D(tDiffuse, vUv + vec2(0.7, -0.7) * rr * px).rgb;
+        acc += texture2D(tDiffuse, vUv + vec2(-0.7, -0.7) * rr * px).rgb;
+        c = acc / 5.0;
       } else if (uLens > 0.5) {
         // In focus: a light unsharp mask keeps outlines and textures crisp.
         vec3 n = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb

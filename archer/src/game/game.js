@@ -309,6 +309,7 @@ export class Game {
     if (this.run.pet) this.actors.createPet(this.run.pet.def.color);
     else this.actors.removePet();
     this.buildRoom();
+    this.warmShaders();
     this.mode = MODE.CHOOSING;
     this.ui.showScreen(null);
     this.ui.setSpells(this.run.spells.map((sp) => ({ def: sp.def, rank: sp.rank })));
@@ -327,6 +328,20 @@ export class Game {
     this.arenaView.build(run.arena, run.theme, run.chapterIndex * 100 + run.room * 7 + 3);
     this.arenaView.openDoor(false);
     if (run.chest) this.arenaView.addChest(run.chest.x, run.chest.z);
+  }
+
+  /**
+   * Compiles every shader the room will need now (behind the fade), instead of in the
+   * middle of the fight at the first spell, bomb or monster of a new kind.
+   */
+  warmShaders() {
+    this.fx.prewarm(true);
+    try {
+      this.view.renderer.compile(this.view.scene, this.view.camera);
+    } catch {
+      // Compiling ahead is only an optimisation.
+    }
+    this.fx.prewarm(false);
   }
 
   offerChoices(kicker, title) {
@@ -522,6 +537,7 @@ export class Game {
           this.buildRoom();
           for (const enemy of this.run.enemies) actors.addEnemy(enemy);
           this.snapCamera = true;
+          this.warmShaders();
           if (boss) {
             ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', this.run.endless ? `Salle ${room}` : 'Le gardien du chapitre', 'danger');
             this.anime(1.4, 0);

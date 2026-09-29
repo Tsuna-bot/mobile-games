@@ -285,6 +285,41 @@ export class Fx {
     this.ringGeometry = new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2);
   }
 
+  /**
+   * Creates the pooled effect meshes ahead of time and shows them all, so that one
+   * compile pass (behind a fade) prepares their shaders; `prewarm(false)` hides them.
+   * Without it the first bomb, aim line or lightning of a run stutters on phones.
+   */
+  prewarm(on) {
+    if (on) {
+      if (!this.hazardPool.length) {
+        this.addHazard({ x: 0, z: -99, radius: 0.1, delay: 1, max: 1 });
+        this.addHazard({ x: 0, z: -99, radius: 0.1, delay: 1, max: 1 }, 0xffffff);
+      }
+      if (!this.lines.length) this.addLine({ x: 0, z: -99, aimX: 0, aimZ: 1, radius: 0.3, dead: true, state: 'idle' }, 'line', 0);
+      if (!this.floorRings.length) this.ring(0, -99, 0.1, 0.01, COLORS.spark);
+      if (!this.bolts.length) this.lightning(0, -99, 0.1, -99);
+      this.warmList = [...this.hazardPool.map((h) => h.mesh), ...this.lines.map((l) => l.mesh), ...this.floorRings.map((r) => r.mesh), ...this.bolts.map((b) => b.line),
+        this.lootMesh, this.beamMesh, this.runeMesh, this.starMesh, this.heroOrbs, this.orbMesh, this.kunaiMesh, this.shotCore, this.shotHalo, this.xpMesh, this.coinMesh, this.heartMesh, this.arrowMesh];
+      for (const m of this.warmList) {
+        m.userData.wasVisible = m.visible;
+        m.visible = true;
+        if (m.isInstancedMesh) {
+          m.userData.wasCount = m.count;
+          m.count = Math.max(1, m.count);
+        }
+      }
+    } else if (this.warmList) {
+      for (const m of this.warmList) {
+        m.visible = m.userData.wasVisible;
+        if (m.isInstancedMesh) m.count = m.userData.wasCount;
+      }
+      for (const h of this.hazardPool) h.active = false;
+      for (const l of this.lines) l.active = false;
+      this.warmList = null;
+    }
+  }
+
   setViewport(height, fov) {
     this.sparks.setViewport(height, fov);
     this.puffs.setViewport(height, fov);

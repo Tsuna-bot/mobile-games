@@ -22,12 +22,12 @@ export const CONFIG = {
   pickupRadius: 1.4,
   // Close, tilted view that follows the hero (`halfWidth`: half the width seen at the
   // hero's depth on a portrait phone); the menu frames the hero from up close.
-  camera: { fov: 45, pitchDeg: 47, halfWidth: 3.7, maxHalfWidth: 5.6, follow: 0.3, menu: { distance: 5.5, pitchDeg: 12, lookY: 0.3 } },
+  camera: { fov: 45, pitchDeg: 47, halfWidth: 4.2, maxHalfWidth: 6, follow: 0.3, menu: { distance: 5.5, pitchDeg: 12, lookY: 0.3 } },
   quality: {
-    lowFps: 52,
-    goodFps: 57,
-    minPixelRatio: 1,
-    minFps: 42,
+    lowFps: 55,
+    goodFps: 58.5,
+    minPixelRatio: 1.25,
+    minFps: 50,
     warmup: 2,
   },
 };
