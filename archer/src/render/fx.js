@@ -95,13 +95,17 @@ void main() {
 
 const GLOW_FRAGMENT = /* glsl */ `
 uniform float uTime;
+uniform float uRays;
 varying vec2 vUv;
 varying vec3 vTint;
 void main() {
   float r = length(vUv) * 2.0;
   if (r > 1.0) discard;
-  float a = atan(vUv.y, vUv.x);
-  float rays = pow(max(0.0, cos(a * 3.0 + uTime * 4.0)), 8.0) + pow(max(0.0, cos(a * 5.0 - uTime * 6.0)), 12.0) * 0.6;
+  float rays = 0.0;
+  if (uRays > 0.5) {
+    float a = atan(vUv.y, vUv.x);
+    rays = pow(max(0.0, cos(a * 3.0 + uTime * 4.0)), 8.0) + pow(max(0.0, cos(a * 5.0 - uTime * 6.0)), 12.0) * 0.6;
+  }
   float glow = pow(1.0 - r, 2.2);
   float core = smoothstep(0.35, 0.0, r);
   vec3 c = vTint * (glow * 1.2 + rays * (1.0 - r) * 0.9) + vec3(1.0) * core * 0.9;
@@ -211,7 +215,7 @@ export class Fx {
     this.shotCore = new THREE.InstancedMesh(sphere, new THREE.MeshBasicMaterial({ toneMapped: false }), 300);
     this.glowTime = { value: 0 };
     this.shotHalo = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
-      uniforms: { uTime: this.glowTime }, vertexShader: GLOW_VERTEX, fragmentShader: GLOW_FRAGMENT,
+      uniforms: { uTime: this.glowTime, uRays: (this.glowRays = { value: 1 }) }, vertexShader: GLOW_VERTEX, fragmentShader: GLOW_FRAGMENT,
       transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     }), 300);
     this.shotHalo.renderOrder = 25;
@@ -684,8 +688,10 @@ export class Fx {
     this.heroOrbs.instanceMatrix.needsUpdate = true;
     if (this.heroOrbs.instanceColor) this.heroOrbs.instanceColor.needsUpdate = true;
 
-    // Monster shots.
+    // Monster shots. In a storm of shots the halos get cheaper (no rays) and the embers stop.
     n = 0;
+    const crowded = run.shots.length > 40;
+    this.glowRays.value = crowded ? 0 : 1;
     for (const s of run.shots) {
       if (n >= 300) break;
       const size = s.kind === 'orb' ? 0.17 : s.kind === 'rock' ? 0.16 : 0.1;
@@ -704,7 +710,7 @@ export class Fx {
       color.setHex(SHOT_GLOW[s.kind] ?? 0xffffff);
       this.shotHalo.setColorAt(n, hdrColor.copy(color).multiplyScalar(HDR.halo));
       // A short trail of embers behind the spell.
-      if ((s.id + this.frame) % 3 === 0 && this.scale > 0.4) this.sparks.emit(s.x - s.dx * 0.15, Y, s.z - s.dz * 0.15, (Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4, color, s.kind === 'orb' ? 0.16 : 0.1, 0.35, { endSize: 0.02, drag: 1.5, brightness: 1.6, opacity: 0.85 });
+      if (!crowded && (s.id + this.frame) % 3 === 0 && this.scale > 0.4) this.sparks.emit(s.x - s.dx * 0.15, Y, s.z - s.dz * 0.15, (Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4, color, s.kind === 'orb' ? 0.16 : 0.1, 0.35, { endSize: 0.02, drag: 1.5, brightness: 1.6, opacity: 0.85 });
       n++;
     }
     this.shotCore.count = this.shotHalo.count = n;

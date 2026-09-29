@@ -80,6 +80,7 @@ export class Game {
       render: (_, dt) => this.render(dt),
     });
     this.bindUi();
+    this.watchContext();
     this.menu = new Menu(this);
     view.onResize = () => this.fitCamera();
     this.applyQuality();
@@ -122,6 +123,53 @@ export class Game {
         this.audio.suspend();
       } else this.audio.resume();
     });
+  }
+
+  /**
+   * iOS can drop the WebGL context (GPU overloaded or short on memory): the 3D view
+   * turns black while the HUD stays. Pause, ask for the context back, and if it does
+   * not return offer a reload (the save is kept).
+   */
+  watchContext() {
+    const box = document.createElement('div');
+    box.className = 'gl-lost';
+    box.hidden = true;
+    box.innerHTML = '<b>Reprise de l’affichage…</b><button type="button" class="btn btn--primary" hidden>Recharger le jeu</button>';
+    document.getElementById('app').append(box);
+    const reload = box.querySelector('button');
+    reload.addEventListener('click', () => {
+      writeSave(this.save);
+      location.reload();
+    });
+    let timers = [];
+    try {
+      this.loseExt = this.view.renderer.getContext().getExtension('WEBGL_lose_context');
+    } catch {
+      this.loseExt = null;
+    }
+    this.view.onContextLost = () => {
+      if (this.mode === MODE.PLAYING) this.pause();
+      box.hidden = false;
+      reload.hidden = true;
+      timers.forEach(clearTimeout);
+      timers = [
+        setTimeout(() => {
+          try {
+            const gl = this.view.renderer.getContext();
+            (this.loseExt ?? gl.getExtension('WEBGL_lose_context'))?.restoreContext();
+          } catch {
+            // Not every browser lets a page restore it: the browser may do it on its own.
+          }
+        }, 900),
+        setTimeout(() => { reload.hidden = false; }, 4000),
+      ];
+    };
+    this.view.onContextRestored = () => {
+      timers.forEach(clearTimeout);
+      box.hidden = true;
+      this.view.refreshShadows();
+      this.applyQuality();
+    };
   }
 
   applyQuality() {

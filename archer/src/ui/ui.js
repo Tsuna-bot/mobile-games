@@ -2,6 +2,19 @@ import { ABILITIES } from '../data/abilities.js';
 import { badge, icon } from './icons.js';
 
 const FLOATERS = 40;
+const FLOAT_NORMAL = [
+  { opacity: 0, transform: 'translate(-50%, -30%) scale(0.5)' },
+  { opacity: 1, transform: 'translate(-50%, -70%) scale(1.25)', offset: 0.12 },
+  { opacity: 1, transform: 'translate(-50%, -80%) scale(1)', offset: 0.24 },
+  { opacity: 0, transform: 'translate(-50%, -170%) scale(0.95)' },
+];
+const FLOAT_CRIT = [
+  { opacity: 0, transform: 'translate(-50%, -30%) scale(2.2) rotate(-8deg)' },
+  { opacity: 1, transform: 'translate(-50%, -70%) scale(0.9) rotate(4deg)', offset: 0.1 },
+  { opacity: 1, transform: 'translate(-50%, -80%) scale(1.15) rotate(-2deg)', offset: 0.2 },
+  { opacity: 1, transform: 'translate(-50%, -88%) scale(1) rotate(0deg)', offset: 0.32 },
+  { opacity: 0, transform: 'translate(-50%, -180%) scale(0.95)' },
+];
 
 /** Everything DOM: HUD, screens, ability cards, damage numbers, banners. */
 export class UI {
@@ -167,7 +180,12 @@ export class UI {
     }
     el.busy = true;
     el.className = kind === 'gem' ? 'flyer gem-icon' : 'flyer coin-icon';
-    const target = this.$('hud-coins').parentElement.querySelector('.coin-icon').getBoundingClientRect();
+    // The counter does not move: measure it once in a while, not for every coin (layout).
+    if (!this.coinRect || now - this.coinRectAt > 2000) {
+      this.coinRect = this.$('hud-coins').parentElement.querySelector('.coin-icon').getBoundingClientRect();
+      this.coinRectAt = now;
+    }
+    const target = this.coinRect;
     const tx = target.left + target.width / 2;
     const ty = target.top + target.height / 2;
     const mx = x + (Math.random() - 0.5) * 80;
@@ -304,16 +322,28 @@ export class UI {
 
   // ------------------------------------------------------------ texts
 
+  /**
+   * A floating number. Animated with the Web Animations API (restarting a CSS animation
+   * by toggling a class forces a layout of the whole page: dozens of hits in one frame
+   * froze iPhones). At most a few per frame: in a storm of hits the small ones are dropped.
+   */
   floatAt(x, y, text, variant = '') {
+    const now = performance.now();
+    if (now - (this.floatFrame ?? 0) > 16) {
+      this.floatFrame = now;
+      this.floatCount = 0;
+    }
+    const important = variant === 'crit' || variant === 'hurt' || variant === 'heal' || variant === 'info';
+    if (++this.floatCount > (important ? 10 : 5)) return;
     const el = this.floaters[this.floaterCursor];
     this.floaterCursor = (this.floaterCursor + 1) % FLOATERS;
+    el.anim?.cancel();
     el.textContent = text;
     el.dataset.variant = variant;
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
-    el.classList.remove('is-playing');
-    void el.offsetWidth;
-    el.classList.add('is-playing');
+    const crit = variant === 'crit';
+    el.anim = el.animate(crit ? FLOAT_CRIT : FLOAT_NORMAL, { duration: crit ? 950 : 850, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' });
   }
 
   banner(title, subtitle = '', variant = '') {

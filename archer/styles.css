@@ -3205,3 +3205,22 @@ button:disabled {
 @keyframes marker-pulse {
   50% { opacity: 0.55; }
 }
+
+/* Shown while the 3D view is being restored after iOS dropped it. */
+.gl-lost {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  background: rgba(10, 14, 32, 0.9);
+  font-family: var(--font-display);
+  font-size: 22px;
+  text-align: center;
+}
+
+.gl-lost[hidden] {
+  display: none;
+}

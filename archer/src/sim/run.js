@@ -34,6 +34,7 @@ const ORB_SPEED = 3.2;
 const ORB_HIT_EVERY = 0.45;
 const DOOR_HALF = 0.9;
 const HEART_CHANCE = 0.06;
+const MAX_SHOTS = 160;
 // Elite monsters: tougher, hit harder, drop more.
 const ELITE = { health: 2.6, power: 1.3, radius: 1.12, coins: 3, xp: 2, heart: 0.4 };
 // Shurikens fly out this long, then come back to the hero.
@@ -978,6 +979,8 @@ export class Run {
       flying: true, ...extra,
     };
     this.shots.push(shot);
+    // Safety cap: past this many shots in the air the oldest ones fade out.
+    if (this.shots.length > MAX_SHOTS) this.shots.splice(0, this.shots.length - MAX_SHOTS);
     this.listener.onEnemyShot?.(enemy, shot);
     return shot;
   }
