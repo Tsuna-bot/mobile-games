@@ -7,7 +7,7 @@ import {
   ACHIEVEMENTS, BRANCHES, DAILY_BONUS, MAX_ACCOUNT_LEVEL, MISSIONS, MISSIONS_PER_DAY, TIER_NEEDS, TREE, TREE_BY_ID, accountXpNeeded, levelReward,
 } from '../data/progression.js';
 
-const STAT_KEYS = ['kills', 'rooms', 'wins', 'bosses', 'elites', 'upgrades', 'chests', 'abilities', 'runs', 'legendaries', 'awakenings', 'endlessRooms', 'heroicRooms'];
+const STAT_KEYS = ['kills', 'rooms', 'wins', 'bosses', 'elites', 'upgrades', 'chests', 'abilities', 'runs', 'legendaries', 'awakenings', 'endlessRooms', 'heroicRooms', 'spells', 'loot', 'runes'];
 
 /** Fills in the progression fields (new player or older save). */
 export function ensureProgress(save) {
@@ -190,6 +190,7 @@ export function achievementValue(save, a) {
     case 'endlessBest': return save.endless?.best ?? 0;
     case 'level': return save.account?.level ?? 1;
     case 'heroes': return save.heroes?.owned?.length ?? 0;
+    case 'heroLevel': return Math.max(1, ...Object.values(save.heroData ?? {}).map((h) => h.level ?? 1));
     default: return save.stats?.[a.stat] ?? 0;
   }
 }

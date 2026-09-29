@@ -12,9 +12,11 @@ Crédits :
 ## Jouer
 
 - **Joystick flottant** : pose le pouce n’importe où et glisse pour courir. Lâche : le héros s’arrête et tire tout seul sur le monstre le plus proche.
-- **8 chapitres de 10 salles**, chacun avec son paysage : Forêt des murmures (prairie ensoleillée), Ruines oubliées (ruines au crépuscule), Cimetière maudit (lande de nuit), Mines de cristal (hauts plateaux aux cristaux lumineux), Toundra gelée (neige, sapins, étangs gelés), Marais toxique (roseaux, eaux vertes, brume), Cœur du volcan (basalte, lave, fissures incandescentes), Citadelle de l’ombre (grande cour de nuit). Un ange après la salle 5 (soin ou capacité), un boss à la salle 10 ; le boss vaincu, la partie est gagnée.
+- **18 chapitres de 10 salles**, chacun avec son paysage : Forêt des murmures (prairie ensoleillée), Ruines oubliées (ruines au crépuscule), Cimetière maudit (lande de nuit), Mines de cristal (hauts plateaux aux cristaux lumineux), Toundra gelée (neige, sapins, étangs gelés), Marais toxique (roseaux, eaux vertes, brume), Cœur du volcan (basalte, lave, fissures incandescentes), Citadelle de l’ombre (grande cour de nuit), puis Dunes d’Ashara (cactus, palmiers, oasis), Jardin des cerisiers (pétales qui tombent), Bois d’automne (feuilles rousses), Abysses de corail (coraux lumineux, bulles), Îles célestes (au-dessus des nuages), Jungle d’émeraude (champignons géants lumineux), Pics de l’orage (pluie battante), Faille du néant (cristaux violets, fissures), Cité d’or et Trône céleste (la fin). La **carte du monde** (bouton Carte ou toucher le nom du chapitre) montre tout d’un coup d’œil. Un ange après la salle 5 (soin ou capacité), un boss à la salle 10 ; le boss vaincu, la partie est gagnée.
 - **Chaque attaque est annoncée** : ligne rouge avant un tir, couloir avant une charge, cercle rouge qui se remplit avant une bombe ou une frappe au sol.
 - **Une seconde chance** par partie (tu repars avec la moitié de ta vie).
+- **3 sorts par héros** : des boutons à droite de l’écran, avec leur temps de recharge (voir plus bas).
+- **Butin en partie** : les monstres lâchent parfois un objet (colonne de lumière de la couleur de sa rareté), les élites souvent, les boss toujours (deux à partir du chapitre 7) et de meilleure qualité. Plus on avance, plus les objets sont rares et de haut niveau. Les élites et les boss lâchent aussi des **runes**. Tout ce qui est ramassé est gardé, même en cas de défaite.
 
 ### Capacités (25)
 
@@ -37,6 +39,8 @@ Chaque chapitre a ses propres monstres (même comportement, autre apparence) :
 
 Chapitres 4 à 8 : blobs qui se divisent en deux en mourant, et de nouveaux boss — **Gardien de cristal**, **Yéti ancestral**, **Tyran des marais**, **Seigneur démon** et le **Maître de l’ombre** (qui enchaîne les attaques des autres boss).
 
+Chapitres 9 à 18 : **Scarabée colosse**, **Kitsune céleste**, **Chef des brigands**, **Léviathan**, **Dragon céleste**, **Seigneur orc**, **Chevalier-tempête**, **Œil du néant**, **Pharaon éternel** et l’**Archonte déchu**.
+
 Les boss deviennent plus agressifs sous la moitié de leur vie.
 
 ## Modes de jeu
@@ -49,10 +53,18 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 
 ## Progression (entre les parties)
 
+- **Niveau des héros** (1 à 50) : chaque héros gagne de l’expérience dans ses propres parties ; chaque niveau donne +2 % d’attaque et de vie.
+- **Sorts** : 3 par héros, appris aux niveaux 1, 4 et 8, améliorés jusqu’au rang 5 avec de l’or et des runes (le rang suivant demande aussi un niveau de héros). Plus de dégâts et une recharge plus courte à chaque rang.
+  - Aren : Pluie de flèches, Flèche du vent (traverse tout), Œil du faucon (cadence et critique).
+  - Kaze : Pas de l’ombre (bond intouchable), Tempête de lames, Marque mortelle (frappe l’ennemi le plus robuste).
+  - Kael : Salve circulaire, Ronces (ralentit, empoisonne), Instinct sauvage.
+  - Ilian : Nova de givre (gèle), Météore, Chaîne d’éclairs.
+  - Bran : Frappe sismique (repousse, étourdit), Rempart sacré (intouchable, soin), Charge du lion.
+- **Classes** (niveau 12) : deux par héros, par exemple Tireur d’élite ou Maître des volées pour Aren, Pyromancien ou Cryomancien pour Ilian, Paladin ou Berserker pour Bran. Chaque classe donne des bonus et renforce un sort. Premier choix gratuit, changement pour 50 gemmes.
 - **Niveau de compte** : chaque partie donne de l'expérience (salles, monstres, victoires). Chaque niveau rapporte un point de talent, des gemmes et de l'or.
 - **Arbre de talents** : 3 branches (Guerre, Garde, Fortune) de 5 paliers, avec des capstones (une capacité de départ en plus, bouclier divin dès le départ, un deuxième ange). Réinitialisation gratuite.
 - **Missions du jour** : 3 missions par jour (monstres, salles, élites, boss, coffres, améliorations…) ; les 3 accomplies donnent un coffre doré.
-- **Succès** : 12 succès à plusieurs paliers (monstres, salles, chapitres, boss, élites, Infini, Héroïque, légendaires, éveils, niveau, héros), récompensés en gemmes.
+- **Succès** : 15 succès à plusieurs paliers (monstres, salles, chapitres, boss, élites, Infini, Héroïque, légendaires, éveils, niveau, héros), récompensés en gemmes.
 - **Ensembles** : Chasseur, Rempart, Arcane, Ombre ; bonus à 2 et 4 pièces différentes (cadence, vie, attaque, critique ; flèche frontale, bouclier divin, orbe de foudre, explosions).
 - **Pouvoirs légendaires** : chaque objet légendaire a son pouvoir (volée, carreaux explosifs, orbes jumeaux, tempête, venin, furie, voile d'ombre…).
 - **Éveil** : un objet épique ou légendaire à son niveau maximum peut être éveillé 3 fois (gemmes et or), +15 % de stats par étoile.
@@ -69,7 +81,7 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 - **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
 - **Kaze l’assassin** : lance des éventails de 3 kunais (qui traversent un ennemi), se déplace 25 % plus vite. Chaque kunai pose une marque (3 au maximum). **Frappe de l’ombre** automatique : il disparaît, réapparaît derrière un monstre affaibli (moins de 20 % de vie, ou 3 marques et moins de 45 %), l’achève d’un coup, enchaîne jusqu’à 3 exécutions si d’autres sont à portée, puis revient à sa place. Intouchable pendant le saut et 1 s après. Sur un boss sous 30 % de vie : coup fatal (6 fois ses dégâts) au lieu d’une exécution. Recharge 5 s.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
-- Un objet est trouvé à chaque chapitre gagné (et parfois après une bonne partie).
+- Un coffre de victoire à chaque chapitre gagné, en plus du butin ramassé en route. Le bouton **Recycler** de l’équipement démonte d’un coup les objets communs en trop.
 
 ## Équilibrage
 
@@ -95,6 +107,8 @@ Réglage global dans `src/config.js` (`difficulty` : dégâts et vie des monstre
 Chapitres 4 à 8 avec l’équipement avancé : gagnés ~90 à 100 % (4 à 7), ~50 % (8, le dernier). Infini : le bot atteint en général les salles 10 à 35 avec un équipement moyen.
 
 Armes au chapitre 2 avec l'équipement de départ : arc ~5/6, arbalète 6/6, arc long 6/6, grimoire 5/6, shurikens 6/8.
+
+Avec les sorts (le bot les lance dès qu’ils sont prêts) : chapitre 3 gagné 4/4 avec l’équipement de départ ; chapitre 9 ~25 % avec l’équipement moyen et un héros niveau 15 ; avec l’équipement avancé et un héros niveau 30 : chapitres 9 et 12 gagnés 4/4, 15 : 3/4, 18 (le dernier) : 1/4. Options du bot : `--hlevel=15` (niveau du héros, sorts inclus), `--spells=off`.
 
 Un humain esquive mieux que le bot : c’est une borne basse.
 

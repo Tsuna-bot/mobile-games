@@ -234,6 +234,11 @@ export class Game {
     });
   }
 
+  /** Jumps to a chapter from the world map. */
+  setChapter(index) {
+    this.pickChapter(index - this.save.chapter);
+  }
+
   pickChapter(delta) {
     const next = clamp(this.save.chapter + delta, 0, CHAPTERS.length - 1);
     if (next === this.save.chapter) return;
@@ -435,6 +440,9 @@ export class Game {
     if (won) track(save, 'wins', 1);
     if (run.endless) track(save, 'endlessRooms', run.roomsCleared);
     if (run.heroic) track(save, 'heroicRooms', run.roomsCleared);
+    track(save, 'spells', run.casts);
+    track(save, 'loot', run.loot.length);
+    track(save, 'runes', run.runes);
     // Account experience.
     const xp = runAccountXp({ rooms: run.roomsCleared, kills: run.kills, won, chapterIndex: run.chapterIndex, mode: run.mode });
     const levels = addAccountXp(save, xp);

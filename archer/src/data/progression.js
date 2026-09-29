@@ -74,6 +74,9 @@ export const MISSIONS = [
   { id: 'abilities', stat: 'abilities', goal: 15, text: 'Choisir 15 capacités', reward: { coins: 400 } },
   { id: 'runs', stat: 'runs', goal: 3, text: 'Jouer 3 parties', reward: { gems: 10 } },
   { id: 'endless', stat: 'endlessRooms', goal: 10, text: 'Nettoyer 10 salles en mode Infini', reward: { gems: 20 }, needs: 'endless' },
+  { id: 'spells', stat: 'spells', goal: 20, text: 'Lancer 20 sorts', reward: { gems: 15 } },
+  { id: 'loot', stat: 'loot', goal: 3, text: 'Trouver 3 objets en partie', reward: { coins: 600 } },
+  { id: 'runes', stat: 'runes', goal: 5, text: 'Récolter 5 runes', reward: { gems: 15 } },
   { id: 'heroic', stat: 'heroicRooms', goal: 5, text: 'Nettoyer 5 salles en Héroïque', reward: { gems: 20 }, needs: 'heroic' },
 ];
 
@@ -96,6 +99,9 @@ export const ACHIEVEMENTS = [
   { id: 'smith', icon: 'upgrade', name: 'Forgeron', stat: 'upgrades', goals: [10, 100, 500], gems: [20, 50, 100], text: (g) => `Améliorer des objets ${g} fois` },
   { id: 'awakened', icon: 'star', name: 'Éveil', stat: 'awakenings', goals: [1, 5, 15], gems: [40, 80, 150], text: (g) => `Éveiller des objets ${g} fois` },
   { id: 'veteran', icon: 'level', name: 'Vétéran', stat: 'level', goals: [5, 15, 30, 50], gems: [20, 50, 100, 200], text: (g) => `Atteindre le niveau de compte ${g}` },
+  { id: 'arcanist', icon: 'spells', name: 'Arcaniste', stat: 'spells', goals: [50, 500, 3000], gems: [20, 60, 150], text: (g) => `Lancer ${g} sorts` },
+  { id: 'looter', icon: 'loot', name: 'Pilleur', stat: 'loot', goals: [5, 50, 250], gems: [20, 60, 150], text: (g) => `Trouver ${g} objets en partie` },
+  { id: 'mentor', icon: 'classes', name: 'Mentor', stat: 'heroLevel', goals: [5, 12, 25, 50], gems: [20, 50, 120, 300], text: (g) => `Amener un héros au niveau ${g}` },
   { id: 'company', icon: 'heroes', name: 'Compagnie', stat: 'heroes', goals: [3, 5], gems: [30, 60], text: (g) => `Recruter ${g} héros` },
 ];
 

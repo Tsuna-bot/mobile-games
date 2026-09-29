@@ -2,6 +2,8 @@ import { writeSave } from '../core/storage.js';
 import { badge, icon } from '../ui/icons.js';
 import { LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
+import { CHAPTERS } from '../data/chapters.js';
+import { ENEMIES } from '../data/enemies.js';
 import { CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_HERO_LEVEL, MAX_SPELL_RANK, SPELLS, SPELL_UNLOCK, classOf, heroLevelStats, heroXpNeeded, rankCooldown, spellUpgradeCost } from '../data/heroes.js';
 import { chooseClass, heroState, spellRank, spellUpgradeBlock, upgradeSpell } from '../meta/heroes.js';
 import { ACHIEVEMENTS, BRANCHES, TIER_NEEDS, TREE, TREE_BY_ID, accountXpNeeded } from '../data/progression.js';
@@ -36,6 +38,8 @@ export class Menu {
     }
     $('btn-talent').addEventListener('click', () => this.buyTalent());
     $('btn-quests').addEventListener('click', () => this.show('quests'));
+    $('btn-map').addEventListener('click', () => this.openChapters());
+    document.querySelector('#chapter-card .chapter-card__body').addEventListener('click', () => this.openChapters());
     $('btn-tree-reset').addEventListener('click', () => {
       if (!resetTree(this.save)) return;
       this.game.audio.click();
@@ -152,6 +156,20 @@ export class Menu {
       .filter((it) => !equippedSlotOf(save, it.uid))
       .sort((a, b) => b.rarity - a.rarity || b.level - a.level || a.base.localeCompare(b.base));
     this.$('inventory-count').textContent = `(${spare.length})`;
+    // Loot piles up: one tap scraps every spare common item that cannot merge.
+    const junk = spare.filter((it) => it.rarity === 0 && !(it.stars ?? 0) && mergePartners(save, it.uid).length < 2 && !PETS[it.base]);
+    const recycle = this.$('btn-recycle');
+    recycle.hidden = junk.length < 2;
+    recycle.innerHTML = `${icon('reset')} Recycler ${junk.length} objets communs · <i class="coin-icon"></i> ${junk.reduce((a, it) => a + salvageValue(it), 0)}`;
+    recycle.onclick = () => {
+      let gold = 0;
+      for (const it of junk) gold += salvage(save, it.uid);
+      this.game.audio.coin();
+      this.game.haptics.pulse([10, 20, 10]);
+      this.persist();
+      this.renderGear();
+      this.game.ui.toast(`${icon('gold-bag')}<span>Recyclage : <b>+${gold}</b> or</span>`, '#ffc93c');
+    };
     this.$('inventory').innerHTML = spare.length ? spare.map((it) => this.itemTile(it)).join('') : '<p class="panel-text" style="grid-column:1/-1;margin:0">Ouvre des coffres ou gagne des chapitres pour trouver de l’équipement.</p>';
     for (const el of document.querySelectorAll('#slots .item[data-uid], #inventory .item[data-uid]')) {
       el.addEventListener('click', () => this.openItem(Number(el.dataset.uid)));
@@ -507,6 +525,33 @@ export class Menu {
     this.game.refreshMenuHero();
   }
 
+  // ------------------------------------------------------------ chapter map
+
+  /** Every chapter at a glance: done, record, locked; a tap goes there. */
+  openChapters() {
+    const save = this.save;
+    const rows = CHAPTERS.map((c, i) => {
+      const best = save.best[c.id] ?? 0;
+      const heroic = (save.best[`${c.id}:heroic`] ?? 0) > 10;
+      const locked = i > save.unlocked;
+      const state = locked ? `${icon('lock')}` : best > 10 ? `${icon('check')}${heroic ? icon('heroic') : ''}` : best ? `${best}/10` : 'Nouveau';
+      return `<button type="button" class="chapter-row${locked ? ' is-locked' : ''}${i === save.chapter ? ' is-current' : ''}${best > 10 ? ' is-done' : ''}" data-chapter="${i}" ${locked ? 'disabled' : ''}>
+        <span class="chapter-row__num">${i + 1}</span><span class="chapter-row__name">${esc(c.name)}<small>Boss : ${esc(ENEMIES[c.boss]?.name ?? '')}</small></span><span class="chapter-row__state">${state}</span></button>`;
+    }).join('');
+    this.openPopup(`<h3 class="popup__name">Carte du monde</h3><div class="chapter-list">${rows}</div><div class="popup__actions"><button type="button" class="btn btn--ghost" data-close>Fermer</button></div>`, '#4fb4ff');
+    const card = this.$('popup-card');
+    card.classList.add('popup__card--list');
+    card.querySelector('[data-close]').addEventListener('click', () => this.closePopup());
+    for (const row of card.querySelectorAll('[data-chapter]')) {
+      row.addEventListener('click', () => {
+        this.closePopup();
+        this.game.setChapter(Number(row.dataset.chapter));
+      });
+    }
+    card.querySelector('.is-current')?.scrollIntoView({ block: 'center' });
+    this.game.audio.click();
+  }
+
   // ------------------------------------------------------------ shop
 
   renderShop() {
@@ -571,6 +616,7 @@ export class Menu {
 
   openPopup(html, color, reveal = false) {
     const card = this.$('popup-card');
+    card.classList.remove('popup__card--list');
     card.style.setProperty('--rarity', color);
     card.classList.toggle('is-reveal', reveal);
     card.innerHTML = html;

@@ -94,6 +94,7 @@ export class Run {
     // Loot found on the way (kept even on a defeat) and runes.
     this.loot = [];
     this.runes = 0;
+    this.casts = 0;
     this.enemies = [];
     this.arrows = [];
     this.shots = [];
@@ -1301,6 +1302,7 @@ export class Run {
         this.listener.onSpell?.(s, info);
         this.damageEnemy(t, hit, true, source);
         s.timer = s.cooldown;
+        this.casts++;
         return true;
       }
       case 'chain': {
@@ -1311,12 +1313,14 @@ export class Run {
         this.hitEnemy(first, damage, source, { noElements: true });
         this.lightning(first, par.jumps + (s.rank - 1), damage, 4.5);
         s.timer = s.cooldown;
+        this.casts++;
         return true;
       }
       default:
         return false;
     }
     s.timer = s.cooldown;
+    this.casts++;
     this.listener.onSpell?.(s, info);
     return true;
   }

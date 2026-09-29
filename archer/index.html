@@ -59,7 +59,7 @@
     <div id="toasts" class="toasts" aria-live="polite"></div>
     <div id="floaters" class="floaters" aria-hidden="true"></div>
     <div id="banner" class="banner" aria-live="polite"></div>
-    <div id="hint" class="hint">Glisse pour courir · lâche pour tirer</div>
+    <div id="hint" class="hint">Glisse pour courir · lâche pour tirer · touche un sort à droite</div>
 
     <section id="screen-menu" class="screen screen--menu" aria-label="Menu">
       <div class="menu-top">
@@ -75,6 +75,7 @@
           <h1 id="title" class="brand__title">Aetherfall</h1>
         </div>
         <button id="btn-quests" class="side-btn" type="button" aria-label="Quêtes"><svg class="ico" aria-hidden="true"><use href="#i-quests"></use></svg><span>Quêtes</span></button>
+        <button id="btn-map" class="side-btn side-btn--map" type="button" aria-label="Carte du monde"><svg class="ico" aria-hidden="true"><use href="#i-map"></use></svg><span>Carte</span></button>
         <div class="modes" id="modes" role="group" aria-label="Mode de jeu">
           <button type="button" data-mode="normal" class="is-active">Normal</button>
           <button type="button" data-mode="heroic"><svg class="ico" aria-hidden="true"><use href="#i-heroic"></use></svg>Héroïque</button>
@@ -96,7 +97,7 @@
           <button class="chip" type="button" data-setting="haptics">Vibrations <span class="chip__value">On</span></button>
           <button class="chip" type="button" data-setting="quality">Qualité <span class="chip__value">Auto</span></button>
         </div>
-        <p class="credits">Version 4 · Héros VRoid (pixiv) · Modèles KayKit (Kay Lousberg) et Quaternius, CC0 · Icônes game-icons.net (Lorc, Delapouite, Darkzaitzev et al., CC BY 3.0)</p>
+        <p class="credits">Version 5 · Héros VRoid (pixiv) · Modèles KayKit (Kay Lousberg) et Quaternius, CC0 · Icônes game-icons.net (Lorc, Delapouite, Darkzaitzev et al., CC BY 3.0)</p>
       </div>
 
       <div class="panel-view" id="panel-gear">
@@ -105,6 +106,7 @@
         <div class="stat-line" id="gear-stats"></div>
         <div class="sets" id="gear-sets"></div>
         <h3 class="panel-subtitle">Inventaire <span id="inventory-count"></span></h3>
+        <button id="btn-recycle" class="btn btn--ghost btn--small btn-recycle" type="button" hidden></button>
         <div class="inventory" id="inventory"></div>
       </div>
 
