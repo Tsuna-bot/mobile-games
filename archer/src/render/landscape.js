@@ -260,6 +260,43 @@ const PROPS = {
   '@spire': (random, theme) => spire(random, theme.spire),
 };
 
+/**
+ * Leaves sway in the wind (the higher, the more), and can take the theme's colour
+ * (their painted shading kept): autumn reds, cherry pink, golden or violet crowns.
+ */
+function patchFoliage(material, time, recolor) {
+  const tint = recolor != null ? new THREE.Color(recolor) : null;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFoliageTime = time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uFoliageTime;\nvarying vec3 vFolWorld;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+  {
+    vec4 fw = modelMatrix * vec4(transformed, 1.0);
+    float k = max(0.0, fw.y - 0.4);
+    transformed.x += sin(uFoliageTime * 1.4 + fw.x * 0.5 + fw.z * 0.3) * 0.035 * k;
+    transformed.z += cos(uFoliageTime * 1.1 + fw.x * 0.4) * 0.025 * k;
+    vFolWorld = fw.xyz;
+  }`);
+    injectWorldLight(shader, 'vFolWorld.xz');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vFolWorld;');
+    if (tint) {
+      shader.uniforms.uLeafTint = { value: tint };
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uLeafTint;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    float l = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+    diffuseColor.rgb = uLeafTint * (0.35 + l * 1.9);
+  }`);
+    }
+  };
+  material.onBeforeCompile.rim = true;
+  material.customProgramCacheKey = () => `foliage-${tint ? 'tint' : 'plain'}`;
+  material.needsUpdate = true;
+  return material;
+}
+
 /** Toon material for the generated props: vertex colours, with a glow for crystals. */
 function propMaterial(glow) {
   const material = patchRim(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp() }));
@@ -291,10 +328,10 @@ export const LANDS = {
     hill: 3.2, grass: [0x2f7a2a, 0xb2e864], grassHeight: [0.2, 0.38], grassDensity: 1,
     flowers: [0xfff09a, 0xff9ec8, 0xffffff, 0xb9a4ff, 0xffb070], flowerDensity: 1,
     water: { deep: 0x1f6fb0, shallow: 0x62dbe4, foam: 0xf4ffff },
-    blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['Rock_3_C', 0.9], ['Rock_3_E', 0.9], ['Bush_1_A', 0.9]],
-    edge: [['Bush_1_C', 0.9], ['Bush_1_A', 0.75], ['Bush_1_E', 0.6], ['Rock_1_A', 0.55], ['Bush_3_A', 0.9]],
-    trees: [['Tree_1_A', 2.3], ['Tree_1_B', 2.5], ['Tree_1_C', 2.3], ['Tree_3_A', 2.7], ['Tree_3_B', 2.6], ['Tree_4_A', 1.9], ['Tree_4_B', 2.1]],
-    treeCount: 70, stone: 0xb8b2a4, portal: 0x8ff8d8, ambience: 'forest',
+    blocks: [['n_Rock_Medium_1', 0.95], ['n_Rock_Medium_2', 0.95], ['n_Rock_Medium_3', 0.9], ['n_Bush_Common_Flowers', 0.95], ['Rock_3_A', 0.95]],
+    edge: [['n_Bush_Common', 0.9], ['n_Bush_Common_Flowers', 0.8], ['n_Fern_1', 0.7], ['n_Plant_7_Big', 0.7], ['n_Flower_3_Group', 0.6], ['n_Mushroom_Common', 0.35], ['n_Rock_Medium_2', 0.55]],
+    trees: [['n_CommonTree_1', 2], ['n_CommonTree_2', 2.1], ['n_CommonTree_3', 1.8], ['n_CommonTree_4', 2], ['n_CommonTree_5', 2.1], ['n_Pine_2', 1.7], ['Tree_1_A', 2.3], ['n_Bush_Common', 1.4]],
+    treeCount: 56, stone: 0xb8b2a4, portal: 0x8ff8d8, ambience: 'forest',
   },
   // Ruins at dusk: a paved court among broken columns, golden grass, a sunset sky.
   dungeon: {
@@ -306,8 +343,8 @@ export const LANDS = {
     flowers: [0xffb070, 0xd0a0ff, 0xff8a6a, 0xfff0c0], flowerDensity: 0.6,
     water: { deep: 0x24506e, shallow: 0x6aa8b8, foam: 0xfff0e0 },
     blocks: [['column', 0.75], ['pillar', 0.9], ['rubble_half', 0.95], ['Rock_3_A', 0.9], ['Rock_3_C', 0.9], ['pillar_decorated', 0.85]],
-    edge: [['rubble_half', 1.2], ['Rock_1_A', 0.6], ['column', 0.6], ['Bush_1_C', 0.8], ['Bush_1_E', 0.6]],
-    trees: [['Tree_Bare_1_A', 2], ['Tree_1_B', 2.3], ['Tree_4_A', 1.9], ['pillar_decorated', 1.6], ['pillar', 1.4], ['Tree_3_A', 2.4], ['column', 1.3]],
+    edge: [['rubble_half', 1.2], ['Rock_1_A', 0.6], ['column', 0.6], ['Bush_1_C', 0.8], ['Bush_1_E', 0.6], ['n_Fern_1', 0.6], ['n_Plant_7_Big', 0.6]],
+    trees: [['Tree_Bare_1_A', 2], ['Tree_1_B', 2.3], ['Tree_4_A', 1.9], ['pillar_decorated', 1.6], ['pillar', 1.4], ['Tree_3_A', 2.4], ['column', 1.3], ['n_CommonTree_2', 2], ['n_CommonTree_4', 1.9], ['n_TwistedTree_1', 2.2]],
     treeCount: 55, stone: 0xcdbca2, portal: 0xc8a0ff, torch: 0xffa850, ambience: 'dungeon',
   },
   // A moor by night: moonlight, an old chapel's pavement, graves, will-o'-the-wisps.
@@ -320,9 +357,9 @@ export const LANDS = {
     flowers: [0x9fffd8, 0xc8d8ff, 0xffffff], flowerDensity: 0.35,
     water: { deep: 0x1a4a58, shallow: 0x4aa8a0, foam: 0xc8fff0 },
     blocks: [['gravestone', 0.85], ['grave_A', 0.95], ['grave_B', 0.95], ['gravestone', 0.8], ['Rock_3_B', 0.85], ['pumpkin_orange_jackolantern', 0.75], ['shrine_candles', 0.7]],
-    edge: [['gravemarker_A', 0.5], ['skull_candle', 0.45], ['pumpkin_yellow', 0.5], ['Rock_1_A', 0.5], ['ribcage', 0.5]],
-    trees: [['tree_dead_large', 2], ['tree_dead_medium', 1.7], ['Tree_Bare_1_A', 1.9], ['Tree_Bare_2_A', 1.7], ['tree_pine_orange_large', 2.4], ['crypt', 2.6]],
-    treeCount: 50, stone: 0x8a9aa8, portal: 0x7affc8, torch: 0x9fffd0, ambience: 'graveyard',
+    edge: [['gravemarker_A', 0.5], ['skull_candle', 0.45], ['pumpkin_yellow', 0.5], ['Rock_1_A', 0.5], ['ribcage', 0.5], ['n_Mushroom_Common', 0.35], ['n_Fern_1', 0.55]],
+    trees: [['tree_dead_large', 2], ['tree_dead_medium', 1.7], ['Tree_Bare_1_A', 1.9], ['Tree_Bare_2_A', 1.7], ['tree_pine_orange_large', 2.4], ['crypt', 2.6], ['n_DeadTree_1', 2.2], ['n_DeadTree_2', 2], ['n_DeadTree_3', 2.3], ['n_TwistedTree_2', 2.2]],
+    treeCount: 50, stone: 0x8a9aa8, portal: 0x7affc8, torch: 0x9fffd0, ambience: 'graveyard', leaves: 0x3a7a6a, natureTint: 0x9aa8b8,
   },
   // Crystal highlands at twilight: glowing crystals among rocks, an underground spring.
   mines: {
@@ -350,9 +387,9 @@ export const LANDS = {
     water: { deep: 0x7ab4e0, shallow: 0xc4e4f8, foam: 0xffffff, calm: true },
     pine: [0x24503e, 0x3e7a58], snow: true,
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['Rock_3_C', 0.9], ['@pine', 0.9]],
-    edge: [['Rock_1_A', 0.55], ['@pine', 0.6], ['Rock_3_E', 0.6]],
-    trees: [['@pine', 1.5], ['@pine', 1.8], ['@pine', 1.3], ['Rock_2_A', 1.8], ['Tree_Bare_1_A', 1.8]],
-    tint: 0xdce8f4, treeCount: 80, stone: 0xc8d4e0, portal: 0x9fe8ff, ambience: 'tundra', light: { dapple: 0.12 },
+    edge: [['Rock_1_A', 0.55], ['@pine', 0.6], ['Rock_3_E', 0.6], ['n_Rock_Medium_1', 0.55]],
+    trees: [['@pine', 1.5], ['@pine', 1.8], ['@pine', 1.3], ['Rock_2_A', 1.8], ['Tree_Bare_1_A', 1.8], ['n_Pine_1', 1.7], ['n_Pine_2', 1.7], ['n_Pine_3', 1.8], ['n_Pine_4', 1.6], ['n_Pine_5', 1.8]],
+    tint: 0xdce8f4, treeCount: 64, stone: 0xc8d4e0, portal: 0x9fe8ff, ambience: 'tundra', leaves: 0x3e7068, natureTint: 0xdce8f4, light: { dapple: 0.12 },
   },
   // A toxic marsh: reeds, dead trees, green ponds, fireflies and mist.
   swamp: {
@@ -364,9 +401,9 @@ export const LANDS = {
     flowers: [0xe8e070, 0xc890ff, 0xffffff], flowerDensity: 0.45,
     water: { deep: 0x234a26, shallow: 0x7aac4e, foam: 0xd8ff9a, glow: 0.25 },
     blocks: [['tree_dead_medium', 0.9], ['Rock_3_A', 0.9], ['Rock_3_C', 0.9], ['Bush_1_A', 0.9]],
-    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['Bush_1_E', 0.6], ['tree_dead_medium', 0.6]],
-    trees: [['tree_dead_large', 2.1], ['tree_dead_medium', 1.8], ['Tree_Bare_1_A', 2], ['Tree_Bare_2_A', 1.8], ['Tree_4_A', 2], ['Tree_Bare_1_B', 2]],
-    treeCount: 60, stone: 0x8a9a80, portal: 0xb8ff8a, ambience: 'swamp',
+    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['Bush_1_E', 0.6], ['tree_dead_medium', 0.6], ['n_Fern_1', 0.7], ['n_Plant_1_Big', 0.7], ['n_Mushroom_Laetiporus', 0.4], ['n_Mushroom_Common', 0.35]],
+    trees: [['tree_dead_large', 2.1], ['tree_dead_medium', 1.8], ['Tree_Bare_1_A', 2], ['Tree_Bare_2_A', 1.8], ['Tree_4_A', 2], ['Tree_Bare_1_B', 2], ['n_TwistedTree_3', 2.2], ['n_TwistedTree_4', 2], ['n_DeadTree_4', 2], ['n_TwistedTree_5', 2.1]],
+    treeCount: 48, stone: 0x8a9a80, portal: 0xb8ff8a, ambience: 'swamp', leaves: 0x5a8a3a,
   },
   // The volcano's heart: black basalt, rivers of lava, a red sky full of ash.
   volcano: {
@@ -380,8 +417,8 @@ export const LANDS = {
     spire: [0x1a1618, 0x4a3a3a],
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['Rock_3_C', 0.9], ['@spire', 0.85]],
     edge: [['Rock_1_A', 0.6], ['Rock_3_E', 0.6], ['tree_dead_medium', 0.6]],
-    trees: [['@spire', 1.4], ['@spire', 1.8], ['Rock_2_A', 2.2], ['tree_dead_large', 1.8], ['Rock_3_E', 1.8]],
-    tint: 0x6a5a58, treeCount: 50, stone: 0x5a4a4a, portal: 0xff8a3a, torch: 0xff7a2a, ambience: 'volcano', light: { dapple: 0, clouds: 0.22 },
+    trees: [['@spire', 1.4], ['@spire', 1.8], ['Rock_2_A', 2.2], ['tree_dead_large', 1.8], ['Rock_3_E', 1.8], ['n_DeadTree_1', 2], ['n_DeadTree_5', 2.2]],
+    tint: 0x6a5a58, treeCount: 50, stone: 0x5a4a4a, portal: 0xff8a3a, torch: 0xff7a2a, ambience: 'volcano', natureTint: 0x5a4848, light: { dapple: 0, clouds: 0.22 },
   },
   // The shadow citadel by night: a vast dark courtyard, pillars, violet void pools.
   citadel: {
@@ -395,8 +432,8 @@ export const LANDS = {
     spire: [0x22202e, 0x5a5270],
     blocks: [['column', 0.75], ['pillar', 0.9], ['pillar_decorated', 0.85], ['rubble_half', 0.95], ['@spire', 0.8]],
     edge: [['rubble_half', 1.1], ['column', 0.6], ['Rock_1_A', 0.5]],
-    trees: [['pillar_decorated', 1.6], ['pillar', 1.4], ['@spire', 1.6], ['@spire', 2], ['Tree_Bare_1_A', 1.9], ['column', 1.3]],
-    tint: 0x9a90b8, treeCount: 55, stone: 0x6e6886, portal: 0xc86aff, torch: 0xc86aff, ambience: 'citadel',
+    trees: [['pillar_decorated', 1.6], ['pillar', 1.4], ['@spire', 1.6], ['@spire', 2], ['Tree_Bare_1_A', 1.9], ['column', 1.3], ['n_DeadTree_2', 2], ['n_DeadTree_3', 2.1]],
+    tint: 0x9a90b8, treeCount: 55, stone: 0x6e6886, portal: 0xc86aff, torch: 0xc86aff, ambience: 'citadel', natureTint: 0x7a6a98,
   },
   // Golden dunes under a hazy sun: sandstone court, cacti, palms around an oasis.
   desert: {
@@ -408,10 +445,10 @@ export const LANDS = {
     flowers: [0xff8a5a, 0xffe07a], flowerDensity: 0.08,
     water: { deep: 0x1a7ab0, shallow: 0x5ae0d8, foam: 0xf4ffff },
     cactus: [0x3a7a4a, 0x8ac06a], palm: [0x2f7a3a, 0x8ad05a], spire: [0x9a5a3a, 0xe0a870],
-    blocks: [['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@cactus', 0.8], ['@spire', 0.8], ['pillar', 0.85]],
-    edge: [['Rock_1_A', 0.55], ['@cactus', 0.55], ['Rock_3_E', 0.6]],
-    trees: [['@palm', 1.8], ['@palm', 2.2], ['@cactus', 1.3], ['@spire', 2], ['Rock_2_A', 2.2]],
-    tint: 0xf0d8b0, treeCount: 45, stone: 0xe0c8a0, portal: 0xffd070, torch: 0xffb050, ambience: 'desert', light: { dapple: 0, clouds: 0.35 },
+    blocks: [['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@cactus', 0.8], ['@spire', 0.8], ['pillar', 0.85], ['n_Rock_Medium_1', 0.95], ['n_Rock_Medium_3', 0.9]],
+    edge: [['Rock_1_A', 0.55], ['@cactus', 0.55], ['Rock_3_E', 0.6], ['n_Rock_Medium_2', 0.6]],
+    trees: [['@palm', 1.8], ['@palm', 2.2], ['@cactus', 1.3], ['@spire', 2], ['Rock_2_A', 2.2], ['n_DeadTree_4', 1.9]],
+    tint: 0xf0d8b0, treeCount: 45, stone: 0xe0c8a0, portal: 0xffd070, torch: 0xffb050, ambience: 'desert', natureTint: 0xf0d0a0, light: { dapple: 0, clouds: 0.35 },
   },
   // A spring garden: cherry trees in bloom, a stone path, falling petals.
   sakura: {
@@ -424,9 +461,9 @@ export const LANDS = {
     water: { deep: 0x2a70a8, shallow: 0x7ae0e8, foam: 0xffffff, calm: true },
     blossom: [0xe87aa8, 0xffd4e8], trunk: 0x5a3a3a,
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['@blossom', 0.9], ['shrine_candles', 0.7], ['pillar', 0.85]],
-    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['@blossom', 0.6], ['Bush_1_E', 0.6]],
-    trees: [['@blossom', 2.2], ['@blossom', 2.6], ['@blossom', 1.8], ['Tree_1_A', 2.3], ['Rock_2_A', 2]],
-    treeCount: 70, stone: 0xd8ccd4, portal: 0xffa8d8, ambience: 'sakura', flecks: [0xffb0d0, 0xfff0f6], fleckAmount: 2.2,
+    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['@blossom', 0.6], ['Bush_1_E', 0.6], ['n_Bush_Common', 0.8], ['n_Flower_4_Group', 0.6], ['n_Fern_1', 0.55]],
+    trees: [['@blossom', 2.2], ['@blossom', 2.6], ['@blossom', 1.8], ['Tree_1_A', 2.3], ['Rock_2_A', 2], ['n_CommonTree_1', 2], ['n_CommonTree_3', 1.8], ['n_CommonTree_5', 2]],
+    treeCount: 58, stone: 0xd8ccd4, portal: 0xffa8d8, ambience: 'sakura', leaves: 0xff9ac8, flecks: [0xffb0d0, 0xfff0f6], fleckAmount: 2.2,
   },
   // Autumn woods at golden hour: red and orange crowns, leaves drifting down.
   autumn: {
@@ -439,9 +476,9 @@ export const LANDS = {
     water: { deep: 0x2a5a78, shallow: 0x6ab0b8, foam: 0xfff0e0 },
     blossom: [0xc83a1a, 0xffa830], trunk: 0x4a3024,
     blocks: [['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@blossom', 0.9], ['barrel_large', 0.7], ['crates_stacked', 0.8]],
-    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.55], ['pumpkin_orange_jackolantern', 0.5], ['Bush_1_A', 0.7]],
-    trees: [['@blossom', 2.4], ['tree_pine_orange_large', 2.4], ['tree_pine_yellow_large', 2.4], ['@blossom', 2], ['tree_pine_orange_medium', 2], ['Tree_Bare_1_A', 2]],
-    treeCount: 70, stone: 0xc8a888, portal: 0xffb050, torch: 0xffa040, ambience: 'autumn', flecks: [0xd8501a, 0xffa830], fleckAmount: 2.4,
+    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.55], ['pumpkin_orange_jackolantern', 0.5], ['Bush_1_A', 0.7], ['n_Bush_Common', 0.8], ['n_Mushroom_Laetiporus', 0.4], ['n_Fern_1', 0.6]],
+    trees: [['@blossom', 2.4], ['tree_pine_orange_large', 2.4], ['tree_pine_yellow_large', 2.4], ['@blossom', 2], ['tree_pine_orange_medium', 2], ['Tree_Bare_1_A', 2], ['n_CommonTree_1', 2], ['n_CommonTree_2', 2.1], ['n_CommonTree_4', 2], ['n_TwistedTree_1', 2.2]],
+    treeCount: 56, stone: 0xc8a888, portal: 0xffb050, torch: 0xffa040, ambience: 'autumn', leaves: 0xe8682a, flecks: [0xd8501a, 0xffa830], fleckAmount: 2.4,
   },
   // Coral abyss: a sunken reef in blue-green light, glowing corals, rising bubbles.
   abyss: {
@@ -469,9 +506,9 @@ export const LANDS = {
     water: { deep: 0x3a8ad8, shallow: 0xa8f0ff, foam: 0xffffff, glow: 0.3 },
     blossom: [0xd8e8f8, 0xffffff], trunk: 0x7a6a5a,
     blocks: [['column', 0.75], ['pillar_decorated', 0.85], ['Rock_3_A', 0.95], ['@blossom', 0.9]],
-    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['column', 0.55]],
-    trees: [['@blossom', 2.2], ['@blossom', 2.6], ['pillar_decorated', 1.6], ['column', 1.3], ['Tree_1_B', 2.3]],
-    treeCount: 50, stone: 0xf0f0f8, portal: 0xa8f0ff, ambience: 'sky', light: { clouds: 0.5 },
+    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['column', 0.55], ['n_Bush_Common_Flowers', 0.8], ['n_Flower_3_Group', 0.6]],
+    trees: [['@blossom', 2.2], ['@blossom', 2.6], ['pillar_decorated', 1.6], ['column', 1.3], ['Tree_1_B', 2.3], ['n_CommonTree_3', 1.9], ['n_CommonTree_5', 2]],
+    treeCount: 50, stone: 0xf0f0f8, portal: 0xa8f0ff, ambience: 'sky', leaves: 0x8ad06a, light: { clouds: 0.5 },
   },
   // Emerald jungle: humid and dense, palms, giant glowing mushrooms, fireflies, mist.
   jungle: {
@@ -484,9 +521,9 @@ export const LANDS = {
     water: { deep: 0x1a5a4a, shallow: 0x5ac8a0, foam: 0xe0ffe0 },
     palm: [0x1f6a2a, 0x6ad04a], mushroom: [0xb03a8a, 0xff8ad8], glowProps: ['@mushroom'], crystalGlow: 0.45,
     blocks: [['Bush_4_A', 0.95], ['Rock_3_A', 0.9], ['@mushroom', 0.85], ['Bush_1_G', 0.9]],
-    edge: [['Bush_1_C', 0.9], ['Bush_4_A', 0.7], ['@mushroom', 0.5], ['Bush_1_E', 0.7]],
-    trees: [['@palm', 2.2], ['@palm', 2.6], ['Tree_2_A', 2.4], ['@mushroom', 1.6], ['Tree_1_C', 2.4], ['Tree_3_A', 2.6]],
-    treeCount: 85, stone: 0x8aa890, portal: 0x8aff9a, ambience: 'jungle', light: { clouds: 0.5 },
+    edge: [['Bush_1_C', 0.9], ['Bush_4_A', 0.7], ['@mushroom', 0.5], ['Bush_1_E', 0.7], ['n_Fern_1', 0.8], ['n_Plant_1_Big', 0.9], ['n_Plant_7_Big', 0.8], ['n_Mushroom_Common', 0.4]],
+    trees: [['@palm', 2.2], ['@palm', 2.6], ['Tree_2_A', 2.4], ['@mushroom', 1.6], ['Tree_1_C', 2.4], ['Tree_3_A', 2.6], ['n_CommonTree_2', 2.2], ['n_TwistedTree_3', 2.4], ['n_CommonTree_4', 2.2], ['n_TwistedTree_5', 2.3]],
+    treeCount: 64, stone: 0x8aa890, portal: 0x8aff9a, ambience: 'jungle', leaves: 0x2e8a3a, light: { clouds: 0.5 },
   },
   // Storm peaks: slate crags under a black sky, driving rain, flashes of light.
   storm: {
@@ -499,9 +536,9 @@ export const LANDS = {
     water: { deep: 0x1a2a4a, shallow: 0x5a80a8, foam: 0xd8e8ff, glow: 0.2 },
     spire: [0x2a2e3a, 0x6a7488], pine: [0x1a3a34, 0x3a5a50],
     blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['@spire', 0.85], ['@pine', 0.9]],
-    edge: [['Rock_1_A', 0.6], ['Rock_3_E', 0.6], ['@pine', 0.6]],
-    trees: [['@spire', 1.8], ['@spire', 2.4], ['@pine', 1.8], ['@pine', 1.5], ['Rock_2_A', 2.4]],
-    tint: 0x9aa4b8, treeCount: 70, stone: 0x8a94a8, portal: 0x8ad0ff, torch: 0x8ad0ff, ambience: 'storm', light: { clouds: 0.5 },
+    edge: [['Rock_1_A', 0.6], ['Rock_3_E', 0.6], ['@pine', 0.6], ['n_Rock_Medium_3', 0.6]],
+    trees: [['@spire', 1.8], ['@spire', 2.4], ['@pine', 1.8], ['@pine', 1.5], ['Rock_2_A', 2.4], ['n_Pine_1', 1.7], ['n_Pine_3', 1.8], ['n_DeadTree_2', 2]],
+    tint: 0x9aa4b8, treeCount: 70, stone: 0x8a94a8, portal: 0x8ad0ff, torch: 0x8ad0ff, ambience: 'storm', leaves: 0x2e4a48, natureTint: 0x9aa4b8, light: { clouds: 0.5 },
   },
   // The void rift: a shattered black plain, violet crystals, pools of nothing.
   void: {
@@ -515,8 +552,8 @@ export const LANDS = {
     crystal: [0x3a1a7a, 0xe0a8ff], spire: [0x14101c, 0x4a3a60], crystalGlow: 0.55,
     blocks: [['@crystal', 0.95], ['@spire', 0.85], ['Rock_3_A', 0.9], ['@crystal', 0.9]],
     edge: [['@crystal', 0.5], ['Rock_1_A', 0.5], ['@spire', 0.6]],
-    trees: [['@crystal', 2], ['@crystal', 2.6], ['@spire', 2], ['@spire', 2.6], ['tree_dead_large', 1.8]],
-    tint: 0x7a6a98, treeCount: 55, stone: 0x5a4a78, portal: 0xd08aff, torch: 0xd08aff, ambience: 'void',
+    trees: [['@crystal', 2], ['@crystal', 2.6], ['@spire', 2], ['@spire', 2.6], ['tree_dead_large', 1.8], ['n_DeadTree_3', 2.2], ['n_DeadTree_5', 2.3]],
+    tint: 0x7a6a98, treeCount: 55, stone: 0x5a4a78, portal: 0xd08aff, torch: 0xd08aff, ambience: 'void', natureTint: 0x6a5a8a,
   },
   // The golden city: gilded courts and columns in the desert sun, palms and banners.
   golden: {
@@ -529,9 +566,9 @@ export const LANDS = {
     water: { deep: 0x1a6ab8, shallow: 0x5ad8f0, foam: 0xffffff, glow: 0.3 },
     palm: [0x2f7a3a, 0x9ae060],
     blocks: [['column', 0.75], ['pillar_decorated', 0.85], ['pillar', 0.9], ['coin_stack_large', 0.6], ['chest_gold', 0.7]],
-    edge: [['column', 0.55], ['banner_red', 0.5], ['coin_stack_large', 0.45], ['Rock_1_A', 0.5]],
-    trees: [['@palm', 2.2], ['pillar_decorated', 1.7], ['column', 1.4], ['@palm', 1.8], ['pillar', 1.5]],
-    tint: 0xffe8a0, treeCount: 55, stone: 0xf0d890, portal: 0xffe070, torch: 0xffc040, ambience: 'golden', light: { dapple: 0, clouds: 0.3 },
+    edge: [['column', 0.55], ['banner_red', 0.5], ['coin_stack_large', 0.45], ['Rock_1_A', 0.5], ['n_Bush_Common', 0.7]],
+    trees: [['@palm', 2.2], ['pillar_decorated', 1.7], ['column', 1.4], ['@palm', 1.8], ['pillar', 1.5], ['n_CommonTree_1', 2], ['n_CommonTree_3', 1.8]],
+    tint: 0xffe8a0, treeCount: 55, stone: 0xf0d890, portal: 0xffe070, torch: 0xffc040, ambience: 'golden', leaves: 0xe8b830, light: { dapple: 0, clouds: 0.3 },
   },
   // The celestial throne: a white and gold court among the stars, drifting light.
   celestial: {
@@ -544,9 +581,9 @@ export const LANDS = {
     water: { deep: 0x1a1a5a, shallow: 0x8a9aff, foam: 0xffffff, glow: 1.3 },
     crystal: [0x8a7a3a, 0xfff4c0], crystalGlow: 0.6,
     blocks: [['pillar_decorated', 0.85], ['column', 0.75], ['@crystal', 0.9], ['pillar', 0.9]],
-    edge: [['@crystal', 0.5], ['column', 0.55], ['rubble_half', 0.9]],
-    trees: [['pillar_decorated', 1.8], ['@crystal', 2.2], ['@crystal', 2.8], ['column', 1.4], ['pillar', 1.6]],
-    tint: 0xe8e4ff, treeCount: 50, stone: 0xf0ecff, portal: 0xfff0a0, torch: 0xfff0a0, ambience: 'celestial',
+    edge: [['@crystal', 0.5], ['column', 0.55], ['rubble_half', 0.9], ['n_Bush_Common', 0.7]],
+    trees: [['pillar_decorated', 1.8], ['@crystal', 2.2], ['@crystal', 2.8], ['column', 1.4], ['pillar', 1.6], ['n_CommonTree_2', 2], ['n_CommonTree_5', 2]],
+    tint: 0xe8e4ff, treeCount: 50, stone: 0xf0ecff, portal: 0xfff0a0, torch: 0xfff0a0, ambience: 'celestial', leaves: 0xeaf0ff,
   },
 };
 
@@ -912,7 +949,7 @@ export class Landscape {
    * The textured standard materials of the kits, as toon ones (cached, so batching still
    * merges). Rocks get smoothed normals.
    */
-  toonize(object, tint = null, smoothRocks = false) {
+  toonize(object, tint = null, smoothRocks = false, recolorLeaves = null) {
     object.traverse((o) => {
       if (!o.isMesh || !o.material.map) return;
       if (smoothRocks) {
@@ -924,10 +961,22 @@ export class Landscape {
         }
         o.geometry = smoothed;
       }
-      const key = `${o.material.uuid}|${tint ?? ''}`;
+      // Foliage (alpha-tested leaf cards) can be recoloured by the theme (autumn, blossom).
+      const leaf = o.material.alphaTest > 0 && /Lea|Grass|Flower/.test(o.material.name);
+      const recolor = leaf ? recolorLeaves ?? null : null;
+      // The nature pack paints shading into vertex colours.
+      const vertexColors = Boolean(o.geometry.attributes.color) && o.material.vertexColors;
+      const key = `${o.material.uuid}|${tint ?? ''}|${recolor ?? ''}|${vertexColors}`;
       let toon = this.toonCache.get(key);
       if (!toon) {
-        toon = patchRim(new THREE.MeshToonMaterial({ map: o.material.map, color: tint ?? 0xffffff, gradientMap: toonRamp() }));
+        toon = new THREE.MeshToonMaterial({
+          map: o.material.map, color: leaf ? 0xffffff : tint ?? 0xffffff, gradientMap: toonRamp(), vertexColors,
+          alphaTest: o.material.alphaTest, side: o.material.alphaTest > 0 ? THREE.DoubleSide : o.material.side,
+        });
+        toon.name = o.material.name;
+        // Leaf cards: no rim light (thin cards seen edge-on would turn white), wind instead.
+        if (o.material.alphaTest > 0) patchFoliage(toon, this.shared.uTime, recolor);
+        else patchRim(toon);
         this.toonCache.set(key, toon);
       }
       o.material = toon;
@@ -1075,7 +1124,7 @@ export class Landscape {
 
     const place = ([name, width], x, z, rotation, scale = 1) => {
       if (name.startsWith('@')) return this.addProcedural(name, width * scale, x, heightAt(x, z) - 0.05, z, rotation, random, theme);
-      const prop = this.toonize(this.assets.fitted(name, width * scale), theme.tint ?? null, /Rock|rubble/.test(name));
+      const prop = this.toonize(this.assets.fitted(name, width * scale), name.startsWith('n_') ? theme.natureTint ?? null : theme.tint ?? null, /^Rock|rubble/.test(name), theme.leaves ?? null);
       prop.position.set(x, heightAt(x, z) - 0.03, z);
       prop.rotation.y = rotation;
       this.root.add(prop);
@@ -1102,7 +1151,9 @@ export class Landscape {
     }
     // Trees on the hills (none right under the camera).
     let planted = 0;
-    for (let tries = 0; tries < theme.treeCount * 6 && planted < theme.treeCount; tries++) {
+    // Fewer trees on the lighter quality levels.
+    const treeTarget = Math.round(theme.treeCount * (0.55 + 0.45 * this.effects));
+    for (let tries = 0; tries < treeTarget * 6 && planted < treeTarget; tries++) {
       const x = (random() - 0.5) * (TW - 4);
       const z = (random() - 0.5) * (TH - 6) - 3;
       const dx = Math.max(0, Math.abs(x) - (halfW + 1.1));
@@ -1143,7 +1194,8 @@ export class Landscape {
     // The props' holders are empty once batched.
     for (const child of [...this.root.children]) if (!child.isMesh && !child.children.length) child.removeFromParent();
     for (const child of this.root.children) {
-      if (child.isMesh && merged.includes(child.geometry) && !child.userData.noOutline) child.add(new THREE.Mesh(child.geometry, this.outline));
+      // Leaf cards get no outline (an inflated card would draw a dark slab).
+      if (child.isMesh && merged.includes(child.geometry) && !child.userData.noOutline && !(child.material.alphaTest > 0)) child.add(new THREE.Mesh(child.geometry, this.outline));
     }
 
     this.buildVegetation(arena, heightAt, meadow, theme, random, TW, TH);

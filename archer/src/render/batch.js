@@ -53,7 +53,8 @@ export function batchStatic(root, skip = new Set()) {
     if (skip.has(object)) return;
     if (!object.isMesh || object.isInstancedMesh || object.isSkinnedMesh || !object.material.map) return;
     for (let p = object; p && p !== root; p = p.parent) if (skip.has(p) || !p.visible) return;
-    const geometry = plainGeometry(object.geometry, ['position', 'normal', 'uv'], matrix.multiplyMatrices(inverse, object.matrixWorld));
+    const keep = object.material.vertexColors ? ['position', 'normal', 'uv', 'color'] : ['position', 'normal', 'uv'];
+    const geometry = plainGeometry(object.geometry, keep, matrix.multiplyMatrices(inverse, object.matrixWorld));
     if (!geometry) return;
     let shadow = true;
     let outline = true;

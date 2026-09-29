@@ -64,6 +64,16 @@ export class Assets {
       onProgress?.(++loaded / total);
     }));
     await animeJob;
+    // Quaternius' Stylized Nature MegaKit: one file, every model a named node (n_<name>).
+    const nature = bundle?.['nature/nature']
+      ? await loader.parseAsync(Uint8Array.from(atob(bundle['nature/nature']), (c) => c.charCodeAt(0)).buffer, 'assets/nature/')
+      : await loader.loadAsync('assets/nature/nature.glb');
+    for (const child of [...nature.scene.children]) {
+      const holder = new THREE.Group();
+      holder.add(child);
+      this.register(`n_${child.name}`, holder);
+    }
+    onProgress?.(1);
   }
 
   register(name, scene) {

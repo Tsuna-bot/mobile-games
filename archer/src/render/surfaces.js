@@ -159,10 +159,8 @@ vec2 fVoronoi(vec2 p) {
       float hue = fFbm(p * 0.12 + 40.0);
       c *= mix(vec3(0.92, 0.98, 1.08), vec3(1.1, 1.04, 0.84), smoothstep(0.3, 0.7, hue));
       c *= 0.82 + big * 0.34;
-      float ang = fNoise(p * 0.5) * 3.14;
-      vec2 dir = vec2(cos(ang), sin(ang));
-      vec2 sp = vec2(dot(p, dir), dot(p, vec2(-dir.y, dir.x)));
-      float stroke = fNoise(vec2(sp.x * 5.0, sp.y * 26.0));
+      vec2 sp = p + vec2(fNoise(p * 0.7), fNoise(p * 0.7 + 5.0)) * 0.8;
+      float stroke = fNoise(vec2(sp.x * 5.0 + sp.y * 2.0, sp.y * 24.0));
       float blades = fNoise(vec2(p.x * 38.0, p.y * 9.0 + fNoise(p * 6.0) * 3.0));
       c *= 0.9 + stroke * 0.16 * uDetail + blades * 0.08 * uDetail;
       c = mix(c, c * vec3(1.14, 1.1, 0.72), smoothstep(0.62, 0.8, mid) * 0.5);

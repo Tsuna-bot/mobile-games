@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v16';
+const VERSION = 'aetherfall-v17';
 
 const APP_SHELL = [
   './',
@@ -183,6 +183,7 @@ const APP_SHELL = [
   './src/ui/iconPaths.js',
   './src/ui/icons.js',
   './src/ui/ui.js',
+  './assets/nature/nature.glb',
 ];
 
 self.addEventListener('install', (event) => {
