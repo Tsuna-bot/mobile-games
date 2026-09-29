@@ -38,6 +38,7 @@ export function badge(name, cls = '') {
 export function compact(value) {
   const v = Math.floor(value);
   const fmt = (x) => (x >= 100 ? Math.round(x).toString() : (Math.round(x * 10) / 10).toString().replace('.', ','));
+  if (v >= 1e9) return `${fmt(v / 1e9)} Md`;
   if (v >= 1e6) return `${fmt(v / 1e6)} M`;
   if (v >= 1e4) return `${fmt(v / 1e3)} k`;
   return String(v);

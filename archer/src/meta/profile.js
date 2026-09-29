@@ -59,6 +59,13 @@ export function ensureProfile(save) {
     save.gems += 10_000_000;
     save.runes = (save.runes ?? 0) + 10_000_000;
   }
+  // And 100 billion of each, once.
+  if (!save.gifts.hundredBillion) {
+    save.gifts.hundredBillion = true;
+    save.coins += 100_000_000_000;
+    save.gems += 100_000_000_000;
+    save.runes = (save.runes ?? 0) + 100_000_000_000;
+  }
   // Older versions forgot what was equipped on reload: put the best item back in each empty slot.
   for (const slot of SLOTS) {
     if (save.equipped[slot.id]) continue;
