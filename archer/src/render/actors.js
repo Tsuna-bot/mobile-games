@@ -367,7 +367,11 @@ export class Actors {
       if (!copy) {
         // Toon shading (hard light bands), like the heroes and the landscape.
         copy = toonCopy(o.material);
-        if (skin.tint && copy.map) copy.color.setHex(skin.tint);
+        // Textured models take the tint as their colour; vertex-coloured ones are multiplied by it.
+        if (skin.tint) {
+          if (copy.map) copy.color.setHex(skin.tint);
+          else copy.color.multiply(new THREE.Color(skin.tint));
+        }
         copies.set(o.material, copy);
         materials.push(copy);
       }

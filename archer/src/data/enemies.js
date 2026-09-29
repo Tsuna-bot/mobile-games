@@ -95,4 +95,56 @@ export const ENEMIES = {
     hp: 6600, speed: 1.25, radius: 0.85, touch: 130, shot: 85, shotSpeed: 5.6, xp: 160, coins: 150, scale: 2.5,
     blurb: 'Le dernier gardien : il maîtrise les attaques de tous les autres.',
   },
+
+  // Bosses of chapters 9 to 18 (the same attack patterns, new looks and names).
+  sandKing: {
+    id: 'sandKing', name: 'Scarabée colosse', model: 'q_spiky', height: 2.8, tint: 0xffd890, ai: 'bossOgre', boss: true,
+    hp: 5400, speed: 1.15, radius: 0.95, touch: 125, shot: 90, shotSpeed: 6.2, dash: 9, blast: 2, xp: 170, coins: 160, scale: 2.6,
+    blurb: 'Charge dans le sable, frappe le sol et crache des rochers.',
+  },
+  kitsune: {
+    id: 'kitsune', name: 'Kitsune céleste', model: 'q_bluedemon', height: 3, tint: 0xffb8e8, ai: 'bossCount', boss: true, summon: 'wisp',
+    hp: 6200, speed: 1.3, radius: 0.8, touch: 125, shot: 85, shotSpeed: 6, xp: 180, coins: 170, scale: 2.4,
+    blurb: 'Se téléporte entre les cerisiers et lance des éventails de feu-renard.',
+  },
+  brigand: {
+    id: 'brigand', name: 'Chef des brigands', model: 'barbarian', attach: 'axe_2handed', aimClip: 'Spellcast_Summon', ai: 'bossKing', boss: true, summon: 'bomber',
+    hp: 6400, speed: 1, radius: 0.85, touch: 130, shot: 90, shotSpeed: 5.4, xp: 190, coins: 180, scale: 2.5,
+    blurb: 'Spirales de haches et bandits grenadiers en renfort.',
+  },
+  leviathan: {
+    id: 'leviathan', name: 'Léviathan', model: 'q_squidle', height: 3, hover: true, tint: 0x8affe8, ai: 'bossKing', boss: true, summon: 'blob',
+    hp: 6000, speed: 1, radius: 0.9, touch: 130, shot: 88, shotSpeed: 5.4, xp: 200, coins: 190, scale: 2.5,
+    blurb: 'Des spirales d’encre et des blobs des profondeurs.',
+  },
+  skyDragon: {
+    id: 'skyDragon', name: 'Dragon céleste', model: 'q_dragon', height: 3.2, hover: true, tint: 0xfff0b0, ai: 'bossCount', boss: true, summon: 'wisp',
+    hp: 6800, speed: 1.3, radius: 0.85, touch: 135, shot: 88, shotSpeed: 6.2, xp: 210, coins: 200, scale: 2.5,
+    blurb: 'Plonge d’un nuage à l’autre en soufflant des éventails de lumière.',
+  },
+  warlord: {
+    id: 'warlord', name: 'Seigneur orc', model: 'q_orc', height: 3.2, tint: 0xb8ff90, ai: 'bossOgre', boss: true,
+    hp: 6000, speed: 1.25, radius: 0.95, touch: 140, shot: 95, shotSpeed: 6.4, dash: 10, blast: 2.1, xp: 220, coins: 210, scale: 2.6,
+    blurb: 'Charges brutales, frappes au sol et rochers.',
+  },
+  stormKnight: {
+    id: 'stormKnight', name: 'Chevalier-tempête', model: 'knight', attach: 'sword_1handed', tint: 0xa8c8ff, ai: 'bossFinal', boss: true, summon: 'ghost', dash: 10.5, blast: 2.1,
+    hp: 6800, speed: 1.3, radius: 0.85, touch: 140, shot: 90, shotSpeed: 5.8, xp: 230, coins: 220, scale: 2.5,
+    blurb: 'La foudre à la main : il enchaîne toutes les attaques.',
+  },
+  voidEye: {
+    id: 'voidEye', name: 'Œil du néant', model: 'q_alien', height: 3.1, tint: 0xc890ff, ai: 'bossKing', boss: true, summon: 'wisp',
+    hp: 6600, speed: 0.95, radius: 0.9, touch: 140, shot: 92, shotSpeed: 5.4, xp: 240, coins: 230, scale: 2.5,
+    blurb: 'Spirales du néant et essaims de feux follets.',
+  },
+  pharaoh: {
+    id: 'pharaoh', name: 'Pharaon éternel', model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon', tint: 0xffe090, ai: 'bossCount', boss: true, summon: 'skeleton',
+    hp: 7000, speed: 1.2, radius: 0.85, touch: 140, shot: 92, shotSpeed: 6, xp: 250, coins: 250, scale: 2.5,
+    blurb: 'Se téléporte, lance des éventails dorés et réveille ses archers.',
+  },
+  archon: {
+    id: 'archon', name: 'Archonte déchu', model: 'q_demon', height: 3.3, tint: 0xfff0d8, ai: 'bossFinal', boss: true, summon: 'vampire', dash: 11, blast: 2.3,
+    hp: 7600, speed: 1.35, radius: 0.9, touch: 150, shot: 95, shotSpeed: 6.2, xp: 300, coins: 300, scale: 2.6,
+    blurb: 'Le maître du trône céleste. Toutes les attaques, plus vite.',
+  },
 };

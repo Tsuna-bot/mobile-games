@@ -76,7 +76,114 @@ const CITADEL = {
   blobling: { model: 'q_pinkblob', height: 0.5 },
 };
 
-const SKINS = { forest: FOREST, dungeon: DUNGEON, graveyard: GRAVEYARD, mines: MINES, tundra: TUNDRA, swamp: SWAMP, volcano: VOLCANO, citadel: CITADEL };
+const DESERT = {
+  zombie: { model: 'q_spiky', height: 0.85, tint: 0xffd890 },
+  orc: { model: 'q_orc_skull', height: 1.45, tint: 0xffe0b0 },
+  ghost: { model: 'q_ghost_skull', height: 1, hover: true },
+  wisp: { model: 'q_bee', height: 0.6, hover: true },
+  vampire: { model: 'q_demon', height: 1.3, tint: 0xffc890 },
+  keeper: { model: 'q_wizard', height: 1.05, tint: 0xffe0a0 },
+  bomber: { model: 'q_tribal', height: 1.2 },
+};
+
+const SAKURA = {
+  zombie: { model: 'q_mushnub', height: 0.8, tint: 0xffc8e0 },
+  skeleton: { model: 'q_mushnub_evolved', height: 0.95, tint: 0xffd8ec },
+  orc: { model: 'q_ninja', height: 1.35 },
+  ghost: { model: 'q_glub', height: 0.8, hover: true, tint: 0xffc0e0 },
+  wisp: { model: 'q_bee', height: 0.6, hover: true },
+  vampire: { model: 'q_bluedemon', height: 1.3, tint: 0xffb8e8 },
+  keeper: { model: 'q_wizard', height: 1 },
+};
+
+const AUTUMN = {
+  zombie: { model: 'q_mushnub', height: 0.8, tint: 0xffb070 },
+  skeleton: { model: 'skeleton_rogue', attach: 'crossbow_1handed', aimClip: '1H_Ranged_Shoot', tint: 0xffd8a0 },
+  orc: { model: 'q_orc', height: 1.45, tint: 0xffc080 },
+  ghost: { model: 'q_ghost', height: 1.05, hover: true, tint: 0xffd8a0 },
+  wisp: { model: 'q_bee_evolved', height: 0.65, hover: true },
+  vampire: { model: 'q_demon', height: 1.3 },
+  keeper: { model: 'q_wizard', height: 1.05, tint: 0xffb070 },
+  bomber: { model: 'rogue', show: ['Throwable'], aimClip: 'Throw', tint: 0xffa060 },
+};
+
+const ABYSS = {
+  zombie: { model: 'q_glub', height: 0.85, tint: 0x8affe8 },
+  skeleton: { model: 'q_squidle', height: 1, hover: true, tint: 0xffa0c0 },
+  orc: { model: 'q_spiky', height: 1.2, tint: 0x8ae0ff },
+  ghost: { model: 'q_glub_evolved', height: 1.1, hover: true },
+  wisp: { model: 'q_hywirl', height: 0.6, hover: true, tint: 0x9affff },
+  vampire: { model: 'q_squidle', height: 1.25, hover: true },
+  keeper: { model: 'q_wizard', height: 1.05, tint: 0x8ae8ff },
+  blob: { model: 'q_alien_blob', height: 0.95, tint: 0x9affe0 },
+  blobling: { model: 'q_alien_blob', height: 0.5, tint: 0x9affe0 },
+};
+
+const SKY = {
+  zombie: { model: 'q_mushnub', height: 0.8, tint: 0xe8f0ff },
+  orc: { model: 'q_orc_skull', height: 1.45, tint: 0xe0e8ff },
+  ghost: { model: 'q_ghost', height: 1.05, hover: true },
+  wisp: { model: 'q_dragon_small', height: 0.7, hover: true },
+  vampire: { model: 'q_bluedemon', height: 1.3, tint: 0xd8e8ff },
+  keeper: { model: 'q_wizard', height: 1.05, tint: 0xfff0c0 },
+};
+
+const JUNGLE = {
+  zombie: { model: 'q_dino', height: 0.95 },
+  skeleton: { model: 'q_mushnub_evolved', height: 0.95, tint: 0xd0ff90 },
+  orc: { model: 'q_orc', height: 1.45 },
+  ghost: { model: 'q_glub', height: 0.8, hover: true },
+  wisp: { model: 'q_bee_evolved', height: 0.65, hover: true },
+  vampire: { model: 'q_squidle', height: 1.2, hover: true, tint: 0xd8ff9a },
+  keeper: { model: 'q_wizard', height: 1 },
+  bomber: { model: 'q_tribal', height: 1.2 },
+  blob: { model: 'q_greenblob', height: 0.9 },
+  blobling: { model: 'q_greenblob', height: 0.5 },
+};
+
+const STORM = {
+  zombie: { model: 'q_yeti', height: 0.95, tint: 0xc8d8ff },
+  orc: { model: 'q_orc_skull', height: 1.45, tint: 0xa8c8ff },
+  ghost: { model: 'q_ghost', height: 1.05, hover: true, tint: 0xc8e0ff },
+  wisp: { model: 'q_hywirl', height: 0.6, hover: true },
+  vampire: { model: 'q_bluedemon', height: 1.3 },
+  keeper: { model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon', tint: 0xa8c8ff },
+};
+
+const VOID = {
+  zombie: { model: 'q_alien', height: 0.95, tint: 0xc890ff },
+  skeleton: { model: 'skeleton_rogue', attach: 'crossbow_1handed', aimClip: '1H_Ranged_Shoot', tint: 0xc8a0ff },
+  ghost: { model: 'q_ghost_skull', height: 1, hover: true, tint: 0xd0a0ff },
+  wisp: { model: 'q_hywirl', height: 0.6, hover: true, tint: 0xd8a0ff },
+  vampire: { model: 'q_ninja', height: 1.2, tint: 0xb890ff },
+  blob: { model: 'q_pinkblob', height: 0.9 },
+  blobling: { model: 'q_pinkblob', height: 0.5 },
+};
+
+const GOLDEN = {
+  zombie: { model: 'skeleton_minion', tint: 0xffe8a0 },
+  orc: { model: 'skeleton_warrior', attach: 'sword_1handed', aimClip: 'Taunt', tint: 0xffe090 },
+  ghost: { model: 'q_ghost_skull', height: 1, hover: true, tint: 0xfff0b0 },
+  wisp: { model: 'q_bee', height: 0.6, hover: true },
+  vampire: { model: 'q_demon', height: 1.3, tint: 0xffd890 },
+  bomber: { model: 'q_tribal', height: 1.2, tint: 0xffe0b0 },
+};
+
+const CELESTIAL = {
+  zombie: { model: 'q_mushnub_evolved', height: 0.95, tint: 0xe8e8ff },
+  orc: { model: 'q_orc_skull', height: 1.45, tint: 0xfff4d8 },
+  ghost: { model: 'q_ghost', height: 1.05, hover: true, tint: 0xfff4d8 },
+  wisp: { model: 'q_dragon_small', height: 0.7, hover: true, tint: 0xfff0c0 },
+  vampire: { model: 'q_bluedemon', height: 1.3, tint: 0xfff0e0 },
+  keeper: { model: 'q_wizard', height: 1.05, tint: 0xd8d8ff },
+  blob: { model: 'q_pinkblob', height: 0.9, tint: 0xfff0ff },
+  blobling: { model: 'q_pinkblob', height: 0.5, tint: 0xfff0ff },
+};
+
+const SKINS = {
+  forest: FOREST, dungeon: DUNGEON, graveyard: GRAVEYARD, mines: MINES, tundra: TUNDRA, swamp: SWAMP, volcano: VOLCANO, citadel: CITADEL,
+  desert: DESERT, sakura: SAKURA, autumn: AUTUMN, abyss: ABYSS, sky: SKY, jungle: JUNGLE, storm: STORM, void: VOID, golden: GOLDEN, celestial: CELESTIAL,
+};
 
 /** The look of monster `def` in chapter theme `theme` (falls back on the monster's own). */
 export function skinOf(def, theme) {

@@ -211,6 +211,38 @@ export const ALL_CHAPTERS = [
   },
 ];
 
+/**
+ * Chapters 9 to 18 follow one pacing: `pool` = four monster types of the chapter
+ * (a, b, c, d), rising in pressure, an elite-friendly room 5, the boss in room 10.
+ */
+function paced([a, b, c, d], boss, extra = 'wisp') {
+  return [
+    [[a, 4], [b, 2]],
+    [[b, 3], [c, 2]],
+    [[c, 2], [d, 1], [a, 2]],
+    [[d, 2], [extra, 6]],
+    [[a, 3], [c, 2], [b, 2]],
+    [[d, 2], [b, 3], [extra, 4]],
+    [[c, 3], [a, 3], [d, 1]],
+    [[b, 3], [d, 2], ['bomber', 1]],
+    [[a, 3], [c, 3], [d, 2]],
+    [[boss, 1]],
+  ];
+}
+
+ALL_CHAPTERS.push(
+  { id: 'desert', name: 'Dunes d’Ashara', theme: 'desert', hp: 14, boss: 'sandKing', rooms: paced(['zombie', 'orc', 'bomber', 'vampire'], 'sandKing') },
+  { id: 'sakura', name: 'Jardin des cerisiers', theme: 'sakura', hp: 16.8, boss: 'kitsune', rooms: paced(['skeleton', 'ghost', 'orc', 'keeper'], 'kitsune') },
+  { id: 'autumn', name: 'Bois d’automne', theme: 'autumn', hp: 19.8, boss: 'brigand', rooms: paced(['zombie', 'skeleton', 'bomber', 'orc'], 'brigand') },
+  { id: 'abyss', name: 'Abysses de corail', theme: 'abyss', hp: 23.2, boss: 'leviathan', rooms: paced(['blob', 'ghost', 'skeleton', 'vampire'], 'leviathan') },
+  { id: 'sky', name: 'Îles célestes', theme: 'sky', hp: 27, boss: 'skyDragon', rooms: paced(['orc', 'ghost', 'keeper', 'vampire'], 'skyDragon') },
+  { id: 'jungle', name: 'Jungle d’émeraude', theme: 'jungle', hp: 31.5, boss: 'warlord', rooms: paced(['zombie', 'blob', 'skeleton', 'orc'], 'warlord') },
+  { id: 'storm', name: 'Pics de l’orage', theme: 'storm', hp: 36.5, boss: 'stormKnight', rooms: paced(['orc', 'ghost', 'keeper', 'vampire'], 'stormKnight') },
+  { id: 'void', name: 'Faille du néant', theme: 'void', hp: 42, boss: 'voidEye', rooms: paced(['skeleton', 'blob', 'ghost', 'vampire'], 'voidEye') },
+  { id: 'golden', name: 'Cité d’or', theme: 'golden', hp: 48, boss: 'pharaoh', rooms: paced(['zombie', 'orc', 'bomber', 'vampire'], 'pharaoh') },
+  { id: 'celestial', name: 'Trône céleste', theme: 'celestial', hp: 55, boss: 'archon', rooms: paced(['orc', 'keeper', 'vampire', 'blob'], 'archon') },
+);
+
 /** Chapters players can pick (the others are still being built). */
 export const CHAPTERS = ALL_CHAPTERS.filter((c) => c.ready !== false);
 
