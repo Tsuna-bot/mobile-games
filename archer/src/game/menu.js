@@ -1,5 +1,5 @@
 import { writeSave } from '../core/storage.js';
-import { badge, icon } from '../ui/icons.js';
+import { badge, compact, icon } from '../ui/icons.js';
 import { BASES, LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
 import { CHAPTERS } from '../data/chapters.js';
@@ -100,8 +100,8 @@ export class Menu {
 
   refreshWallet() {
     const save = this.save;
-    this.$('menu-coins').textContent = Math.floor(save.coins);
-    this.$('menu-gems').textContent = save.gems;
+    this.$('menu-coins').textContent = compact(save.coins);
+    this.$('menu-gems').textContent = compact(save.gems);
     this.$('menu-power').textContent = powerScore(save);
     this.$('menu-level').textContent = save.account.level;
     this.$('menu-level-bar').style.width = `${Math.round(Math.min(1, save.account.xp / accountXpNeeded(save.account.level)) * 100)}%`;
@@ -512,7 +512,7 @@ export class Menu {
         <small class="hero-sheet__bonus">Bonus de niveau : attaque +${Math.round(bonus.damageMul * 100)} %, vie +${Math.round(bonus.hpMul * 100)} %${h.cls ? ` · Classe : ${classOf(id, h.cls).name}` : ''}</small>
       </div>
       <p class="hero-sheet__reco">${icon('check')} Armes conseillées : ${(RECOMMENDED[id] ?? []).map((b) => `<b>${BASES[b].name}</b>`).join(' · ')} <small>(+${Math.round(RECOMMENDED_BONUS * 100)} % d’attaque)</small></p>
-      <h3 class="panel-subtitle">Sorts <span class="runes-pill">${icon('rune')} ${save.runes} runes</span></h3>
+      <h3 class="panel-subtitle">Sorts <span class="runes-pill">${icon('rune')} ${compact(save.runes)} runes</span></h3>
       <div class="spell-list">${spells}${classSpellRow}</div>
       <h3 class="panel-subtitle">Classe</h3>
       ${classHtml}

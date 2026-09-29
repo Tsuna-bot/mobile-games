@@ -33,3 +33,12 @@ export function icon(name, cls = '') {
 export function badge(name, cls = '') {
   return `<span class="badge badge--${TONE_OF[name] ?? 'gold'} ${cls}">${icon(name)}</span>`;
 }
+
+/** Big numbers made short for the wallet: 25 300 → 25,3 k, 10 002 000 → 10 M. */
+export function compact(value) {
+  const v = Math.floor(value);
+  const fmt = (x) => (x >= 100 ? Math.round(x).toString() : (Math.round(x * 10) / 10).toString().replace('.', ','));
+  if (v >= 1e6) return `${fmt(v / 1e6)} M`;
+  if (v >= 1e4) return `${fmt(v / 1e3)} k`;
+  return String(v);
+}

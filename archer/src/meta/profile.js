@@ -52,6 +52,13 @@ export function ensureProfile(save) {
     save.coins += 2000;
     save.gems += 300;
   }
+  // Gift asked for by the player: 10 million gold, gems and runes, once.
+  if (!save.gifts.tenMillion) {
+    save.gifts.tenMillion = true;
+    save.coins += 10_000_000;
+    save.gems += 10_000_000;
+    save.runes = (save.runes ?? 0) + 10_000_000;
+  }
   // Older versions forgot what was equipped on reload: put the best item back in each empty slot.
   for (const slot of SLOTS) {
     if (save.equipped[slot.id]) continue;

@@ -1,5 +1,5 @@
 import { ABILITIES } from '../data/abilities.js';
-import { badge, icon } from './icons.js';
+import { badge, compact, icon } from './icons.js';
 
 const FLOATERS = 40;
 const FLOAT_NORMAL = [
@@ -424,8 +424,8 @@ export class UI {
   // ------------------------------------------------------------ menu
 
   setMenu({ coins, gems, kicker, chapterName, best, locked, lockText, canPrev, canNext, mode, modes }) {
-    this.$('menu-coins').textContent = coins;
-    this.$('menu-gems').textContent = gems;
+    this.$('menu-coins').textContent = compact(coins);
+    this.$('menu-gems').textContent = compact(gems);
     this.$('chapter-kicker').textContent = kicker;
     this.$('chapter-name').textContent = chapterName;
     this.$('chapter-best').textContent = locked ? lockText : best;
