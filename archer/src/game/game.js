@@ -25,6 +25,9 @@ import { Run, STATE } from '../sim/run.js';
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
 const ROOMS = 10;
 const ENDLESS_GEMS = ENDLESS.gemsPerBoss;
+// Kills less than this many seconds apart chain into a combo; shouts at milestones.
+const COMBO_TIME = 2.4;
+const COMBO_TAGS = { 10: 'Carnage !', 20: 'Déchaîné !', 35: 'Inarrêtable !', 50: 'Légendaire !', 80: 'Divin !' };
 const HAPTIC = { hit: 10, hurt: [30, 20, 40], kill: 6, level: [15, 40, 15], boss: [40, 30, 60, 30, 90] };
 
 /**
@@ -296,6 +299,9 @@ export class Game {
     // Endless goes through the landscapes of the chapters already opened.
     const themes = CHAPTERS.slice(0, save.unlocked + 1).map((c) => c.theme);
     this.run = new Run(chapterIndex, gear, this.createListener(), undefined, { mode, themes });
+    this.combo = { count: 0, timer: 0 };
+    this.bestCombo = 0;
+    this.ui.setCombo(0, 0);
     this.runGear = gear;
     this.actors.createHero(gear.hero);
     if (this.run.pet) this.actors.createPet(this.run.pet.def.color);
@@ -404,6 +410,8 @@ export class Game {
     this.mode = MODE.END;
     this.joystick.release();
     this.ui.setHud(false);
+    this.ui.setLowHp(false);
+    this.ui.setCombo(0, 0);
     this.ui.setBoss(null);
     const save = this.save;
     const coins = Math.floor(run.coins);
@@ -485,6 +493,8 @@ export class Game {
         ['Niveau', run.level],
         ['Monstres', run.kills],
         ['Élites', run.eliteKills],
+        ['Meilleur combo', this.bestCombo ?? 0],
+        ['Butin', run.loot.length],
       ],
       loot.join(''),
     );
@@ -567,6 +577,7 @@ export class Game {
       onDot: (enemy, amount) => this.floatWorld(enemy.x, 1.1, enemy.z, String(Math.round(amount)), 'dot'),
       onEnemyDie: (enemy) => {
         actors.enemyDied(enemy);
+        this.addCombo();
         // Loot falling: a burst in the rarity colour (after the kill's own drops are placed).
         setTimeout(() => {
           const run = this.run;
@@ -684,7 +695,11 @@ export class Game {
       onPickup: (item) => {
         const p = this.run.player;
         fx.pickup(p.x, p.z, item.kind);
-        if (item.kind === 'coin') audio.coin();
+        if (item.kind === 'coin') {
+          audio.coin();
+          const at = this.screenOf(item.x, 0.3, item.z);
+          ui.flyCoin(at.x, at.y);
+        }
         else if (item.kind === 'heart') {
           fx.heal(p.x, p.z);
           this.floatWorld(p.x, 1.3, p.z, 'Soin', 'heal');
@@ -788,6 +803,21 @@ export class Game {
     }
   }
 
+  /** A kill feeds the combo; milestones shout, buzz and chime. */
+  addCombo() {
+    const c = (this.combo ??= { count: 0, timer: 0 });
+    c.count = c.timer > 0 ? c.count + 1 : 1;
+    c.timer = COMBO_TIME;
+    const tag = COMBO_TAGS[c.count];
+    if (tag) {
+      this.audio.upgrade();
+      this.haptics.pulse([12, 20, 24]);
+      this.anime(0.35, 0);
+    }
+    this.ui.setCombo(c.count, 1, tag ?? '');
+    this.bestCombo = Math.max(this.bestCombo ?? 0, c.count);
+  }
+
   /** Short black fade around room changes. */
   fade(middle) {
     this.fading = true;
@@ -797,6 +827,13 @@ export class Game {
       this.fading = false;
       this.fadeEl.style.opacity = '0';
     }, 230);
+  }
+
+  /** Screen position (CSS pixels) of a world point. */
+  screenOf(x, y, z) {
+    const rect = this.view.canvas.getBoundingClientRect();
+    const v = this.tmp.set(x, y, z).project(this.view.camera);
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
   }
 
   floatWorld(x, y, z, text, variant) {
@@ -856,6 +893,7 @@ export class Game {
     else this.actors.update(dt, this.time, this.view.camera, run);
     this.fx.update(dt, run && !this.fading ? run : null);
     this.updateCamera(dt);
+    this.hudDt = dt;
     if (run) this.updateHud();
     this.view.render();
   }
@@ -930,6 +968,15 @@ export class Game {
     const run = this.run;
     const ui = this.ui;
     ui.updateSpells(run.spells.map((_, i) => run.spellState(i)));
+    const dt = this.hudDt ?? 0.016;
+    ui.tick(dt);
+    const combo = this.combo;
+    if (combo?.timer > 0) {
+      if (this.mode === MODE.PLAYING) combo.timer -= dt;
+      ui.setCombo(combo.count, Math.max(0, combo.timer / COMBO_TIME));
+    }
+    const p = run.player;
+    ui.setLowHp(this.mode === MODE.PLAYING && p.hp > 0 && p.hp < p.maxHp * 0.3);
     // A boost glows around the hero while it lasts.
     if (this.aura && this.mode === MODE.PLAYING) {
       if (this.time > this.aura.until || !run.buffs.length && run.player.invulnerable <= 0) this.aura = null;

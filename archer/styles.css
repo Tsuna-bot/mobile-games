@@ -2741,3 +2741,435 @@ button:disabled {
   flex: 1;
   min-height: 0;
 }
+
+/* ================================================================ HUD juice */
+
+/* Every button sinks under the thumb and springs back. */
+.btn,
+.chip,
+.nav button,
+.side-btn,
+.round-btn,
+.modes button,
+.tabs button,
+.item,
+.chapter-card__nav {
+  transition: transform 0.16s var(--spring), filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:active:not(:disabled),
+.chip:active,
+.nav button:active,
+.side-btn:active,
+.round-btn:active,
+.modes button:active,
+.tabs button:active,
+.item:active,
+.chapter-card__nav:active:not(:disabled) {
+  transform: scale(0.92);
+  filter: brightness(1.12);
+  transition-duration: 0.06s;
+}
+
+/* The Play button: a light sweep across it now and then. */
+.btn--play {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn--play::after {
+  content: '';
+  position: absolute;
+  inset: -20% auto -20% -40%;
+  width: 34%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  transform: skewX(-18deg);
+  animation: sheen 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sheen {
+  0%, 55% { left: -40%; }
+  85%, 100% { left: 120%; }
+}
+
+/* XP bar: a moving shine and a bright head. */
+.xp__bar {
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.xp__bar i {
+  position: relative;
+  background: linear-gradient(90deg, #3fc8ff, #6ff0ff 60%, #d8fff4);
+  box-shadow: 0 0 10px rgba(111, 240, 255, 0.7);
+  transition: width 0.45s var(--spring);
+  overflow: hidden;
+}
+
+.xp__bar i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.7) 50%, transparent 80%);
+  background-size: 60px 100%;
+  background-repeat: no-repeat;
+  animation: xp-shine 1.8s linear infinite;
+}
+
+@keyframes xp-shine {
+  from { background-position: -60px 0; }
+  to { background-position: calc(100% + 60px) 0; }
+}
+
+.xp.bump .xp__level {
+  animation: level-pop 0.6s var(--spring);
+}
+
+.xp.bump .xp__bar {
+  animation: bar-flash 0.6s ease-out;
+}
+
+@keyframes level-pop {
+  0% { transform: scale(1.8) rotate(-10deg); box-shadow: 0 0 0 0 rgba(111, 240, 255, 0.9); }
+  60% { box-shadow: 0 0 0 14px rgba(111, 240, 255, 0); }
+  100% { transform: scale(1); }
+}
+
+@keyframes bar-flash {
+  0% { filter: brightness(2.2); }
+  100% { filter: none; }
+}
+
+/* Coins: the counter bounces when a coin lands. */
+.hud__coins.is-bump {
+  animation: coin-bump 0.28s var(--spring);
+}
+
+.hud__coins.is-bump .coin-icon {
+  animation: coin-spin 0.35s ease-out;
+}
+
+@keyframes coin-bump {
+  0% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+@keyframes coin-spin {
+  0% { transform: scaleX(0.2); filter: brightness(1.8); }
+  100% { transform: none; }
+}
+
+.flyers {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.flyer {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  opacity: 0;
+  box-shadow: 0 0 10px rgba(255, 210, 80, 0.8);
+  will-change: transform;
+}
+
+/* Boss bar: a white chip lags behind the damage, the bar shakes on hits. */
+.boss__track {
+  position: relative;
+  height: 18px;
+  box-shadow: 0 0 0 2px rgba(255, 90, 74, 0.6), 0 0 18px rgba(255, 60, 40, 0.35);
+}
+
+.boss__track i {
+  position: absolute;
+  inset: 2px auto 2px 2px;
+  max-width: calc(100% - 4px);
+}
+
+.boss__track #boss-fill {
+  background: linear-gradient(180deg, #ff7a5a, #e0281a 60%, #a01408);
+  transition: width 0.12s ease-out;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+
+.boss__track .boss__chip {
+  background: #fff4e0;
+  transition: width 0.5s cubic-bezier(0.3, 0, 0.3, 1);
+}
+
+.boss__track .boss__half {
+  left: 50%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 0;
+}
+
+.boss.is-hit .boss__track {
+  animation: boss-shake 0.18s linear;
+}
+
+.boss.is-enraged .boss__name {
+  color: #ff9a7a;
+  animation: enraged 0.9s ease-in-out infinite;
+}
+
+@keyframes boss-shake {
+  25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -1px); }
+  75% { transform: translate(-1px, 0); }
+}
+
+@keyframes enraged {
+  50% { text-shadow: 0 0 12px rgba(255, 80, 40, 0.9), 0 2px 0 rgba(0, 0, 0, 0.5); }
+}
+
+/* Low life: the screen edges beat red. */
+.hurt.is-low {
+  opacity: 1;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(255, 30, 30, 0.42) 100%);
+  animation: heartbeat 1s ease-in-out infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { opacity: 0.55; }
+  15% { opacity: 1; }
+  30% { opacity: 0.6; }
+  45% { opacity: 0.95; }
+}
+
+/* Kill combo, under the XP bar on the right. */
+.combo {
+  position: absolute;
+  top: calc(var(--safe-top) + 104px);
+  right: 12px;
+  z-index: 3;
+  display: grid;
+  justify-items: end;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(30px);
+  transition: opacity 0.25s ease, transform 0.3s var(--spring);
+}
+
+.combo.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.combo b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 38px;
+  line-height: 0.9;
+  color: #fff;
+  text-shadow: 2px 0 0 #1c1430, -2px 0 0 #1c1430, 0 2px 0 #1c1430, 0 -2px 0 #1c1430, 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 16px var(--combo, rgba(111, 240, 255, 0.8));
+}
+
+.combo b::before {
+  content: '×';
+  font-size: 24px;
+  margin-right: 2px;
+}
+
+.combo span {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--combo-c, #9ff0ff);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.combo > i {
+  display: block;
+  width: 70px;
+  height: 5px;
+  margin-top: 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.combo > i > i {
+  display: block;
+  height: 100%;
+  background: var(--combo-c, #9ff0ff);
+  transform-origin: left;
+}
+
+.combo[data-tier='1'] { --combo: rgba(255, 210, 80, 0.9); --combo-c: #ffd25a; }
+.combo[data-tier='2'] { --combo: rgba(255, 110, 60, 0.95); --combo-c: #ff8a4a; }
+.combo[data-tier='3'] { --combo: rgba(220, 110, 255, 1); --combo-c: #e0a0ff; }
+
+.combo.is-pop b {
+  animation: combo-pop 0.25s var(--spring);
+}
+
+@keyframes combo-pop {
+  0% { transform: scale(1.5) rotate(-6deg); }
+  100% { transform: none; }
+}
+
+.combo em {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  font-style: normal;
+  font-family: var(--font-display);
+  font-size: 22px;
+  white-space: nowrap;
+  color: var(--combo-c, #ffd25a);
+  text-shadow: 2px 0 0 #1c1430, -2px 0 0 #1c1430, 0 2px 0 #1c1430, 0 -2px 0 #1c1430;
+  opacity: 0;
+}
+
+.combo em.is-playing {
+  animation: combo-tag 1.4s var(--ease-out) forwards;
+}
+
+@keyframes combo-tag {
+  0% { opacity: 0; transform: scale(2.4) rotate(-8deg); }
+  12% { opacity: 1; transform: scale(0.9) rotate(3deg); }
+  22% { transform: scale(1.05) rotate(0deg); }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+/* Ability cards: flip in one after another, the chosen one lifts, the others fall. */
+.screen.is-visible .card {
+  animation: card-flip 0.55s var(--spring) forwards;
+}
+
+@keyframes card-flip {
+  0% { opacity: 0; transform: perspective(600px) rotateY(80deg) translateY(30px) scale(0.8); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.35) 45%, transparent 60%);
+  background-size: 250% 100%;
+  background-position: 120% 0;
+  animation: card-shine 2.6s ease-in-out 0.6s infinite;
+  pointer-events: none;
+}
+
+@keyframes card-shine {
+  0%, 60% { background-position: 120% 0; }
+  100% { background-position: -40% 0; }
+}
+
+.cards.is-picking .card:not(.is-picked) {
+  animation: card-drop 0.22s ease-in forwards !important;
+}
+
+.cards .card.is-picked {
+  animation: card-pick 0.23s var(--spring) forwards !important;
+  z-index: 1;
+}
+
+@keyframes card-drop {
+  to { opacity: 0; transform: translateY(40px) scale(0.85); }
+}
+
+@keyframes card-pick {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.12) translateY(-10px); box-shadow: inset 0 0 0 3px #ffe07a, 0 0 40px rgba(255, 210, 90, 0.8); }
+}
+
+/* End screen: rewards pop in one after another. */
+.screen.is-visible #end-loot > * {
+  animation: reward-pop 0.45s var(--spring) both;
+}
+
+#end-loot > *:nth-child(1) { animation-delay: 0.25s; }
+#end-loot > *:nth-child(2) { animation-delay: 0.35s; }
+#end-loot > *:nth-child(3) { animation-delay: 0.45s; }
+#end-loot > *:nth-child(4) { animation-delay: 0.55s; }
+#end-loot > *:nth-child(5) { animation-delay: 0.65s; }
+#end-loot > *:nth-child(6) { animation-delay: 0.75s; }
+#end-loot > *:nth-child(7) { animation-delay: 0.85s; }
+#end-loot > *:nth-child(n + 8) { animation-delay: 0.95s; }
+
+@keyframes reward-pop {
+  0% { opacity: 0; transform: scale(0.4) translateY(14px); }
+  100% { opacity: 1; transform: none; }
+}
+
+.screen.is-visible #end-title {
+  animation: title-in 0.6s var(--spring) both;
+}
+
+@keyframes title-in {
+  0% { opacity: 0; transform: scale(1.8); letter-spacing: 0.2em; }
+  100% { opacity: 1; transform: none; }
+}
+
+/* Room banner: slams in. */
+.banner.is-playing {
+  animation-timing-function: var(--spring);
+}
+
+/* Menu tabs slide in from the side of the tab you came from. */
+.panel-view.is-active {
+  animation: panel-in 0.32s var(--spring);
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+}
+
+/* Spell buttons: a ripple on each cast. */
+.spell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 var(--spell);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.spell.is-cast::after {
+  animation: spell-ripple 0.5s ease-out;
+}
+
+@keyframes spell-ripple {
+  0% { opacity: 1; box-shadow: 0 0 0 0 var(--spell); }
+  100% { opacity: 0; box-shadow: 0 0 0 22px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--play::after,
+  .xp__bar i::after,
+  .card::after {
+    animation: none;
+  }
+}
+
+.spell {
+  overflow: visible;
+}
+
+.hint {
+  white-space: normal;
+  width: max-content;
+  max-width: min(78vw, 300px);
+  text-align: center;
+  border-radius: 18px;
+  line-height: 1.3;
+}
+
+.hurt.is-low {
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(255, 20, 20, 0.62) 100%);
+}

@@ -136,11 +136,89 @@ export class UI {
     this.$('hud-room').textContent = room;
   }
 
+  /** The coin counter rolls toward its value (see tick) and bounces when it grows. */
   setCoins(coins) {
-    const value = Math.floor(coins);
-    if (this.shown.coins === value) return;
-    this.shown.coins = value;
-    this.$('hud-coins').textContent = value;
+    this.coinTarget = Math.floor(coins);
+    if (this.coinShown === undefined || this.coinTarget < this.coinShown) this.coinShown = this.coinTarget;
+  }
+
+  /** Per-frame HUD animation (rolling counters, combo timer). */
+  tick(dt) {
+    if (this.coinTarget !== undefined && this.coinShown !== this.coinTarget) {
+      const gap = this.coinTarget - this.coinShown;
+      this.coinShown += Math.sign(gap) * Math.max(1, Math.ceil(Math.abs(gap) * Math.min(1, dt * 9)));
+      if (Math.abs(this.coinTarget - this.coinShown) < 1) this.coinShown = this.coinTarget;
+      this.$('hud-coins').textContent = this.coinShown;
+    }
+  }
+
+  /** A coin flies from a screen point to the coin counter; the counter bounces when it lands. */
+  flyCoin(x, y, kind = 'coin') {
+    const now = performance.now();
+    if (now - (this.lastFly ?? 0) < 45) return;
+    this.lastFly = now;
+    this.flyPool ??= [];
+    let el = this.flyPool.find((e) => !e.busy);
+    if (!el) {
+      if (this.flyPool.length >= 18) return;
+      el = document.createElement('i');
+      this.$('flyers').append(el);
+      this.flyPool.push(el);
+    }
+    el.busy = true;
+    el.className = kind === 'gem' ? 'flyer gem-icon' : 'flyer coin-icon';
+    const target = this.$('hud-coins').parentElement.querySelector('.coin-icon').getBoundingClientRect();
+    const tx = target.left + target.width / 2;
+    const ty = target.top + target.height / 2;
+    const mx = x + (Math.random() - 0.5) * 80;
+    const my = Math.min(y, ty) - 40 - Math.random() * 60;
+    const anim = el.animate([
+      { transform: `translate(${x}px, ${y}px) scale(0.4)`, opacity: 0 },
+      { transform: `translate(${mx}px, ${my}px) scale(1.25)`, opacity: 1, offset: 0.35 },
+      { transform: `translate(${tx}px, ${ty}px) scale(0.7)`, opacity: 1 },
+    ], { duration: 520 + Math.random() * 160, easing: 'cubic-bezier(0.45, 0, 0.6, 1)' });
+    anim.onfinish = () => {
+      el.busy = false;
+      el.style.opacity = 0;
+      const box = this.$('hud-coins').parentElement;
+      box.classList.remove('is-bump');
+      void box.offsetWidth;
+      box.classList.add('is-bump');
+    };
+  }
+
+  /** Kill combo: count, time left (0..1), a tag at milestones. */
+  setCombo(count, share, tag = '') {
+    const box = this.$('combo');
+    const visible = count >= 3 && share > 0;
+    box.classList.toggle('is-visible', visible);
+    if (!visible) {
+      this.shown.combo = 0;
+      return;
+    }
+    if (this.shown.combo !== count) {
+      this.shown.combo = count;
+      this.$('combo-count').textContent = count;
+      box.classList.remove('is-pop');
+      void box.offsetWidth;
+      box.classList.add('is-pop');
+      box.dataset.tier = count >= 35 ? '3' : count >= 20 ? '2' : count >= 10 ? '1' : '0';
+    }
+    this.$('combo-timer').style.transform = `scaleX(${share.toFixed(3)})`;
+    if (tag) {
+      const t = this.$('combo-tag');
+      t.textContent = tag;
+      t.classList.remove('is-playing');
+      void t.offsetWidth;
+      t.classList.add('is-playing');
+    }
+  }
+
+  /** A red heartbeat on the screen edges while the hero's life is low. */
+  setLowHp(low) {
+    if (this.shown.low === low) return;
+    this.shown.low = low;
+    this.$('hurt').classList.toggle('is-low', low);
   }
 
   setXp(level, fraction) {
@@ -151,6 +229,11 @@ export class UI {
         el.classList.remove('bump');
         void el.offsetWidth;
         el.classList.add('bump');
+        // Level up: the bar flashes full before starting again.
+        this.$('hud-xp').style.transition = 'none';
+        this.$('hud-xp').style.width = '100%';
+        void el.offsetWidth;
+        this.$('hud-xp').style.transition = '';
       }
       this.shown.level = level;
       this.$('hud-level').textContent = level;
@@ -165,9 +248,25 @@ export class UI {
   setBoss(b) {
     const box = this.$('boss');
     box.hidden = !b;
-    if (!b) return;
+    if (!b) {
+      this.shown.boss = null;
+      return;
+    }
     this.$('boss-name').textContent = b.name;
-    this.$('boss-fill').style.width = `${Math.max(0, Math.round(b.share * 1000) / 10)}%`;
+    const width = `${Math.max(0, Math.round(b.share * 1000) / 10)}%`;
+    if (this.shown.boss !== width) {
+      // The white chip lags behind the red bar: you see the chunk you just took off.
+      if (this.shown.boss && parseFloat(width) < parseFloat(this.shown.boss)) {
+        box.classList.remove('is-hit');
+        void box.offsetWidth;
+        box.classList.add('is-hit');
+      } else if (!this.shown.boss) this.$('boss-chip').style.width = width;
+      this.shown.boss = width;
+      this.$('boss-fill').style.width = width;
+      clearTimeout(this.chipTimer);
+      this.chipTimer = setTimeout(() => { this.$('boss-chip').style.width = width; }, 380);
+    }
+    box.classList.toggle('is-enraged', b.share < 0.5);
   }
 
   hurt() {
@@ -223,8 +322,14 @@ export class UI {
       card.innerHTML = `${badge(a.icon, 'card__icon')}<b>${a.name}</b><small>${a.text}</small>${a.max && a.max < 99 && stacks ? `<span class="card__stack">${stacks}/${a.max}</span>` : ''}`;
       // Ignore taps in the first moments (the thumb was still on the joystick).
       card.addEventListener('click', () => {
-        if (performance.now() - this.choiceShownAt < 350) return;
-        onPick(a.id);
+        if (performance.now() - this.choiceShownAt < 350 || box.classList.contains('is-picking')) return;
+        // The chosen card lifts and glows, the others drop away; then the pick.
+        box.classList.add('is-picking');
+        card.classList.add('is-picked');
+        setTimeout(() => {
+          box.classList.remove('is-picking');
+          onPick(a.id);
+        }, 230);
       });
       box.append(card);
     });
@@ -249,9 +354,19 @@ export class UI {
   showEnd(kicker, title, stats, loot = '') {
     this.$('end-kicker').textContent = kicker;
     this.$('end-title').textContent = title;
-    this.$('end-stats').innerHTML = stats.map(([l, v]) => `<div><dt>${l}</dt><dd>${v}</dd></div>`).join('');
+    this.$('end-stats').innerHTML = stats.map(([l, v]) => `<div><dt>${l}</dt><dd data-value="${typeof v === 'number' ? v : ''}">${typeof v === 'number' ? 0 : v}</dd></div>`).join('');
     this.$('end-loot').innerHTML = loot;
     this.showScreen('end');
+    // Numbers count up, then the rewards pop in one after another (CSS delays).
+    const start = performance.now();
+    const cells = [...this.$('end-stats').querySelectorAll('dd[data-value]')].filter((d) => d.dataset.value !== '');
+    const step = (now) => {
+      const k = Math.min(1, (now - start) / 750);
+      const e = 1 - (1 - k) ** 3;
+      for (const d of cells) d.textContent = Math.round(Number(d.dataset.value) * e);
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   // ------------------------------------------------------------ menu
