@@ -862,7 +862,9 @@ export class Landscape {
     this.sun.shadow.normalBias = 0.03;
     this.back = new THREE.DirectionalLight(0x9fd8ff, 1);
     this.back.position.set(4, 7, -10);
-    scene.add(this.hemi, this.sun, this.sun.target, this.back);
+    // By night the hero carries a warm glow that lights the ground around them.
+    this.heroLight = new THREE.PointLight(0xffd8a0, 0, 6, 1.4);
+    scene.add(this.hemi, this.sun, this.sun.target, this.back, this.heroLight);
 
     this.ambience = new Ambience(scene);
     this.outline = rigidOutlineMaterial(0x2a2230, 0.0016);
@@ -966,6 +968,8 @@ export class Landscape {
     this.scene.userData.exposure = theme.exposure ?? (theme.stars ? 1 : 0.9);
     this.back.color.setHex(theme.back[0]);
     this.back.intensity = theme.back[1];
+    this.heroLightLevel = theme.stars ? 10 : 0;
+    this.heroLight.color.setHex(theme.heroLight ?? 0xffd8a8);
     setRim(theme.rim[0], theme.rim[1]);
     // Drifting cloud shadows by day, fainter at night, caustics under the sea.
     setWorldLight({ clouds: theme.stars ? 0.18 : 0.42, dapple: theme.stars ? 0 : 0.2, ...theme.light });
@@ -1417,6 +1421,10 @@ export class Landscape {
     this.time += dt;
     this.shared.uTime.value = this.time;
     WORLD.uCloudTime.value = this.time;
+    if (hero) {
+      this.heroLight.position.set(hero.x, 1.35, hero.z + 0.2);
+      this.heroLight.intensity = (this.heroLightLevel ?? 0) * (1 + Math.sin(this.time * 7) * 0.04 + Math.sin(this.time * 17) * 0.03);
+    } else this.heroLight.intensity = 0;
     if (hero) this.shared.uPush.value.set(hero.x, hero.z, 0.9);
     this.ambience.update(dt);
     for (let i = 0; i < this.torches.length; i++) {
