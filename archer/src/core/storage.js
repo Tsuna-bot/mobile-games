@@ -1,5 +1,6 @@
 // Save in localStorage: currencies, progress, settings (and later gear, talents, pets).
 
+// The game's first name: kept so existing saves still load.
 export const STORAGE_KEY = 'sagittaire/v1';
 
 export function defaultSave() {

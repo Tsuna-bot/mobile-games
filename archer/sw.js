@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'sagittaire-v8';
+const VERSION = 'aetherfall-v9';
 
 const APP_SHELL = [
   './',
@@ -195,7 +195,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key.startsWith('sagittaire-') && key !== VERSION).map((key) => caches.delete(key)));
+      await Promise.all(keys.filter((key) => (key.startsWith('aetherfall-') || key.startsWith('sagittaire-')) && key !== VERSION).map((key) => caches.delete(key)));
       await self.clients.claim();
     })(),
   );

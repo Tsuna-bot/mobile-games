@@ -1,4 +1,4 @@
-// Converts VRoid sample characters (VRM 0.x, CC0) into light .glb files for Sagittaire:
+// Converts VRoid sample characters (VRM 0.x, CC0) into light .glb files for Aetherfall:
 // textures resized and turned to WebP, normal maps and most face expressions dropped,
 // hair and cloth pieces sharing a material joined, meshes quantized and meshopt-compressed.
 // The VRM extension (spring bones, MToon) is not kept: the game draws its own toon shading.

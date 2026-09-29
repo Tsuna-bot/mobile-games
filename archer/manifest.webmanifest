@@ -1,7 +1,7 @@
 {
-  "name": "Sagittaire",
-  "short_name": "Sagittaire",
-  "description": "Roguelite d'archer en 3D : cours pour esquiver, arrête-toi pour tirer.",
+  "name": "Aetherfall",
+  "short_name": "Aetherfall",
+  "description": "Roguelite d'aventure en 3D style anime : traverse les portails, cours pour esquiver, arrête-toi pour frapper.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

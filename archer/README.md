@@ -1,6 +1,6 @@
-# Sagittaire
+# Aetherfall
 
-Roguelite d’archer en 3D pour mobile (Three.js), dans l’esprit d’Archero : **cours pour esquiver, arrête-toi pour tirer.** Chaque salle nettoyée ouvre le portail suivant ; à chaque niveau, tu choisis 1 capacité parmi 3 et ton héros devient de plus en plus fou. Style anime : héros en ombrage toon avec contours, paysages ouverts (herbe au vent, fleurs, étangs, ciel peint).
+Roguelite d’aventure en 3D pour mobile (Three.js), dans l’esprit d’Archero : **cours pour esquiver, arrête-toi pour tirer.** Chaque salle nettoyée ouvre le portail suivant ; à chaque niveau, tu choisis 1 capacité parmi 3 et ton héros devient de plus en plus fou. Style anime : héros en ombrage toon avec contours, paysages ouverts (herbe au vent, fleurs, étangs, ciel peint).
 
 Crédits :
 - Modèles 3D **KayKit** de Kay Lousberg (CC0) : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon, Forest Nature Pack ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).

@@ -1,4 +1,4 @@
-// Converts the KayKit packs (CC0, kaylousberg.itch.io) into small .glb files for Sagittaire.
+// Converts the KayKit packs (CC0, kaylousberg.itch.io) into small .glb files for Aetherfall.
 // All characters share one rig, so only skeleton_minion keeps the animations (the ones
 // the game plays, without the tracks that never move); everything is deduplicated,
 // quantized and meshopt-compressed.
