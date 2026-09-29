@@ -13,7 +13,10 @@ import { Landscape } from '../render/landscape.js';
 import { COLORS, Fx } from '../render/fx.js';
 import { ResolutionScaler, detectInitialQuality, lowerQuality } from '../render/view.js';
 import { HEROES } from '../data/meta.js';
-import { ensureProfile, runDrop, runGear } from '../meta/profile.js';
+import { RARITIES } from '../data/gear.js';
+import { addHeroXp } from '../meta/heroes.js';
+import { SPELLS } from '../data/heroes.js';
+import { addItem, ensureProfile, itemDef, runDrop, runGear } from '../meta/profile.js';
 import { Arena } from '../sim/arena.js';
 import { Menu } from './menu.js';
 import { icon } from '../ui/icons.js';
@@ -87,6 +90,7 @@ export class Game {
     ui.on('btn-prev', () => this.pickChapter(-1));
     ui.on('btn-next', () => this.pickChapter(1));
     ui.on('btn-pause', () => this.pause());
+    ui.on('spell', (i) => this.castSpell(i));
     ui.on('btn-resume', () => this.resume());
     ui.on('btn-quit', () => this.giveUp());
     ui.on('btn-revive', () => this.revive());
@@ -97,8 +101,13 @@ export class Game {
       if (this.pendingDrop) {
         const item = this.pendingDrop;
         this.pendingDrop = null;
-        setTimeout(() => this.menu.revealItem(item, 'Butin de l’expédition'), 400);
+        setTimeout(() => this.menu.revealItem(item, 'Coffre de victoire'), 400);
+      } else if (this.pendingLoot?.length) {
+        // The best piece found on the way is shown.
+        const best = [...this.pendingLoot].sort((a, b) => b.rarity - a.rarity || b.level - a.level)[0];
+        if (best.rarity >= 1) setTimeout(() => this.menu.revealItem(best, 'Meilleure trouvaille'), 400);
       }
+      this.pendingLoot = null;
     });
     ui.on('setting', (key) => this.toggleSetting(key));
     ui.renderSettings(this.save.settings, this.haptics.supported);
@@ -287,6 +296,7 @@ export class Game {
     this.buildRoom();
     this.mode = MODE.CHOOSING;
     this.ui.showScreen(null);
+    this.ui.setSpells(this.run.spells.map((sp) => ({ def: sp.def, rank: sp.rank })));
     this.ui.setHud(true);
     this.joystick.enabled = true;
     this.audio.setIntensity(0.6);
@@ -331,6 +341,22 @@ export class Game {
     if (wasStart && this.save.tutorial) {
       this.hintShown = true;
       this.ui.setHint(true);
+    }
+  }
+
+  /** A spell button: cast if ready (a small shake of the button otherwise). */
+  castSpell(i) {
+    const run = this.run;
+    if (this.mode !== MODE.PLAYING || !run) return;
+    const ok = run.castSpell(i);
+    this.ui.castFeedback(i, ok);
+    if (!ok) {
+      this.haptics.pulse(4);
+      return;
+    }
+    if (this.hintShown) {
+      this.hintShown = false;
+      this.ui.setHint(false);
     }
   }
 
@@ -412,14 +438,30 @@ export class Game {
     // Account experience.
     const xp = runAccountXp({ rooms: run.roomsCleared, kills: run.kills, won, chapterIndex: run.chapterIndex, mode: run.mode });
     const levels = addAccountXp(save, xp);
-    const drop = runDrop(save, run.chapterIndex, won, run.endless ? run.roomsCleared : run.room, Math.random, run.mode);
+    // A bonus item on a good run (the chest at the end), plus everything found on the way.
+    const drop = won ? runDrop(save, run.chapterIndex, won, run.endless ? run.roomsCleared : run.room, Math.random, run.mode) : null;
     this.pendingDrop = drop;
+    const found = run.loot.map((spec) => addItem(save, spec.base, spec.rarity, spec.level));
+    save.runes = (save.runes ?? 0) + run.runes;
+    // The hero grows with every run played with them.
+    const heroId = this.runGear?.hero?.id ?? save.heroes.selected;
+    const heroLevels = addHeroXp(save, heroId, xp);
     writeSave(save);
     const loot = [`<span class="pill"><i class="coin-icon"></i><b>+${coins}</b></span>`];
-    if (drop) loot.push(`<span class="pill">${icon('gift')} Objet trouvé</span>`);
+    if (drop) loot.push(`<span class="pill">${icon('gift')} Coffre de victoire</span>`);
+    if (run.runes) loot.push(`<span class="pill">${icon('rune')} <b>+${run.runes}</b> runes</span>`);
     if (gems) loot.push(`<span class="pill"><i class="gem-icon"></i><b>+${gems}</b></span>`);
     loot.push(`<span class="pill">${icon('level')} +${xp} XP</span>`);
-    for (const l of levels) loot.push(`<span class="pill pill--gold">${icon('level')} Niveau ${l.level} · +1 point de talent</span>`);
+    for (const l of levels) loot.push(`<span class="pill pill--gold">${icon('level')} Compte niveau ${l.level} · +1 point de talent</span>`);
+    const heroName = HEROES[heroId]?.name ?? 'Héros';
+    for (const l of heroLevels) {
+      const extra = l.spell ? ` · nouveau sort : ${SPELLS[l.spell].name}` : l.cls ? ' · choix de classe !' : '';
+      loot.push(`<span class="pill pill--gold">${icon('hero-archer')} ${heroName} niveau ${l.level}${extra}</span>`);
+    }
+    if (found.length) {
+      loot.push(`<div class="end-loot-list">${found.map((it) => this.menu.itemTile(it, { showEquipped: false })).join('')}</div>`);
+      this.pendingLoot = found;
+    }
     if (record && !won) loot.push(`<span class="pill">${icon('trophy')} Nouveau record</span>`);
     if (unlocked) loot.push(`<span class="pill">${icon('crown')} Chapitre suivant</span>`);
     const done = save.daily?.missions.filter((m) => !m.claimed && m.progress >= (this.menu.missionGoal(m.id) ?? Infinity)).length ?? 0;
@@ -513,6 +555,17 @@ export class Game {
       onDot: (enemy, amount) => this.floatWorld(enemy.x, 1.1, enemy.z, String(Math.round(amount)), 'dot'),
       onEnemyDie: (enemy) => {
         actors.enemyDied(enemy);
+        // Loot falling: a burst in the rarity colour (after the kill's own drops are placed).
+        setTimeout(() => {
+          const run = this.run;
+          if (!run) return;
+          for (const p of run.pickups) {
+            if (p.kind !== 'loot' || p.announced) continue;
+            p.announced = true;
+            fx.lootDrop(p.x, p.z, new THREE.Color(RARITIES[p.value.rarity].color));
+            if (p.value.rarity >= 2) audio.warning(false);
+          }
+        }, 0);
         fx.death(enemy.x, enemy.z, Boolean(enemy.def.boss), enemy.def.id === 'ghost' || enemy.def.id === 'wisp' ? COLORS.ice : COLORS.smoke);
         audio.enemyDeath(Boolean(enemy.def.boss));
         this.haptics.pulse(enemy.def.boss ? HAPTIC.boss : HAPTIC.kill);
@@ -626,6 +679,31 @@ export class Game {
         } else audio.collect(0);
       },
       onArrowWall: (arrow, x, z) => fx.wallHit(x, z),
+      onSpell: (s, info) => this.spellFx(s, info),
+      onZone: (zone, def) => {
+        const c = new THREE.Color(def.color);
+        fx.addZone(zone, c.getHex());
+        fx.spellFall(zone.x, zone.z, zone.delay, c, zone.big);
+      },
+      onZoneBlast: (zone) => {
+        const c = new THREE.Color(SPELLS[zone.spell]?.color ?? '#ffffff');
+        fx.blast(zone.x, zone.z, zone.radius, c);
+        if (zone.big) {
+          this.shake = Math.min(1, this.shake + 0.6);
+          audio.explosion(true);
+          this.haptics.pulse([30, 20, 50]);
+        } else audio.explosion(false);
+      },
+      onLoot: (spec) => {
+        const rarity = RARITIES[spec.rarity];
+        const def = itemDef({ base: spec.base });
+        ui.toast(`${icon(def.icon)}<span><b>${rarity.name}</b> · ${def.name}</span>`, rarity.color);
+        if (spec.rarity >= 2) {
+          audio.victory();
+          this.haptics.pulse([20, 30, 20, 30, 50]);
+        } else audio.upgrade();
+      },
+      onBuffEnd: () => {},
       onDash: (enemy) => fx.dust(enemy.x, enemy.z, 8),
       onBump: (enemy) => {
         fx.dust(enemy.x, enemy.z, 14);
@@ -636,6 +714,61 @@ export class Game {
       onDoor: () => audio.whoosh(),
       onRevive: () => {},
     };
+  }
+
+  /** What a cast looks, sounds and feels like. */
+  spellFx(s, info) {
+    const fx = this.fx;
+    const c = new THREE.Color(s.def.color);
+    const p = this.run.player;
+    this.actors.heroShoot();
+    switch (s.def.type) {
+      case 'nova':
+        fx.nova(p.x, p.z, info.radius, c);
+        this.shake = Math.min(1, this.shake + 0.45);
+        this.audio.explosion(true);
+        this.haptics.pulse([25, 20, 40]);
+        break;
+      case 'dash':
+        fx.trail(info.x, info.z, info.toX, info.toZ, c);
+        fx.ring(info.toX, info.toZ, 1.2, 0.35, c);
+        this.audio.whoosh();
+        this.haptics.pulse(18);
+        break;
+      case 'buff':
+      case 'guard':
+        fx.aura(p.x, p.z, c);
+        if (s.def.type === 'guard') fx.heal(p.x, p.z);
+        this.aura = { color: c, until: this.time + (info.duration ?? 5) };
+        this.audio.upgrade();
+        this.haptics.pulse([15, 30, 15]);
+        break;
+      case 'execute':
+        fx.trail(p.x, p.z, info.toX, info.toZ, c);
+        fx.execute(info.toX, info.toZ, true);
+        this.hitStop = Math.max(this.hitStop, 0.08);
+        this.shake = Math.min(1, this.shake + 0.5);
+        this.audio.whoosh();
+        this.haptics.pulse([30, 20, 50]);
+        break;
+      case 'chain':
+        fx.lightning(p.x, p.z, info.toX, info.toZ);
+        fx.flash(p.x, 0.9, p.z, 1.2, c);
+        this.audio.lightning();
+        this.haptics.pulse(20);
+        break;
+      case 'pierce':
+      case 'fan':
+        fx.flash(p.x, 0.6, p.z, 1.4, c);
+        fx.ring(p.x, p.z, 1.3, 0.3, c);
+        this.audio.shoot('ballista');
+        this.haptics.pulse(15);
+        break;
+      default:
+        fx.flash(p.x, 0.8, p.z, 1.2, c);
+        this.audio.whoosh();
+        this.haptics.pulse(12);
+    }
   }
 
   /** Short black fade around room changes. */
@@ -746,6 +879,12 @@ export class Game {
   updateHud() {
     const run = this.run;
     const ui = this.ui;
+    ui.updateSpells(run.spells.map((_, i) => run.spellState(i)));
+    // A boost glows around the hero while it lasts.
+    if (this.aura && this.mode === MODE.PLAYING) {
+      if (this.time > this.aura.until || !run.buffs.length && run.player.invulnerable <= 0) this.aura = null;
+      else if ((this.auraTick = (this.auraTick ?? 0) + 1) % 14 === 0) this.fx.ring(run.player.x, run.player.z, 1.1, 0.45, this.aura.color);
+    }
     if (run.endless) ui.setRoom('Mode Infini', run.isBossRoom ? `Boss · salle ${run.room}` : `Salle ${run.room}`);
     else ui.setRoom(`Chapitre ${run.chapterIndex + 1}${run.heroic ? ' · Héroïque' : ''}`, run.room >= ROOMS ? 'Boss !' : `Salle ${run.room}/${ROOMS}`);
     ui.setCoins(run.coins);

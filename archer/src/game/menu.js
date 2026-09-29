@@ -2,6 +2,8 @@ import { writeSave } from '../core/storage.js';
 import { badge, icon } from '../ui/icons.js';
 import { LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
+import { CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_HERO_LEVEL, MAX_SPELL_RANK, SPELLS, SPELL_UNLOCK, classOf, heroLevelStats, heroXpNeeded, rankCooldown, spellUpgradeCost } from '../data/heroes.js';
+import { chooseClass, heroState, spellRank, spellUpgradeBlock, upgradeSpell } from '../meta/heroes.js';
 import { ACHIEVEMENTS, BRANCHES, TIER_NEEDS, TREE, TREE_BY_ID, accountXpNeeded } from '../data/progression.js';
 import {
   activeSets, awaken, buyHero, chestReady, equip, equippedSlotOf, grantChest, itemDef, merge, mergePartners, nextTalentCost, openChest, powerScore, rollTalent,
@@ -106,6 +108,10 @@ export class Menu {
     const talents = document.querySelector('#nav [data-tab="talents"]');
     talents.classList.toggle('badge-dot', save.coins >= nextTalentCost(save) || treeFree(save) > 0);
     this.$('btn-quests').classList.toggle('badge-dot', questsReady(save));
+    const heroes = document.querySelector('#nav [data-tab="heroes"]');
+    const hid = save.heroes.selected;
+    const hs = heroState(save, hid);
+    heroes.classList.toggle('badge-dot', [0, 1, 2].some((slot) => !spellUpgradeBlock(save, hid, slot)) || (hs.level >= CLASS_LEVEL && !hs.cls));
     const gear = document.querySelector('#nav [data-tab="gear"]');
     gear.classList.toggle('badge-dot', save.inventory.some((it) => mergePartners(save, it.uid).length >= 2));
   }
@@ -374,20 +380,112 @@ export class Menu {
 
   renderHeroes() {
     const save = this.save;
+    if (!HEROES[this.heroView]) this.heroView = save.heroes.selected;
     this.$('heroes').innerHTML = HERO_ORDER.map((id) => {
       const hero = HEROES[id];
       const owned = save.heroes.owned.includes(id);
       const selected = save.heroes.selected === id;
+      const viewed = this.heroView === id;
+      const level = heroState(save, id).level;
       const face = badge(`hero-${id}`, 'badge--lg');
-      const button = selected
-        ? `<button type="button" class="btn" disabled>${icon('check')} Choisi</button>`
-        : owned
-          ? `<button type="button" class="btn btn--primary" data-hero="${id}">Choisir</button>`
-          : `<button type="button" class="btn btn--gold" data-hero="${id}" ${save.gems < hero.price ? 'disabled' : ''}><i class="gem-icon"></i> ${hero.price}</button>`;
-      return `<div class="hero-card${selected ? ' is-selected' : ''}" style="--hero:#${hero.cape.toString(16).padStart(6, '0')}"><span class="hero-card__face">${face}</span><b>${hero.name}</b><small>${hero.role} · ${hero.text}</small>${button}</div>`;
+      return `<button type="button" class="hero-card${selected ? ' is-selected' : ''}${viewed ? ' is-viewed' : ''}${owned ? '' : ' is-locked'}" data-view-hero="${id}" style="--hero:#${hero.cape.toString(16).padStart(6, '0')}"><span class="hero-card__face">${face}${owned ? `<span class="hero-card__level">${level}</span>` : `<span class="hero-card__level hero-card__level--lock">${icon('lock')}</span>`}</span><b>${hero.name}</b></button>`;
     }).join('');
-    for (const button of this.$('heroes').querySelectorAll('[data-hero]')) {
-      button.addEventListener('click', () => this.pickHero(button.dataset.hero));
+    for (const card of this.$('heroes').querySelectorAll('[data-view-hero]')) {
+      card.addEventListener('click', () => {
+        if (this.heroView === card.dataset.viewHero) return;
+        this.heroView = card.dataset.viewHero;
+        this.game.audio.click();
+        this.renderHeroes();
+      });
+    }
+    this.renderHeroDetail();
+  }
+
+  /** The viewed hero: level, experience, the three spells (ranks) and the class. */
+  renderHeroDetail() {
+    const save = this.save;
+    const id = this.heroView;
+    const hero = HEROES[id];
+    const h = heroState(save, id);
+    const owned = save.heroes.owned.includes(id);
+    const need = heroXpNeeded(h.level);
+    const selected = save.heroes.selected === id;
+    const pick = selected
+      ? `<button type="button" class="btn btn--small" disabled>${icon('check')} Choisi</button>`
+      : owned
+        ? `<button type="button" class="btn btn--primary btn--small" data-hero="${id}">Jouer avec</button>`
+        : `<button type="button" class="btn btn--gold btn--small" data-hero="${id}" ${save.gems < hero.price ? 'disabled' : ''}><i class="gem-icon"></i> ${hero.price}</button>`;
+    const bonus = heroLevelStats(h.level);
+    const spells = HERO_SPELLS[id].map((sid, slot) => {
+      const def = SPELLS[sid];
+      const rank = spellRank(save, id, slot);
+      const shown = Math.max(1, rank);
+      const pips = Array.from({ length: MAX_SPELL_RANK }, (_, i) => `<i class="${i < rank ? 'is-on' : ''}"></i>`).join('');
+      let action;
+      if (!rank) action = `<span class="spell-row__lock">${icon('level')} Niveau ${SPELL_UNLOCK[slot]}</span>`;
+      else if (rank >= MAX_SPELL_RANK) action = '<span class="spell-row__lock">Rang max</span>';
+      else {
+        const cost = spellUpgradeCost(slot, rank);
+        const block = owned ? spellUpgradeBlock(save, id, slot) : 'owned';
+        const label = block === 'level' ? `Niv. ${cost.level} requis` : `<i class="coin-icon"></i>${cost.coins} · ${icon('rune')}${cost.runes}`;
+        action = `<button type="button" class="btn btn--gold btn--small" data-spell="${slot}" ${block ? 'disabled' : ''}>${label}</button>`;
+      }
+      return `<div class="spell-row${rank ? '' : ' is-locked'}" style="--spell:${def.color}">
+        <span class="spell-row__icon">${badge(def.icon, 'badge--md')}</span>
+        <div class="spell-row__body"><b>${def.name}</b><span class="spell-row__pips">${pips}</span><small>${esc(def.text(shown))} Recharge ${Math.round(def.cd * rankCooldown(shown))} s.</small></div>
+        ${action}</div>`;
+    }).join('');
+    const classes = CLASSES[id];
+    let classHtml;
+    if (h.level < CLASS_LEVEL) classHtml = `<p class="panel-text">${icon('classes')} Au niveau ${CLASS_LEVEL}, ${hero.name} choisit une classe : ${classes.map((c) => `<b>${c.name}</b>`).join(' ou ')}.</p>`;
+    else {
+      classHtml = `<div class="class-cards">${classes.map((c) => {
+        const active = h.cls === c.id;
+        const btn = active ? `<button type="button" class="btn" disabled>${icon('check')} Active</button>` : `<button type="button" class="btn ${h.cls ? 'btn--gold' : 'btn--primary'} btn--small" data-class="${c.id}" ${!owned || (h.cls && save.gems < CLASS_SWITCH_GEMS) ? 'disabled' : ''}>${h.cls ? `<i class="gem-icon"></i> ${CLASS_SWITCH_GEMS}` : 'Choisir'}</button>`;
+        return `<div class="class-card${active ? ' is-active' : ''}">${badge(c.icon, 'badge--md')}<b>${c.name}</b><small>${esc(c.text)}</small>${btn}</div>`;
+      }).join('')}</div>`;
+    }
+    this.$('hero-detail').innerHTML = `
+      <div class="hero-sheet" style="--hero:#${hero.cape.toString(16).padStart(6, '0')}">
+        <div class="hero-sheet__head">
+          <span class="hero-sheet__level">${h.level}</span>
+          <div class="hero-sheet__name"><b>${hero.name} · ${hero.role}</b><small>${esc(hero.text)}</small></div>
+          ${pick}
+        </div>
+        <div class="hero-sheet__xp"><i style="width:${h.level >= MAX_HERO_LEVEL ? 100 : Math.round((h.xp / need) * 100)}%"></i><span>${h.level >= MAX_HERO_LEVEL ? 'Niveau max' : `${h.xp} / ${need} XP`}</span></div>
+        <small class="hero-sheet__bonus">Bonus de niveau : attaque +${Math.round(bonus.damageMul * 100)} %, vie +${Math.round(bonus.hpMul * 100)} %${h.cls ? ` · Classe : ${classOf(id, h.cls).name}` : ''}</small>
+      </div>
+      <h3 class="panel-subtitle">Sorts <span class="runes-pill">${icon('rune')} ${save.runes} runes</span></h3>
+      <div class="spell-list">${spells}</div>
+      <h3 class="panel-subtitle">Classe</h3>
+      ${classHtml}
+      <p class="panel-text hero-sheet__tip">${owned ? 'Le héros gagne de l’expérience à chaque partie jouée avec lui. Les runes tombent des élites et des boss.' : `Recrute ${hero.name} pour le faire progresser.`}</p>`;
+    this.$('hero-detail').querySelector('[data-hero]')?.addEventListener('click', () => this.pickHero(id));
+    for (const button of this.$('hero-detail').querySelectorAll('[data-spell]')) {
+      button.addEventListener('click', () => {
+        if (!upgradeSpell(save, id, Number(button.dataset.spell))) {
+          this.game.audio.denied();
+          return;
+        }
+        this.game.audio.upgrade();
+        this.game.haptics.pulse([15, 30, 15]);
+        this.persist();
+        this.renderHeroes();
+        const row = this.$('hero-detail').querySelectorAll('.spell-row')[Number(button.dataset.spell)];
+        row?.classList.add('is-bumped');
+      });
+    }
+    for (const button of this.$('hero-detail').querySelectorAll('[data-class]')) {
+      button.addEventListener('click', () => {
+        if (!chooseClass(save, id, button.dataset.class)) {
+          this.game.audio.denied();
+          return;
+        }
+        this.game.audio.victory();
+        this.game.haptics.pulse([20, 40, 20, 40, 60]);
+        this.persist();
+        this.renderHeroes();
+      });
     }
   }
 
@@ -395,6 +493,7 @@ export class Menu {
     const save = this.save;
     const owned = save.heroes.owned.includes(id);
     const ok = owned ? selectHero(save, id) : buyHero(save, id);
+    this.heroView = id;
     if (!ok) {
       this.game.audio.denied();
       return;

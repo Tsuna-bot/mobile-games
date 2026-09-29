@@ -43,6 +43,71 @@ export class UI {
 
   setHud(visible) {
     this.hud.classList.toggle('is-visible', visible);
+    this.$('spellbar').classList.toggle('is-visible', visible);
+  }
+
+  /** The spell buttons of the run: [{ def, rank }] (index = the run's spell index). */
+  setSpells(spells) {
+    const bar = this.$('spellbar');
+    bar.replaceChildren();
+    this.spellButtons = spells.map((s, i) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'spell';
+      button.style.setProperty('--spell', s.def.color);
+      button.setAttribute('aria-label', s.def.name);
+      button.innerHTML = `<span class="spell__icon">${icon(s.def.icon)}</span><i class="spell__cd"></i><b class="spell__time"></b><span class="spell__rank">${'•'.repeat(s.rank)}</span>`;
+      // Instant on touch down (a second finger while the other one steers).
+      button.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handlers.spell?.(i);
+      });
+      bar.append(button);
+      return { button, cd: button.querySelector('.spell__cd'), time: button.querySelector('.spell__time'), shown: null };
+    });
+  }
+
+  /** @param states [{ ready, share, timer }] */
+  updateSpells(states) {
+    if (!this.spellButtons) return;
+    states.forEach((st, i) => {
+      const b = this.spellButtons[i];
+      if (!b || !st) return;
+      const key = st.ready ? 'ready' : `${Math.ceil(st.timer)}|${Math.round(st.share * 60)}`;
+      if (b.shown === key) return;
+      const wasReady = b.shown === 'ready';
+      b.shown = key;
+      b.button.classList.toggle('is-ready', st.ready);
+      b.cd.style.setProperty('--cd', st.ready ? 0 : st.share);
+      b.time.textContent = st.ready ? '' : Math.ceil(st.timer);
+      if (st.ready && !wasReady) {
+        b.button.classList.remove('is-flash');
+        void b.button.offsetWidth;
+        b.button.classList.add('is-flash');
+      }
+    });
+  }
+
+  castFeedback(i, ok) {
+    const b = this.spellButtons?.[i];
+    if (!b) return;
+    const cls = ok ? 'is-cast' : 'is-denied';
+    b.button.classList.remove('is-cast', 'is-denied');
+    void b.button.offsetWidth;
+    b.button.classList.add(cls);
+  }
+
+  /** A short notice at the top (loot found). */
+  toast(html, color = '#fff') {
+    const box = this.$('toasts');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.style.setProperty('--toast', color);
+    el.innerHTML = html;
+    box.append(el);
+    while (box.children.length > 3) box.firstChild.remove();
+    setTimeout(() => el.remove(), 2600);
   }
 
   setLoading(fraction, text) {

@@ -5,12 +5,12 @@ import { ICON_PATHS } from './iconPaths.js';
 
 // Colour family of each icon, used for the badges behind them.
 const TONES = {
-  gold: ['longbow', 'elite', 'star', 'level', 'quests', 'treasure', 'front', 'multishot', 'diagonal', 'side', 'rear', 'bounce', 'ricochet', 'pierce', 'attack', 'speed', 'crit', 'strength', 'power', 'bow', 'crossbow', 'blades', 'slot-weapon', 'chest-gold', 'gold-bag', 'looting', 'fortune', 'trophy', 'crown', 'upgrade'],
-  fire: ['heroic', 'fire', 'fireOrb', 'deathBlast', 'rage', 'salamander'],
-  ice: ['reset', 'calendar', 'ice', 'iceOrb', 'frostling', 'shield', 'guard', 'mail', 'slot-armor', 'hero-knight'],
-  poison: ['tree', 'poison', 'recovery', 'luck', 'serpent', 'heal', 'life'],
-  arcane: ['tome', 'shadowgarb', 'infinity', 'bolt', 'boltOrb', 'staff', 'robe', 'agility', 'bat', 'hero-mage', 'hero-assassin', 'shuriken', 'slot-amulet', 'chest-pet'],
-  blood: ['fang', 'vitality', 'bloodthirst', 'vigor'],
+  gold: ['rain', 'hawk', 'loot', 'map', 'classes', 'quake', 'longbow', 'elite', 'star', 'level', 'quests', 'treasure', 'front', 'multishot', 'diagonal', 'side', 'rear', 'bounce', 'ricochet', 'pierce', 'attack', 'speed', 'crit', 'strength', 'power', 'bow', 'crossbow', 'blades', 'slot-weapon', 'chest-gold', 'gold-bag', 'looting', 'fortune', 'trophy', 'crown', 'upgrade'],
+  fire: ['meteor', 'charge', 'heroic', 'fire', 'fireOrb', 'deathBlast', 'rage', 'salamander'],
+  ice: ['snowflake', 'gale', 'reset', 'calendar', 'ice', 'iceOrb', 'frostling', 'shield', 'guard', 'mail', 'slot-armor', 'hero-knight'],
+  poison: ['thorns', 'paw', 'fan', 'tree', 'poison', 'recovery', 'luck', 'serpent', 'heal', 'life'],
+  arcane: ['rune', 'spells', 'dash', 'storm', 'tome', 'shadowgarb', 'infinity', 'bolt', 'boltOrb', 'staff', 'robe', 'agility', 'bat', 'hero-mage', 'hero-assassin', 'shuriken', 'slot-amulet', 'chest-pet'],
+  blood: ['skull', 'fang', 'vitality', 'bloodthirst', 'vigor'],
   wind: ['dodge', 'haste', 'swift', 'falcon', 'owl', 'wolf', 'bear', 'leather', 'slot-pet', 'slot-ring', 'hero-ranger', 'hero-archer', 'chest-free'],
 };
 const TONE_OF = {};

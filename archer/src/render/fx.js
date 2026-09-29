@@ -23,10 +23,32 @@ export const COLORS = {
 
 const SHOT_COLORS = { orb: 0xff3a6a, arrow: 0xf4ecd8, bone: 0xf4f0e0, rock: 0xa07a50 };
 const SHOT_GLOW = { orb: 0xff3a9a, arrow: 0xffc070, bone: 0xd8f0ff, rock: 0xff8a2a };
+const RARITY_COLORS = [0xd8e0ea, 0x4fb4ff, 0xc070ff, 0xffc93c];
 const ORB_COLORS = { fire: 0xff8a2a, ice: 0x8fe0ff, bolt: 0xc9a0ff };
 const Y = 0.55;
 // Above 1: these glow through the bloom pass.
 const HDR = { core: 2.2, halo: 1.5, orb: 2.4 };
+
+// Loot: a column of light in the item's rarity colour (open cylinder, fading upward).
+const BEAM_VERTEX = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  vUv = uv;
+  vTint = instanceColor;
+  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+}`;
+
+const BEAM_FRAGMENT = /* glsl */ `
+uniform float uTime;
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  float fade = pow(1.0 - vUv.y, 1.6);
+  float edge = 0.55 + 0.45 * sin(vUv.x * 6.2832 * 3.0 + uTime * 2.0);
+  float flow = 0.7 + 0.3 * sin(vUv.y * 18.0 - uTime * 5.0);
+  gl_FragColor = vec4(vTint * fade * edge * flow * 0.9, 1.0);
+}`;
 
 // Monster spells: a camera-facing glow with slowly turning rays around each shot.
 const GLOW_VERTEX = /* glsl */ `
@@ -194,6 +216,23 @@ export class Fx {
     this.orbMesh.frustumCulled = false;
     scene.add(this.orbMesh);
 
+    // Loot on the floor: a spinning gem in the rarity colour under a column of light; runes.
+    this.lootMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.2, 0), new THREE.MeshBasicMaterial({ toneMapped: false }), 16);
+    this.lootMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(16 * 3), 3);
+    const beam = new THREE.CylinderGeometry(0.1, 0.2, 2.8, 14, 1, true).translate(0, 1.4, 0);
+    this.beamMesh = new THREE.InstancedMesh(beam, new THREE.ShaderMaterial({
+      uniforms: { uTime: this.glowTime }, vertexShader: BEAM_VERTEX, fragmentShader: BEAM_FRAGMENT,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    }), 16);
+    this.beamMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(16 * 3), 3);
+    this.beamMesh.renderOrder = 24;
+    this.runeMesh = new THREE.InstancedMesh(new THREE.TetrahedronGeometry(0.14, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xc890ff).multiplyScalar(2.2), toneMapped: false }), 30);
+    for (const m of [this.lootMesh, this.beamMesh, this.runeMesh]) {
+      m.frustumCulled = false;
+      m.count = 0;
+      scene.add(m);
+    }
+
     // Danger circles and aim lines (pooled meshes).
     this.hazardPool = [];
     this.hazardGeometry = { ring: new THREE.RingGeometry(0.94, 1, 48).rotateX(-Math.PI / 2), disc: new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2) };
@@ -347,8 +386,62 @@ export class Fx {
 
   // ------------------------------------------------------------ telegraphs
 
+  /** The hero's ground spells: a rune circle in the spell's colour. */
+  addZone(zone, hex) {
+    this.addHazard(zone, hex);
+  }
+
+  /** A column of sparks falling on a spot (arrow rain, meteor) for `delay` seconds. */
+  spellFall(x, z, delay, c, big) {
+    const n = this.count(big ? 26 : 8);
+    for (let i = 0; i < n; i++) {
+      const h = big ? 5 + Math.random() * 2 : 3.5 + Math.random() * 1.5;
+      const ox = (Math.random() - 0.5) * (big ? 0.8 : 1.4);
+      const oz = (Math.random() - 0.5) * (big ? 0.8 : 1.4);
+      const t = delay * (0.7 + Math.random() * 0.3);
+      this.sparks.emit(x + ox - 1.2, h, z + oz - 1.2, 1.2 / t, -h / t, 1.2 / t, c, big ? 0.5 + Math.random() * 0.3 : 0.14, t, { endSize: big ? 0.25 : 0.1, drag: 0, brightness: 2.2 });
+    }
+  }
+
+  /** An expanding wave around the hero (novas). */
+  nova(x, z, radius, c) {
+    this.ring(x, z, radius, 0.5, c);
+    this.ring(x, z, radius * 0.6, 0.35, COLORS.spark);
+    this.flash(x, 0.5, z, radius * 1.1, c);
+    const n = this.count(40);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const v = radius * (2.2 + Math.random());
+      this.sparks.emit(x, 0.4, z, Math.sin(a) * v, 0.6 + Math.random(), Math.cos(a) * v, c, 0.18, 0.45, { endSize: 0.04, drag: 2.5, brightness: 2 });
+    }
+    this.puffs.burst(x, 0.15, z, this.count(12), radius * 1.6, COLORS.dust, 0.35, 0.6, { upward: 0.3, drag: 3, endSize: 0.8 });
+  }
+
+  /** A streak of light along a dash. */
+  trail(x0, z0, x1, z1, c) {
+    const n = this.count(24);
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      this.sparks.emit(x0 + (x1 - x0) * t, 0.5 + Math.random() * 0.4, z0 + (z1 - z0) * t, (Math.random() - 0.5) * 0.6, 0.4, (Math.random() - 0.5) * 0.6, c, 0.2, 0.25 + t * 0.25, { endSize: 0.03, drag: 2, brightness: 2 });
+    }
+    this.puffs.burst(x0, 0.4, z0, this.count(8), 1.2, COLORS.smoke, 0.3, 0.5, { upward: 0.5, drag: 3, endSize: 0.6 });
+  }
+
+  /** A boost glowing around the hero (buffs, guard). */
+  aura(x, z, c) {
+    this.sparks.burst(x, 0.2, z, this.count(36), 2, c, 0.16, 0.9, { upward: 0.95, gravity: -2, drag: 1.4, brightness: 2 });
+    this.ring(x, z, 1.4, 0.5, c);
+    this.flash(x, 0.8, z, 1.4, c);
+  }
+
+  /** Loot on the floor: a burst in the rarity colour. */
+  lootDrop(x, z, c) {
+    this.sparks.burst(x, 0.4, z, this.count(30), 3, c, 0.16, 0.8, { upward: 0.9, gravity: 3, brightness: 2.2 });
+    this.ring(x, z, 1.2, 0.5, c);
+  }
+
   /** Red circle that fills up until the blast. */
-  addHazard(h) {
+  addHazard(h, hex = null) {
     let item = this.hazardPool.find((x) => !x.active);
     if (!item) {
       const material = new THREE.ShaderMaterial({
@@ -365,12 +458,13 @@ export class Fx {
     }
     item.active = true;
     item.hazard = h;
+    item.friendly = hex !== null;
     item.mesh.visible = true;
     item.mesh.position.set(h.x, 0.04, h.z);
     item.mesh.scale.setScalar(h.radius);
     item.mesh.rotation.y = Math.random() * Math.PI * 2;
     // Bombs red, ground slams and rocks amber.
-    item.mesh.material.uniforms.uColor.value.setHex(h.kind === 'bomb' ? 0xff3a2a : 0xff8a1a);
+    item.mesh.material.uniforms.uColor.value.setHex(hex ?? (h.kind === 'bomb' ? 0xff3a2a : 0xff8a1a));
   }
 
   /** Aim line in front of a monster ('line' thin, 'dash' wide). */
@@ -423,6 +517,7 @@ export class Fx {
       b.line.material.opacity = Math.min(1, b.life * 10);
     }
     if (!run) {
+      this.lootMesh.count = this.beamMesh.count = this.runeMesh.count = 0;
       this.kunaiMesh.count = this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
       return;
     }
@@ -464,7 +559,11 @@ export class Fx {
         else dummy.scale.set(1, 0.6, 0.6);
       } else {
         dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
-        dummy.scale.setScalar(a.kind === 'crossbow' ? 1.35 : a.kind === 'longbow' ? 1.55 : 1);
+        dummy.scale.setScalar(a.kind === 'crossbow' ? 1.35 : a.kind === 'longbow' ? 1.55 : a.kind === 'gale' ? 3.2 : 1);
+      }
+      // The wind arrow: a thick cyan wake.
+      if (a.kind === 'gale') {
+        for (let k = 0; k < 3; k++) this.sparks.emit(a.x - a.dx * (0.3 + k * 0.25), Y + (Math.random() - 0.5) * 0.3, a.z - a.dz * (0.3 + k * 0.25), (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 1.2, COLORS.ice, 0.32 - k * 0.06, 0.3, { endSize: 0.04, drag: 2, brightness: 2.2 });
       }
       dummy.updateMatrix();
       this.arrowMesh.setMatrixAt(n++, dummy.matrix);
@@ -511,7 +610,34 @@ export class Fx {
     let nx = 0;
     let nc = 0;
     let nh = 0;
+    let nl = 0;
+    let nr = 0;
     for (const p of run.pickups) {
+      if (p.kind === 'loot' && nl < 16) {
+        const rc = color.set(RARITY_COLORS[p.value.rarity] ?? 0xffffff);
+        dummy.position.set(p.x, 0.45 + Math.sin(t * 3 + p.id) * 0.08, p.z);
+        dummy.rotation.set(0, t * 2.4 + p.id, 0);
+        dummy.scale.setScalar(1 + p.value.rarity * 0.12);
+        dummy.updateMatrix();
+        this.lootMesh.setMatrixAt(nl, dummy.matrix);
+        this.lootMesh.setColorAt(nl, hdrColor.copy(rc).multiplyScalar(2.2));
+        dummy.position.set(p.x, 0, p.z);
+        dummy.rotation.set(0, t * 0.8, 0);
+        dummy.scale.set(1 + p.value.rarity * 0.15, 0.7 + p.value.rarity * 0.3, 1 + p.value.rarity * 0.15);
+        dummy.updateMatrix();
+        this.beamMesh.setMatrixAt(nl, dummy.matrix);
+        this.beamMesh.setColorAt(nl++, hdrColor.copy(rc).multiplyScalar(0.45 + p.value.rarity * 0.2));
+        if ((p.id + this.frame) % 6 === 0) this.sparks.emit(p.x + (Math.random() - 0.5) * 0.5, 0.2, p.z + (Math.random() - 0.5) * 0.5, 0, 1.2 + Math.random(), 0, rc, 0.12, 0.8, { endSize: 0.02, drag: 0.5, brightness: 2 });
+        continue;
+      }
+      if (p.kind === 'rune' && nr < 30) {
+        dummy.position.set(p.x, 0.35 + Math.sin(t * 4 + p.id) * 0.07, p.z);
+        dummy.rotation.set(t * 2 + p.id, t * 3, 0);
+        dummy.scale.setScalar(1.2);
+        dummy.updateMatrix();
+        this.runeMesh.setMatrixAt(nr++, dummy.matrix);
+        continue;
+      }
       const bob = 0.25 + Math.sin(t * 5 + p.id) * 0.06;
       dummy.position.set(p.x, bob, p.z);
       dummy.rotation.set(0, t * 3 + p.id, 0);
@@ -521,6 +647,10 @@ export class Fx {
       else if (p.kind === 'coin' && nc < 300) this.coinMesh.setMatrixAt(nc++, dummy.matrix);
       else if (p.kind === 'heart' && nh < 20) this.heartMesh.setMatrixAt(nh++, dummy.matrix);
     }
+    this.lootMesh.count = this.beamMesh.count = nl;
+    this.runeMesh.count = nr;
+    for (const m of [this.lootMesh, this.beamMesh, this.runeMesh]) m.instanceMatrix.needsUpdate = true;
+    this.lootMesh.instanceColor.needsUpdate = this.beamMesh.instanceColor.needsUpdate = true;
     this.xpMesh.count = nx;
     this.coinMesh.count = nc;
     this.heartMesh.count = nh;
@@ -546,7 +676,7 @@ export class Fx {
     for (const item of this.hazardPool) {
       if (!item.active) continue;
       const h = item.hazard;
-      if (h.dead || h.delay <= 0 || !run.hazards.includes(h)) {
+      if (h.dead || h.delay <= 0 || !(item.friendly ? run.zones : run.hazards).includes(h)) {
         item.active = false;
         item.mesh.visible = false;
         continue;

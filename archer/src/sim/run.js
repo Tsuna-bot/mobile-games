@@ -7,6 +7,8 @@ import { ABILITIES, rollAbilities } from '../data/abilities.js';
 import { ALL_CHAPTERS, ANGEL_AFTER, BOSS_LAYOUT, LAYOUTS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
 import { ENDLESS, HEROIC, SPECIAL_ROOMS, eliteChance } from '../data/progression.js';
+import { SPELLS, rankCooldown, rankPower } from '../data/heroes.js';
+import { DROP_CHANCE, rollLoot, runeDrop } from '../data/loot.js';
 import { seededRandom } from '../core/random.js';
 import { Arena, CELL } from './arena.js';
 import { updateEnemy } from './enemies.js';
@@ -80,6 +82,18 @@ export class Run {
       this.player.ricochet += 1;
     }
     this.pet = this.createPet(gear.pet);
+    // The hero's spells (buttons during the run), their timed boosts and ground zones.
+    this.spells = (gear.spells ?? []).filter((s) => SPELLS[s.id]).map((s) => {
+      const def = SPELLS[s.id];
+      const cooldown = def.cd * rankCooldown(s.rank) * (s.cdMul ?? 1);
+      return { id: s.id, def, rank: s.rank, power: rankPower(s.rank) * (s.power ?? 1), cooldown, timer: Math.min(2, cooldown) };
+    });
+    this.buffs = [];
+    this.zones = [];
+    this.lastInput = { x: 0, z: 0 };
+    // Loot found on the way (kept even on a defeat) and runes.
+    this.loot = [];
+    this.runes = 0;
     this.enemies = [];
     this.arrows = [];
     this.shots = [];
@@ -143,6 +157,12 @@ export class Run {
     return this.endless ? this.room % ENDLESS.bossEvery === 0 : this.roomIndex === ROOMS - 1;
   }
 
+  /** How deep the run is (loot quality): the chapter, the Endless depth, Heroic higher. */
+  get tier() {
+    if (this.endless) return Math.min(17, Math.floor(this.roomIndex / 3));
+    return Math.min(20, this.chapterIndex + (this.heroic ? 4 : 0));
+  }
+
   /** Monster health multiplier of the current room. */
   healthScale() {
     const d = CONFIG.difficulty;
@@ -204,6 +224,7 @@ export class Run {
     this.arrows = [];
     this.shots = [];
     this.hazards = [];
+    this.zones = [];
     this.pickups = [];
     const p = this.player;
     p.x = 0;
@@ -348,6 +369,8 @@ export class Run {
   step(dt, input) {
     if (this.state !== STATE.FIGHT && this.state !== STATE.CLEARED) return;
     this.time += dt;
+    this.lastInput = input;
+    this.updateSpells(dt);
     this.updatePlayer(dt, input);
     this.flowTimer -= dt;
     if (this.flowTimer <= 0) {
@@ -358,6 +381,7 @@ export class Run {
     this.updateArrows(dt);
     this.updateShots(dt);
     this.updateHazards(dt);
+    this.updateZones(dt);
     this.updateOrbs(dt);
     this.updatePet(dt);
     this.updatePickups(dt);
@@ -373,7 +397,10 @@ export class Run {
     this.roomsCleared++;
     // The boss is down: the chapter is won right away (no door, no last ability).
     if (this.isBossRoom && !this.endless) {
-      for (const item of this.pickups) if (item.kind === 'coin') this.coins += item.value;
+      for (const item of this.pickups) {
+        if (item.kind === 'coin') this.coins += item.value;
+        else if (item.kind === 'loot' || item.kind === 'rune') this.collect(item);
+      }
       this.pickups = [];
       this.shots = [];
       this.hazards = [];
@@ -386,6 +413,7 @@ export class Run {
     this.doorOpen = true;
     this.shots = [];
     this.hazards = [];
+    this.zones = [];
     if (this.endless && this.isBossRoom) this.gems += ENDLESS.gemsPerBoss;
     // Treasure: the chest bursts into gold (and a heart).
     if (this.roomKind === 'treasure' && this.chest) {
@@ -676,7 +704,7 @@ export class Run {
         const nz = arrow.z + (arrow.dz * arrow.speed * dt) / n;
         // Monsters first: a ghost floating over a block can still be hit.
         if (this.arrowHits(arrow, nx, nz)) continue;
-        if (arena.wall(nx, nz) && !arrow.returning) {
+        if (arena.wall(nx, nz) && !arrow.returning && !arrow.ghost) {
           if (arrow.boomerang && arrow.bounces <= 0) {
             this.turnBack(arrow);
             continue;
@@ -732,7 +760,7 @@ export class Run {
     for (const e of this.enemies) {
       if (e.dead || e.spawning > 0 || arrow.hits.has(e.id)) continue;
       if (arrow.grace > 0 && arrow.graceId === e.id) continue;
-      const r = e.radius + 0.12;
+      const r = e.radius + (arrow.width ?? 0.12);
       if ((e.x - x) ** 2 + (e.z - z) ** 2 > r * r) continue;
       arrow.hits.add(e.id);
       if (arrow.pet) {
@@ -830,11 +858,11 @@ export class Run {
     if (!noElements && p.bolt) this.lightning(enemy, 2 + (p.bolt - 1), this.damage * 0.35 * p.bolt);
   }
 
-  lightning(from, count, damage) {
+  lightning(from, count, damage, range = 3.2) {
     const hit = new Set([from.id]);
     let prev = from;
     for (let i = 0; i < count; i++) {
-      const next = this.nearestEnemy(prev.x, prev.z, 3.2, hit);
+      const next = this.nearestEnemy(prev.x, prev.z, range, hit);
       if (!next) break;
       hit.add(next.id);
       this.listener.onLightning?.(prev, next);
@@ -876,6 +904,14 @@ export class Run {
     const coins = Math.max(1, Math.round(enemy.def.coins * (1 + tier * 0.5) * (this.heroic ? 1.5 : 1) * (enemy.elite ? ELITE.coins : 1) * p.coinMul));
     for (let i = 0; i < Math.min(5, coins); i++) drop('coin', coins / Math.min(5, coins));
     if (this.random() < (enemy.elite ? ELITE.heart : HEART_CHANCE)) drop('heart', 0.12);
+    // Loot: an item now and then (elites often, bosses always, two in the deeper chapters), and runes.
+    if (!enemy.minion) {
+      const source = enemy.def.boss ? 'boss' : enemy.elite ? 'elite' : 'normal';
+      const items = source === 'boss' ? (this.tier >= 6 ? 2 : 1) : this.random() < DROP_CHANCE[source] ? 1 : 0;
+      for (let i = 0; i < items; i++) drop('loot', rollLoot(source, this.tier, this.random));
+      const runes = runeDrop(source, this.tier);
+      if (runes) drop('rune', runes);
+    }
     // Blobs split in two when they die.
     if (enemy.def.split) {
       for (const side of [-1, 1]) {
@@ -1076,10 +1112,250 @@ export class Run {
         if (item.kind === 'xp') this.addXp(item.value);
         else if (item.kind === 'coin') this.coins += item.value;
         else if (item.kind === 'heart') p.hp = Math.min(p.maxHp, p.hp + p.maxHp * item.value);
+        else this.collect(item);
         this.listener.onPickup?.(item);
       }
     }
     this.pickups = this.pickups.filter((i) => !i.dead);
+  }
+
+  /** Loot and runes picked up (or swept up when the boss falls). */
+  collect(item) {
+    if (item.kind === 'loot') {
+      this.loot.push(item.value);
+      this.listener.onLoot?.(item.value);
+    } else if (item.kind === 'rune') this.runes += item.value;
+  }
+
+  // ------------------------------------------------------------ spells
+
+  /** Seconds left before spell `i` is ready, and its full cooldown. */
+  spellState(i) {
+    const s = this.spells[i];
+    return s ? { ready: s.timer <= 0, share: Math.max(0, s.timer) / s.cooldown, timer: s.timer } : null;
+  }
+
+  updateSpells(dt) {
+    for (const s of this.spells) if (s.timer > 0) s.timer -= dt;
+    if (!this.buffs.length) return;
+    for (const b of this.buffs) {
+      if (this.time < b.until) continue;
+      b.revert();
+      b.done = true;
+      this.listener.onBuffEnd?.(b.spell);
+    }
+    this.buffs = this.buffs.filter((b) => !b.done);
+  }
+
+  /** Living monsters sorted by distance to the hero. */
+  enemiesByDistance() {
+    const p = this.player;
+    return this.enemies
+      .filter((e) => !e.dead && e.spawning <= 0)
+      .map((e) => ({ e, d: (e.x - p.x) ** 2 + (e.z - p.z) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+      .map((x) => x.e);
+  }
+
+  /** Casts spell `i` if it is ready; returns true on a cast. */
+  castSpell(i) {
+    const s = this.spells[i];
+    if (!s || s.timer > 0 || this.state !== STATE.FIGHT) return false;
+    const p = this.player;
+    const def = s.def;
+    const par = def.params;
+    const k = s.power;
+    const damage = this.damage * (par.damage ?? 0) * k;
+    const source = { spell: def.id };
+    const targets = this.enemiesByDistance();
+    const offensive = !['buff', 'guard', 'dash'].includes(def.type);
+    if (offensive && !targets.length) return false;
+    const info = { x: p.x, z: p.z };
+    switch (def.type) {
+      case 'rain': {
+        const count = par.count + (def.id === 'arrowRain' ? Math.floor((s.rank - 1) / 2) : 0);
+        for (let n = 0; n < count; n++) {
+          const e = targets[n % targets.length];
+          if (n >= targets.length && n > 0) break;
+          const zone = {
+            id: this.nextId++, spell: def.id, x: e.x, z: e.z, radius: par.radius * (par.big ? 1 : 1), delay: par.delay + n * 0.07, damage,
+            slow: par.slow, poison: par.poison ? damage * 0.3 : 0, burn: par.burn ? damage * 0.12 : 0, big: Boolean(par.big),
+          };
+          zone.max = zone.delay;
+          this.zones.push(zone);
+          this.listener.onZone?.(zone, def);
+        }
+        break;
+      }
+      case 'pierce': {
+        const t = targets[0];
+        const d = Math.hypot(t.x - p.x, t.z - p.z) || 1;
+        const dx = (t.x - p.x) / d;
+        const dz = (t.z - p.z) / d;
+        p.dirX = dx;
+        p.dirZ = dz;
+        this.arrows.push({
+          id: this.nextId++, kind: 'gale', x: p.x + dx * 0.4, z: p.z + dz * 0.4, dx, dz, speed: P.arrowSpeed * 1.35, damage, life: 1.6,
+          bounces: 0, ricochets: 0, hits: new Set(), view: null, pierceLeft: 99, homing: 0, width: par.width, ghost: true,
+        });
+        break;
+      }
+      case 'fan': {
+        const count = par.count + (s.rank - 1) * 2;
+        for (let n = 0; n < count; n++) {
+          const a = (n / count) * Math.PI * 2;
+          this.arrows.push({
+            id: this.nextId++, kind: 'bow', x: p.x, z: p.z, dx: Math.sin(a), dz: Math.cos(a), speed: P.arrowSpeed, damage, life: 1.4,
+            bounces: 0, ricochets: 0, hits: new Set(), view: null, pierceLeft: 1, homing: 0,
+          });
+        }
+        break;
+      }
+      case 'buff': {
+        const duration = par.duration + (s.rank - 1);
+        const rate = par.rateMul ? 1 + (par.rateMul - 1) * k : 1;
+        const dmg = par.damageMul ? 1 + (par.damageMul - 1) * k : 1;
+        const speed = par.speedMul ?? 1;
+        const crit = par.crit ?? 0;
+        p.rateMul *= rate;
+        p.damageMul *= dmg;
+        p.speedMul *= speed;
+        p.crit += crit;
+        this.buffs.push({
+          spell: def.id, until: this.time + duration,
+          revert: () => {
+            p.rateMul /= rate;
+            p.damageMul /= dmg;
+            p.speedMul /= speed;
+            p.crit -= crit;
+          },
+        });
+        info.duration = duration;
+        break;
+      }
+      case 'guard': {
+        const time = par.invulnerable + (s.rank - 1) * 0.3;
+        p.invulnerable = Math.max(p.invulnerable, time);
+        p.hp = Math.min(p.maxHp, p.hp + p.maxHp * par.heal * k);
+        info.duration = time;
+        break;
+      }
+      case 'dash': {
+        const input = this.lastInput;
+        const len = Math.hypot(input.x, input.z);
+        let dx = len > 0.12 ? input.x / len : p.dirX;
+        let dz = len > 0.12 ? input.z / len : p.dirZ;
+        // Standing still: toward the nearest monster (or away if it is too close).
+        if (len <= 0.12 && targets[0]) {
+          const t = targets[0];
+          const d = Math.hypot(t.x - p.x, t.z - p.z) || 1;
+          dx = (t.x - p.x) / d;
+          dz = (t.z - p.z) / d;
+        }
+        const hit = new Set();
+        const steps = 12;
+        for (let n = 0; n < steps; n++) {
+          this.arena.move(p, (dx * par.distance) / steps, (dz * par.distance) / steps);
+          for (const e of targets) {
+            if (e.dead || hit.has(e.id) || (e.x - p.x) ** 2 + (e.z - p.z) ** 2 > (e.radius + 0.7) ** 2) continue;
+            hit.add(e.id);
+            this.hitEnemy(e, damage, source, { noElements: true });
+            if (par.stun) this.stun(e, par.stun);
+          }
+        }
+        p.dirX = dx;
+        p.dirZ = dz;
+        p.invulnerable = Math.max(p.invulnerable, par.invulnerable);
+        p.cooldown = Math.min(p.cooldown, 0.05);
+        p.volley = null;
+        info.toX = p.x;
+        info.toZ = p.z;
+        break;
+      }
+      case 'nova': {
+        const r = par.radius;
+        for (const e of targets) {
+          if ((e.x - p.x) ** 2 + (e.z - p.z) ** 2 > (r + e.radius) ** 2) continue;
+          this.hitEnemy(e, damage, source, { noElements: true });
+          if (e.dead) continue;
+          if (par.freeze) this.stun(e, par.freeze + (s.rank - 1) * 0.2);
+          if (par.stun) this.stun(e, par.stun);
+          if (par.poison) {
+            e.poison = Math.max(e.poison, damage * 0.25);
+            e.poisonTimer = 5;
+          }
+          if (par.push && !e.def.boss) {
+            const d = Math.hypot(e.x - p.x, e.z - p.z) || 1;
+            this.arena.move(e, ((e.x - p.x) / d) * par.push, ((e.z - p.z) / d) * par.push);
+          }
+        }
+        info.radius = r;
+        break;
+      }
+      case 'execute': {
+        let t = targets[0];
+        for (const e of targets) if (e.hp > t.hp) t = e;
+        const hit = damage * p.critDamage * (t.def.boss ? 1 + p.bossDamage : 1);
+        info.toX = t.x;
+        info.toZ = t.z;
+        this.listener.onSpell?.(s, info);
+        this.damageEnemy(t, hit, true, source);
+        s.timer = s.cooldown;
+        return true;
+      }
+      case 'chain': {
+        const first = targets[0];
+        info.toX = first.x;
+        info.toZ = first.z;
+        this.listener.onSpell?.(s, info);
+        this.hitEnemy(first, damage, source, { noElements: true });
+        this.lightning(first, par.jumps + (s.rank - 1), damage, 4.5);
+        s.timer = s.cooldown;
+        return true;
+      }
+      default:
+        return false;
+    }
+    s.timer = s.cooldown;
+    this.listener.onSpell?.(s, info);
+    return true;
+  }
+
+  /** Frozen in place (bosses are only slowed). */
+  stun(e, time) {
+    if (e.def.boss) {
+      e.slow = Math.max(e.slow, 0.5);
+      e.slowTimer = Math.max(e.slowTimer, time);
+    } else e.frozen = Math.max(e.frozen, time);
+  }
+
+  /** The hero's ground spells (rain, meteor, thorns) land when their timer ends. */
+  updateZones(dt) {
+    if (!this.zones.length) return;
+    for (const z of this.zones) {
+      z.delay -= dt;
+      if (z.delay > 0) continue;
+      z.dead = true;
+      this.listener.onZoneBlast?.(z);
+      for (const e of this.enemies) {
+        if (e.dead || e.spawning > 0 || (e.x - z.x) ** 2 + (e.z - z.z) ** 2 > (z.radius + e.radius) ** 2) continue;
+        this.hitEnemy(e, z.damage, { spell: z.spell }, { noElements: true });
+        if (e.dead) continue;
+        if (z.slow) {
+          e.slow = Math.max(e.slow, 0.5);
+          e.slowTimer = 2.5;
+        }
+        if (z.poison) {
+          e.poison = Math.max(e.poison, z.poison);
+          e.poisonTimer = 5;
+        }
+        if (z.burn) {
+          e.burn = Math.max(e.burn, z.burn);
+          e.burnTimer = 3;
+        }
+      }
+    }
+    this.zones = this.zones.filter((z) => !z.dead);
   }
 
   // ------------------------------------------------------------ hero damage

@@ -4,6 +4,7 @@
 import { Run, STATE } from '../src/sim/run.js';
 import { defaultSave } from '../src/core/storage.js';
 import { addItem, ensureProfile, equip, runGear } from '../src/meta/profile.js';
+import { heroState } from '../src/meta/heroes.js';
 
 const ARGV = typeof process !== 'undefined' ? process.argv : [];
 const args = ARGV.slice(2).filter((a) => !a.startsWith('--'));
@@ -17,6 +18,18 @@ const HERO = ARGV.find((a) => a.startsWith('--hero='))?.slice(7);
 // --mode=heroic / endless; --weapon=shuriken: another weapon in place of the bow.
 const MODE = ARGV.find((a) => a.startsWith('--mode='))?.slice(7) ?? 'normal';
 const WEAPON = ARGV.find((a) => a.startsWith('--weapon='))?.slice(9);
+// --hlevel=15: the hero's level (spells and class come with it); --spells=off: never casts.
+const HLEVEL = Number(ARGV.find((a) => a.startsWith('--hlevel='))?.slice(9) ?? 1);
+const NO_SPELLS = ARGV.includes('--spells=off');
+
+function grow(save) {
+  const id = save.heroes.selected;
+  const h = heroState(save, id);
+  h.level = HLEVEL;
+  const rank = Math.max(1, Math.min(5, Math.floor(HLEVEL / 6)));
+  h.spells = [rank, rank, rank];
+  return save;
+}
 
 function gearPreset(name) {
   if (!name) return {};
@@ -30,7 +43,7 @@ function gearPreset(name) {
     const fresh = ensureProfile(defaultSave());
     if (HERO) fresh.heroes.selected = HERO;
     if (WEAPON) fresh.inventory.find((it) => it.uid === fresh.equipped.weapon).base = WEAPON;
-    return runGear(fresh);
+    return runGear(grow(fresh));
   }
   if (name === 'early') {
     put('bow', 0, 5);
@@ -38,7 +51,7 @@ function gearPreset(name) {
     put('bear', 0, 3);
     for (const id of ['strength', 'vigor', 'agility', 'luck', 'vigor']) save.talents[id] = (save.talents[id] ?? 0) + 1;
     if (HERO) save.heroes.selected = HERO;
-    return runGear(save);
+    return runGear(grow(save));
   }
   put('bow', late ? 2 : 1, late ? 22 : 10);
   put('mail', late ? 2 : 1, late ? 20 : 9);
@@ -50,7 +63,7 @@ function gearPreset(name) {
   const ids = ['strength', 'vigor', 'agility', 'recovery', 'guard', 'looting', 'luck', 'swift'];
   for (let i = 0; i < rolls; i++) save.talents[ids[i % ids.length]] = (save.talents[ids[i % ids.length]] ?? 0) + 1;
   if (HERO) save.heroes.selected = HERO;
-  return runGear(save);
+  return runGear(grow(save));
 }
 const DT = 1 / 60;
 const PREFER = ['attack', 'front', 'multishot', 'speed', 'crit', 'ricochet', 'diagonal', 'vitality', 'bolt', 'fire', 'heal'];
@@ -143,11 +156,12 @@ export function play(chapter, gear = {}, seed = undefined, mode = 'normal') {
   const limit = mode === 'endless' ? 5400 : 1800;
   while (t < limit && run.state !== STATE.DEAD && run.state !== STATE.WON) {
     if (run.state === STATE.CHOOSE || run.state === STATE.ANGEL) run.choose(pick(run));
+    if (!NO_SPELLS && run.state === STATE.FIGHT) for (let i = 0; i < run.spells.length; i++) if (run.spells[i].timer <= 0) run.castSpell(i);
     run.step(DT, botInput(run));
     t += DT;
   }
   if (run.state === STATE.FIGHT && t >= limit) events.stuck = run.enemies.filter((e) => !e.dead).map((e) => `${e.def.id}@${e.x.toFixed(1)},${e.z.toFixed(1)} ${e.state}`).join(' ') + ` hero@${run.player.x.toFixed(1)},${run.player.z.toFixed(1)} layout ${run.layout.join('|')}`;
-  return { state: run.state, room: run.room, level: run.level, coins: Math.round(run.coins), kills: run.kills, elites: run.eliteKills, gems: run.gems, time: Math.round(t), hp: Math.round(run.player.hp), ...events, abilities: Object.keys(run.taken).join(',') };
+  return { state: run.state, room: run.room, level: run.level, coins: Math.round(run.coins), kills: run.kills, elites: run.eliteKills, gems: run.gems, loot: run.loot.length, runes: run.runes, time: Math.round(t), hp: Math.round(run.player.hp), ...events, abilities: Object.keys(run.taken).join(',') };
 }
 
 if (ARGV[1]?.endsWith('bot.mjs')) {
@@ -159,6 +173,7 @@ if (ARGV[1]?.endsWith('bot.mjs')) {
   for (const r of results) for (const [k, v] of Object.entries(r.by)) by[k] = (by[k] ?? 0) + v;
   console.log('damage by source', JSON.stringify(Object.fromEntries(Object.entries(by).sort((a, b) => b[1] - a[1]))));
   console.log(`executions per run ${(results.reduce((a, r) => a + r.executions, 0) / RUNS).toFixed(1)}`);
+  console.log(`loot per run ${(results.reduce((a, r) => a + r.loot, 0) / RUNS).toFixed(1)}, runes ${(results.reduce((a, r) => a + r.runes, 0) / RUNS).toFixed(1)}`);
   console.log(`elites per run ${(results.reduce((a, r) => a + r.elites, 0) / RUNS).toFixed(1)}, gems ${(results.reduce((a, r) => a + r.gems, 0) / RUNS).toFixed(1)}`);
   console.log(`${MODE === 'normal' ? '' : `${MODE} `}chapter ${CHAPTER + 1}: won ${won}/${RUNS}, reached rooms [${results.map((r) => r.room).join(',')}], levels [${results.map((r) => r.level).join(',')}], minutes [${results.map((r) => (r.time / 60).toFixed(1)).join(',')}]`);
 }

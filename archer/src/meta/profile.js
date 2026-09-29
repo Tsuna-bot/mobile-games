@@ -4,6 +4,7 @@
 import { BASES, BASE_IDS, LEGENDARY, MAX_STARS, RARITIES, SETS, SLOTS, awakenCost, canAwaken, itemStats, upgradeCost } from '../data/gear.js';
 import { CHESTS, FREE_HEROES, HEROES, PETS, TALENTS, petPower, talentCost } from '../data/meta.js';
 import { TREE } from '../data/progression.js';
+import { ensureHeroes, heroGear } from './heroes.js';
 import { ensureProgress, track } from './progress.js';
 
 const HOUR = 3600 * 1000;
@@ -60,10 +61,12 @@ export function ensureProfile(save) {
     if (candidates[0]) save.equipped[slot.id] = candidates[0].uid;
   }
   ensureProgress(save);
+  ensureHeroes(save);
   return save;
 }
 
 export function addItem(save, base, rarity, level = 1) {
+  level = Math.max(1, Math.min(RARITIES[rarity].cap, Math.floor(level) || 1));
   const item = { uid: save.nextUid++, base, rarity, level, stars: 0 };
   save.inventory.push(item);
   if (rarity === RARITIES.length - 1) track(save, 'legendaries', 1);
@@ -325,6 +328,11 @@ export function runGear(save) {
   const hero = HEROES[save.heroes.selected] ?? HEROES.archer;
   add(hero.stats);
   gear.hero = hero;
+  // The hero's own growth: level, class and spells.
+  const growth = heroGear(save, hero.id);
+  for (const stats of growth.stats) add(stats);
+  gear.spells = growth.spells;
+  gear.heroLevel = growth.level;
   gear.armor = Math.min(0.6, gear.armor);
   gear.dodge = Math.min(0.5, gear.dodge);
   return gear;

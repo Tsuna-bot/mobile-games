@@ -2108,3 +2108,517 @@ button:disabled {
   height: 11px;
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
 }
+
+/* ---------------------------------------------------------------- spells (HUD) */
+
+.spellbar {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--safe-bottom) + 22px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(16px);
+  transition: opacity 0.3s ease, transform 0.35s var(--ease-out);
+}
+
+.spellbar.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.spellbar.is-visible .spell {
+  pointer-events: auto;
+}
+
+/* The first spell is the big one, the others sit above it. */
+.spell {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--spell) 55%, #fff) 0%, var(--spell) 45%, color-mix(in srgb, var(--spell) 35%, #101830) 100%);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), inset 0 -4px 0 rgba(0, 0, 0, 0.25), 0 0 0 3px rgba(255, 255, 255, 0.85);
+  touch-action: none;
+  overflow: hidden;
+  transition: transform 0.15s var(--spring), filter 0.2s ease;
+}
+
+.spell:first-child {
+  width: 74px;
+  height: 74px;
+}
+
+.spell__icon .ico {
+  width: 34px;
+  height: 34px;
+  fill: #fff;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+}
+
+.spell__cd {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(rgba(10, 14, 32, 0.72) calc(var(--cd, 0) * 360deg), transparent 0);
+  pointer-events: none;
+}
+
+.spell__time {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 22px;
+  color: #fff;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.spell__rank {
+  position: absolute;
+  bottom: 3px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 1px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.spell:not(.is-ready) {
+  filter: saturate(0.55) brightness(0.85);
+}
+
+.spell.is-ready {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45), inset 0 -4px 0 rgba(0, 0, 0, 0.25), 0 0 0 3px #fff, 0 0 18px 4px color-mix(in srgb, var(--spell) 70%, transparent);
+}
+
+.spell.is-flash {
+  animation: spell-ready 0.5s var(--spring);
+}
+
+.spell.is-cast {
+  animation: spell-cast 0.3s var(--ease-out);
+}
+
+.spell.is-denied {
+  animation: spell-denied 0.3s ease;
+}
+
+@keyframes spell-ready {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+@keyframes spell-cast {
+  0% { transform: scale(0.82); }
+  100% { transform: scale(1); }
+}
+
+@keyframes spell-denied {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Loot notices. */
+
+.toasts {
+  position: absolute;
+  top: calc(var(--safe-top) + 96px);
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 8px;
+  border-radius: 999px;
+  background: rgba(16, 22, 48, 0.86);
+  box-shadow: inset 0 0 0 2px var(--toast), 0 0 18px color-mix(in srgb, var(--toast) 50%, transparent), 0 6px 14px rgba(0, 0, 0, 0.4);
+  font-size: 14px;
+  white-space: nowrap;
+  animation: toast-in 2.6s var(--ease-out) forwards;
+}
+
+.toast .ico {
+  width: 24px;
+  height: 24px;
+  fill: var(--toast);
+}
+
+.toast b {
+  color: var(--toast);
+}
+
+@keyframes toast-in {
+  0% { opacity: 0; transform: translateY(-10px) scale(0.9); }
+  10% { opacity: 1; transform: none; }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+
+/* ---------------------------------------------------------------- hero sheet */
+
+.hero-card {
+  cursor: pointer;
+  transition: transform 0.15s var(--spring), box-shadow 0.2s ease;
+}
+
+.hero-card.is-viewed {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
+  transform: translateY(-2px);
+}
+
+.hero-card.is-selected.is-viewed {
+  box-shadow: inset 0 0 0 3px var(--gold), 0 0 18px rgba(255, 201, 60, 0.3);
+}
+
+.hero-card__face {
+  position: relative;
+}
+
+.hero-card__level {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 15px;
+  background: linear-gradient(#ffe07a, var(--gold-deep));
+  color: #3a2200;
+  box-shadow: 0 0 0 2px #fff, 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.hero-detail {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.hero-sheet {
+  padding: 12px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--hero) 35%, rgba(20, 26, 56, 0.9)), rgba(20, 26, 56, 0.9));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--hero) 60%, transparent);
+  display: grid;
+  gap: 8px;
+}
+
+.hero-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-sheet__head b {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 20px;
+}
+
+.hero-sheet__head small,
+.hero-sheet__bonus {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.hero-sheet__level {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 26px;
+  color: #3a2200;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, var(--gold) 50%, var(--gold-deep));
+  box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255, 201, 60, 0.5);
+}
+
+.hero-sheet__xp {
+  position: relative;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.hero-sheet__xp i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #6ff0ff, #4fb4ff);
+  box-shadow: 0 0 12px rgba(111, 240, 255, 0.6);
+}
+
+.hero-sheet__xp span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.runes-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: rgba(192, 112, 255, 0.2);
+  color: #e0c0ff;
+}
+
+.runes-pill .ico,
+.spell-row .btn .ico {
+  width: 16px;
+  height: 16px;
+  fill: #d0a0ff;
+}
+
+.spell-list {
+  display: grid;
+  gap: 8px;
+}
+
+.spell-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 3px 0 0 var(--spell);
+}
+
+.spell-row.is-locked {
+  opacity: 0.6;
+}
+
+.spell-row.is-bumped {
+  animation: talent-pop 0.4s var(--spring);
+}
+
+.spell-row__body {
+  min-width: 0;
+}
+
+.spell-row__body b {
+  font-size: 15px;
+}
+
+.spell-row__body small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.spell-row__pips {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.spell-row__pips i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.spell-row__pips i.is-on {
+  background: var(--spell);
+  box-shadow: 0 0 6px var(--spell);
+}
+
+.spell-row__lock {
+  font-size: 12px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.spell-row__lock .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.btn--small {
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.btn--small .coin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.badge--md {
+  width: 44px;
+  height: 44px;
+}
+
+.badge--md .ico {
+  width: 26px;
+  height: 26px;
+}
+
+.class-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.class-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 8px;
+  border-radius: 16px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.class-card.is-active {
+  background: rgba(255, 201, 60, 0.14);
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.class-card b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 17px;
+}
+
+.class-card small {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.3;
+  flex: 1;
+}
+
+.hero-sheet__tip {
+  font-size: 12px;
+  text-align: center;
+}
+
+.end-loot-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.end-loot-list .item {
+  width: 56px;
+  height: 56px;
+}
+
+/* Compact hero picker: five portraits in a row, the sheet below. */
+.heroes {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.heroes .hero-card {
+  padding: 8px 2px 6px;
+  gap: 4px;
+  border-radius: 14px;
+}
+
+.heroes .hero-card__face {
+  width: 52px;
+  height: 52px;
+}
+
+.heroes .hero-card__face .badge--lg {
+  width: 48px;
+  height: 48px;
+}
+
+.heroes .hero-card b {
+  font-size: 14px;
+}
+
+.heroes .hero-card.is-locked .hero-card__face {
+  filter: grayscale(0.7) brightness(0.8);
+}
+
+.hero-card__level {
+  min-width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+
+.hero-card__level--lock {
+  background: linear-gradient(#c8d0dc, #7a8494);
+}
+
+.hero-card__level--lock .ico {
+  width: 12px;
+  height: 12px;
+  fill: #20283a;
+}
+
+.hero-sheet__name {
+  flex: 1;
+  min-width: 0;
+}
+
+.spell-row {
+  grid-template-columns: auto 1fr;
+}
+
+.spell-row > .btn,
+.spell-row > .spell-row__lock {
+  grid-column: 2;
+  justify-self: start;
+}
