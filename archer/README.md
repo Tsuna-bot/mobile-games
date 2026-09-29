@@ -12,7 +12,7 @@ Crédits :
 ## Jouer
 
 - **Joystick flottant** : pose le pouce n’importe où et glisse pour courir. Lâche : le héros s’arrête et tire tout seul sur le monstre le plus proche.
-- **3 chapitres de 10 salles** : Forêt des murmures (prairie ensoleillée), Ruines oubliées (ruines au crépuscule), Cimetière maudit (lande de nuit). Un ange après la salle 5 (soin ou capacité), un boss à la salle 10.
+- **8 chapitres de 10 salles**, chacun avec son paysage : Forêt des murmures (prairie ensoleillée), Ruines oubliées (ruines au crépuscule), Cimetière maudit (lande de nuit), Mines de cristal (hauts plateaux aux cristaux lumineux), Toundra gelée (neige, sapins, étangs gelés), Marais toxique (roseaux, eaux vertes, brume), Cœur du volcan (basalte, lave, fissures incandescentes), Citadelle de l’ombre (grande cour de nuit). Un ange après la salle 5 (soin ou capacité), un boss à la salle 10 ; le boss vaincu, la partie est gagnée.
 - **Chaque attaque est annoncée** : ligne rouge avant un tir, couloir avant une charge, cercle rouge qui se remplit avant une bombe ou une frappe au sol.
 - **Une seconde chance** par partie (tu repars avec la moitié de ta vie).
 
@@ -34,6 +34,8 @@ Chaque chapitre a ses propres monstres (même comportement, autre apparence) :
 | cercle d’orbes lentes | sorcier | sorcier | mage squelette |
 | bombes (sors du cercle rouge) | guerrier tribal | bandit | bandit |
 | **Boss** | **Roi Champignon** : charges, frappe au sol, rochers | **Roi squelette** : spirales d’os, cercles, invocations | **Dragon spectral** : téléportation, éventails, chauves-souris |
+
+Chapitres 4 à 8 : blobs qui se divisent en deux en mourant, et de nouveaux boss — **Gardien de cristal**, **Yéti ancestral**, **Tyran des marais**, **Seigneur démon** et le **Maître de l’ombre** (qui enchaîne les attaques des autres boss).
 
 Les boss deviennent plus agressifs sous la moitié de leur vie.
 
@@ -69,6 +71,8 @@ Réglage global dans `src/config.js` (`difficulty` : dégâts et vie des monstre
 | --- | --- | --- | --- |
 | départ, jamais amélioré | gagne ~95 % | gagne ~60 % | atteint le boss, gagne ~20 % |
 | moyen (~25 parties) | — | — | gagne ~80 % |
+
+Chapitres 4 à 8 avec l’équipement avancé : gagnés ~90 à 100 % (4 à 7), ~50 % (8, le dernier).
 
 Un humain esquive mieux que le bot : c’est une borne basse.
 

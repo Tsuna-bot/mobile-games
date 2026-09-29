@@ -22,7 +22,7 @@ export const FLOOR_STYLE = { grass: 0, stone: 1, flagstone: 2, soil: 3 };
  * Patches `material` (MeshStandardMaterial, instanced or not) with the painted floor.
  * `occlusion` is a texture from `occlusionTexture` (null outside the arena).
  */
-export function patchFloor(material, { style, occlusion = null, bounds = null, tint = 0xffffff, detail = 1, region = null }) {
+export function patchFloor(material, { style, occlusion = null, bounds = null, tint = 0xffffff, detail = 1, region = null, cracks = null }) {
   const uniforms = {
     uStyle: { value: style },
     uOcc: { value: occlusion },
@@ -33,6 +33,8 @@ export function patchFloor(material, { style, occlusion = null, bounds = null, t
     // Paved court (ruins): half size, enabled; colour of the slabs.
     uRegion: { value: new THREE.Vector4(region?.halfW ?? 0, region?.halfH ?? 0, region ? 1 : 0, 0) },
     uRegionColor: { value: new THREE.Color(region?.color ?? 0xffffff) },
+    // Glowing cracks (volcano): their colour, black for none.
+    uCracks: { value: new THREE.Color(cracks ?? 0x000000) },
   };
   material.userData.floor = uniforms;
   material.onBeforeCompile = (shader) => {
@@ -56,6 +58,7 @@ uniform vec3 uTint;
 uniform float uDetail;
 uniform vec4 uRegion;
 uniform vec3 uRegionColor;
+uniform vec3 uCracks;
 ${NOISE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
   {
@@ -112,6 +115,15 @@ ${NOISE}`)
       c *= 1.0 - occ * 0.55;
     }
     diffuseColor.rgb = c;
+  }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  if (uCracks.r + uCracks.g + uCracks.b > 0.0) {
+    vec2 q = vFloorWorld.xz;
+    float n = fNoise(q * 1.1 + fNoise(q * 2.7) * 0.9);
+    float crack = 1.0 - smoothstep(0.0, 0.03, abs(n - 0.5));
+    crack *= smoothstep(0.42, 0.66, fFbm(q * 0.35 + 5.0));
+    diffuseColor.rgb *= 1.0 - crack * 0.8;
+    totalEmissiveRadiance += uCracks * crack * 1.6;
   }`);
   };
   material.customProgramCacheKey = () => `floor-${style}-${region ? 'court' : 'open'}`;

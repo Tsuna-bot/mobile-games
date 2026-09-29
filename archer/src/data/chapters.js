@@ -116,7 +116,6 @@ export const ALL_CHAPTERS = [
   },
   {
     id: 'mines',
-    ready: false, // decor and monsters not drawn yet
     name: 'Mines de cristal',
     theme: 'mines',
     hp: 4.4,
@@ -136,7 +135,6 @@ export const ALL_CHAPTERS = [
   },
   {
     id: 'tundra',
-    ready: false, // decor and monsters not drawn yet
     name: 'Toundra gelée',
     theme: 'tundra',
     hp: 5.8,
@@ -156,7 +154,6 @@ export const ALL_CHAPTERS = [
   },
   {
     id: 'swamp',
-    ready: false, // decor and monsters not drawn yet
     name: 'Marais toxique',
     theme: 'swamp',
     hp: 7.4,
@@ -176,7 +173,6 @@ export const ALL_CHAPTERS = [
   },
   {
     id: 'volcano',
-    ready: false, // decor and monsters not drawn yet
     name: 'Cœur du volcan',
     theme: 'volcano',
     hp: 9.2,
@@ -196,7 +192,6 @@ export const ALL_CHAPTERS = [
   },
   {
     id: 'citadel',
-    ready: false, // decor and monsters not drawn yet
     name: 'Citadelle de l’ombre',
     theme: 'citadel',
     hp: 11.5,

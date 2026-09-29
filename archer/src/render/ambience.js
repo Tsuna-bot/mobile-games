@@ -77,6 +77,12 @@ export const AMBIENCE = {
   forest: { motes: [[0xfff0a0, 70, 0.9, 0.12], [0xb8ff8a, 30, 0.7, 0.05]], shafts: { color: 0xfff1c0, count: 4, opacity: 0.09 } },
   dungeon: { motes: [[0xff9a40, 60, 0.8, 0.35], [0xd8c8ff, 30, 0.6, 0.06]], shafts: { color: 0xffd9a0, count: 3, opacity: 0.07 } },
   graveyard: { motes: [[0x8affc8, 50, 1, 0.1], [0xc8d8ff, 30, 0.7, 0.04]], mist: { color: 0xa8c4d8, opacity: 0.32 } },
+  mines: { motes: [[0x9ff0ff, 60, 0.9, 0.08], [0xd8a8ff, 35, 0.7, 0.04]] },
+  // A negative rise makes the motes fall: snow.
+  tundra: { motes: [[0xffffff, 150, 1.2, -0.35], [0xd8ecff, 60, 0.8, -0.2]], shafts: { color: 0xffffff, count: 3, opacity: 0.06 } },
+  swamp: { motes: [[0xd8ff6a, 55, 0.9, 0.05], [0xfff0a0, 25, 0.7, 0.03]], mist: { color: 0xb8d0a0, opacity: 0.34 } },
+  volcano: { motes: [[0xff8a3a, 100, 0.8, 0.55], [0xffd070, 40, 0.6, 0.3]] },
+  citadel: { motes: [[0xc89aff, 60, 0.9, 0.08], [0xff9ad8, 20, 0.7, 0.04]], mist: { color: 0x8a6ab8, opacity: 0.3 } },
 };
 
 export class Ambience {

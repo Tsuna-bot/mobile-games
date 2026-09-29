@@ -6,6 +6,17 @@ import { addOutlines, patchRim, toonCopy } from './surfaces.js';
 
 const TMP = new THREE.Color();
 
+/** Frees the bone textures of the skinned meshes under `root` (one per skeleton). */
+function disposeSkeletons(root) {
+  const done = new Set();
+  root.traverse((o) => {
+    if (o.isSkinnedMesh && !done.has(o.skeleton)) {
+      done.add(o.skeleton);
+      o.skeleton.dispose();
+    }
+  });
+}
+
 function shortestAngle(from, to) {
   let d = (to - from) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
@@ -288,6 +299,7 @@ export class Actors {
     if (!hero) return;
     hero.root.removeFromParent();
     hero.animator.mixer.stopAllAction();
+    disposeSkeletons(hero.root);
     for (const item of hero.gear) item.dispose();
     this.hero = null;
   }
@@ -417,6 +429,7 @@ export class Actors {
 
   removeEnemy(view) {
     view.root.removeFromParent();
+    disposeSkeletons(view.root);
     view.animator.mixer.stopAllAction();
     for (const item of view.gear) item.dispose();
     this.enemies.delete(view.enemy.id);
