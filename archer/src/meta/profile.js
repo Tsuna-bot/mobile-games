@@ -5,7 +5,7 @@ import { BASES, BASE_IDS, LEGENDARY, MAX_STARS, RARITIES, SETS, SLOTS, awakenCos
 import { CHESTS, FREE_HEROES, HEROES, PETS, TALENTS, petPower, talentCost } from '../data/meta.js';
 import { TREE } from '../data/progression.js';
 import { ensureHeroes, heroGear } from './heroes.js';
-import { RECOMMENDED, RECOMMENDED_BONUS } from '../data/heroes.js';
+import { RECOMMENDED_BONUSES, isRecommended } from '../data/heroes.js';
 import { ensureProgress, track } from './progress.js';
 
 const HOUR = 3600 * 1000;
@@ -348,10 +348,17 @@ export function runGear(save) {
   for (const stats of growth.stats) add(stats);
   gear.spells = growth.spells;
   gear.heroLevel = growth.level;
-  // A weapon the hero handles best: +12 % attack.
-  if (gear.weapon && RECOMMENDED[hero.id]?.includes(gear.weapon)) {
-    gear.damageMul += RECOMMENDED_BONUS;
-    gear.recommended = true;
+  // Pieces the hero handles best: a bonus per piece, by slot.
+  gear.recommended = 0;
+  for (const [slot, uid] of Object.entries(save.equipped)) {
+    const item = save.inventory.find((it) => it.uid === uid);
+    if (!item || !isRecommended(hero.id, item.base)) continue;
+    const kind = slot === 'pet' ? 'pet' : BASES[item.base]?.slot;
+    const bonus = RECOMMENDED_BONUSES[kind];
+    if (!bonus) continue;
+    gear.recommended++;
+    if (bonus.power && gear.pet) gear.pet.power *= bonus.power;
+    if (bonus.stats) add(bonus.stats);
   }
   gear.armor = Math.min(0.6, gear.armor);
   gear.dodge = Math.min(0.5, gear.dodge);

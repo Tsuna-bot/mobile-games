@@ -80,7 +80,12 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 - **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
 - **Entraînement** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
 - **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
-- **Armes** : chaque arme tire de la même façon quel que soit le héros. Chaque héros a deux **armes conseillées** (+12 % d’attaque) : Aren arc et arc long, Kaze shurikens et lames, Kael arbalète et arc long, Ilian bâton et grimoire, Bran arbalète et arc.
+- **Armes et équipement** : chaque arme tire de la même façon quel que soit le héros. Chaque objet et chaque familier est **conseillé** pour certains héros (coche verte dans l’inventaire), avec un bonus par emplacement : arme +12 % d’attaque, armure +10 % de vie, anneau +5 % d’attaque, amulette +4 % d’attaque et de vie, familier +25 % de puissance.
+  - Aren : arc, arc long, cuir, faucon, loup, anneau de rage, chouette.
+  - Kaze : shurikens, lames, tenue d’ombre, serpent, loup, croc, chauve-souris.
+  - Kael : arbalète, arc long, cuir, serpent, faucon, fortune, chouette.
+  - Ilian : bâton, grimoire, robe, faucon, ours, fortune, givrelin, salamandre.
+  - Bran : arbalète, arc, cotte de mailles, ours, vie, rage, salamandre.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
 - Un coffre de victoire à chaque chapitre gagné, en plus du butin ramassé en route. Le bouton **Recycler** de l’équipement démonte d’un coup les objets communs en trop.
 

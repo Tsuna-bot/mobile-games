@@ -195,15 +195,32 @@ export function classRankScale(rank) {
   return 1 + (rank - 1) * 0.25;
 }
 
-/** Weapons each hero handles best (+12 % attack with one of them). */
+/**
+ * The equipment and pets each hero handles best. Every item suits at least one hero;
+ * each recommended piece worn gives a bonus that depends on its slot (see below).
+ */
 export const RECOMMENDED = {
-  archer: ['bow', 'longbow'],
-  assassin: ['shuriken', 'blades'],
-  ranger: ['crossbow', 'longbow'],
-  mage: ['staff', 'tome'],
-  knight: ['crossbow', 'bow'],
+  archer: ['bow', 'longbow', 'leather', 'falcon', 'wolf', 'rage', 'owl'],
+  assassin: ['shuriken', 'blades', 'shadowgarb', 'serpent', 'wolf', 'fang', 'bat'],
+  ranger: ['crossbow', 'longbow', 'leather', 'serpent', 'falcon', 'fortune', 'owl'],
+  mage: ['staff', 'tome', 'robe', 'falcon', 'bear', 'fortune', 'frostling', 'salamander'],
+  knight: ['crossbow', 'bow', 'mail', 'bear', 'life', 'rage', 'salamander'],
 };
+/** Weapon bonus (kept for the texts). */
 export const RECOMMENDED_BONUS = 0.12;
+/** Bonus of a recommended piece, by slot kind (pets: their power ×). */
+export const RECOMMENDED_BONUSES = {
+  weapon: { stats: { damageMul: 0.12 }, text: '+12 % d’attaque' },
+  armor: { stats: { hpMul: 0.1 }, text: '+10 % de vie' },
+  ring: { stats: { damageMul: 0.05 }, text: '+5 % d’attaque' },
+  amulet: { stats: { damageMul: 0.04, hpMul: 0.04 }, text: '+4 % d’attaque et de vie' },
+  pet: { power: 1.25, text: '+25 % de puissance du familier' },
+};
+
+/** Whether `base` (item or pet) suits `heroId`. */
+export function isRecommended(heroId, base) {
+  return Boolean(RECOMMENDED[heroId]?.includes(base));
+}
 
 function pct(v) {
   return `${Math.round(v * 100)} %`;

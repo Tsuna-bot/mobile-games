@@ -5,7 +5,7 @@ import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
 import { CHAPTERS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
-  CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_CLASS_RANK, MAX_HERO_LEVEL, MAX_SPELL_RANK, RECOMMENDED, RECOMMENDED_BONUS, SPELLS, SPELL_UNLOCK,
+  CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_CLASS_RANK, MAX_HERO_LEVEL, MAX_SPELL_RANK, RECOMMENDED, RECOMMENDED_BONUSES, SPELLS, SPELL_UNLOCK, isRecommended,
   classOf, classUpgradeCost, heroLevelStats, heroXpNeeded, rankCooldown, spellUpgradeCost,
 } from '../data/heroes.js';
 import { chooseClass, classRank, classUpgradeBlock, heroState, spellRank, spellUpgradeBlock, upgradeClass, upgradeSpell } from '../meta/heroes.js';
@@ -131,8 +131,9 @@ export class Menu {
     const equipped = showEquipped && equippedSlotOf(this.save, item.uid);
     const canMerge = mergePartners(this.save, item.uid).length >= 2;
     const stars = item.stars ? `<span class="item__stars">${icon('star').repeat(item.stars)}</span>` : '';
+    const reco = isRecommended(this.save.heroes.selected, item.base) ? `<span class="item__reco" title="Conseillé pour ton héros">${icon('check')}</span>` : '';
     return `<button type="button" class="item${item.rarity === 3 ? ' is-legendary' : ''}" data-uid="${item.uid}" style="--rarity:${rarity.color}" aria-label="${esc(def.name)}">
-      ${slotLabel ? `<span class="item__slot">${slotLabel}</span>` : ''}${icon(def.icon, 'item__ico')}${stars}<span class="item__level">Niv. ${item.level}</span>${equipped ? `<span class="item__equipped">${icon('check')}</span>` : ''}${canMerge ? `<span class="item__merge">${icon('upgrade')}</span>` : ''}</button>`;
+      ${slotLabel ? `<span class="item__slot">${slotLabel}</span>` : ''}${icon(def.icon, 'item__ico')}${stars}${reco}<span class="item__level">Niv. ${item.level}</span>${equipped ? `<span class="item__equipped">${icon('check')}</span>` : ''}${canMerge ? `<span class="item__merge">${icon('upgrade')}</span>` : ''}</button>`;
   }
 
   renderGear() {
@@ -184,7 +185,8 @@ export class Menu {
     const fans = HERO_ORDER.filter((id) => RECOMMENDED[id]?.includes(base));
     if (!fans.length) return '';
     const mine = fans.includes(this.save.heroes.selected);
-    return `<p class="popup__reco${mine ? ' is-mine' : ''}">${icon('check')} Conseillée pour ${fans.map((id) => HEROES[id].name).join(', ')}${mine ? ` · +${Math.round(RECOMMENDED_BONUS * 100)} % d’attaque` : ''}</p>`;
+    const kind = PETS[base] ? 'pet' : BASES[base]?.slot;
+    return `<p class="popup__reco${mine ? ' is-mine' : ''}">${icon('check')} Conseillé pour ${fans.map((id) => HEROES[id].name).join(', ')} · ${RECOMMENDED_BONUSES[kind]?.text ?? ''}${mine ? ' (actif)' : ''}</p>`;
   }
 
   openItem(uid) {
@@ -511,7 +513,13 @@ export class Menu {
         <div class="hero-sheet__xp"><i style="width:${h.level >= MAX_HERO_LEVEL ? 100 : Math.round((h.xp / need) * 100)}%"></i><span>${h.level >= MAX_HERO_LEVEL ? 'Niveau max' : `${h.xp} / ${need} XP`}</span></div>
         <small class="hero-sheet__bonus">Bonus de niveau : attaque +${Math.round(bonus.damageMul * 100)} %, vie +${Math.round(bonus.hpMul * 100)} %${h.cls ? ` · Classe : ${classOf(id, h.cls).name}` : ''}</small>
       </div>
-      <p class="hero-sheet__reco">${icon('check')} Armes conseillées : ${(RECOMMENDED[id] ?? []).map((b) => `<b>${BASES[b].name}</b>`).join(' · ')} <small>(+${Math.round(RECOMMENDED_BONUS * 100)} % d’attaque)</small></p>
+      <div class="hero-reco">
+        <b class="hero-reco__title">${icon('check')} Équipement conseillé</b>
+        ${[['weapon', 'Armes'], ['armor', 'Armure'], ['ring', 'Anneaux'], ['amulet', 'Amulette'], ['pet', 'Familier']].map(([kind, label]) => {
+          const names = (RECOMMENDED[id] ?? []).filter((b) => (kind === 'pet' ? PETS[b] : BASES[b]?.slot === kind)).map((b) => (PETS[b] ?? BASES[b]).name);
+          return names.length ? `<span><em>${label}</em> ${names.join(' · ')} <small>${RECOMMENDED_BONUSES[kind].text}</small></span>` : '';
+        }).join('')}
+      </div>
       <h3 class="panel-subtitle">Sorts <span class="runes-pill">${icon('rune')} ${compact(save.runes)} runes</span></h3>
       <div class="spell-list">${spells}${classSpellRow}</div>
       <h3 class="panel-subtitle">Classe</h3>
