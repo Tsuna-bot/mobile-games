@@ -901,9 +901,13 @@ export class Game {
     this.fading = true;
     this.fadeEl.style.opacity = '1';
     setTimeout(() => {
-      middle();
-      this.fading = false;
-      this.fadeEl.style.opacity = '0';
+      try {
+        middle();
+      } finally {
+        // Never left on a black screen, even if rebuilding the room failed.
+        this.fading = false;
+        this.fadeEl.style.opacity = '0';
+      }
     }, 230);
   }
 
@@ -920,7 +924,7 @@ export class Game {
     const pts = (this.framePts ??= []);
     pts.length = 0;
     pts.push([p.x, p.z, 1.3]);
-    for (const e of run.enemies) if (!e.dead) pts.push([e.x, e.z, 0.8 + e.radius]);
+    for (const e of run.enemies) if (!e.dead && Number.isFinite(e.x) && Number.isFinite(e.z)) pts.push([e.x, e.z, 0.8 + e.radius]);
     const halfH = CONFIG.arena.height / 2;
     // Safe box in normalised screen coordinates.
     const safe = { x0: -0.84, x1: 0.84, y0: -0.7, y1: 0.58 };
@@ -1100,6 +1104,9 @@ export class Game {
       this.snapCamera = false;
       Object.assign(cam, target);
     }
+    // A broken number (NaN) would leave the camera lost forever: start again from the target.
+    if (![target.x, target.z, target.d, target.pitch].every(Number.isFinite)) target = { x: 0, y: 0, z: 0, d: this.camDistance, pitch: cfg.pitchDeg };
+    if (![cam.x, cam.y, cam.z, cam.d, cam.pitch].every(Number.isFinite)) Object.assign(cam, target);
     cam.x = damp(cam.x, target.x, 6, dt);
     cam.z = damp(cam.z, target.z, 6, dt);
     cam.y = damp(cam.y, target.y, 3, dt);

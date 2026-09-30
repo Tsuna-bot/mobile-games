@@ -116,7 +116,31 @@ const GradeShader = {
         c = mix(c, inv * uImpactColor, uImpact);
       }
       c += (gHash(vUv * (uTime + 1.0)) - 0.5) * 0.018;
+      if (any(isnan(c))) c = vec3(0.0);
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
+
+/**
+ * Replaces invalid pixels (NaN, infinity: a burst of stacked additive glows can
+ * overflow the half-float buffer) before the bloom: its blur would spread a single
+ * bad pixel over the whole screen and the 3D view would turn black.
+ */
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 48.0), c.a);
     }`,
 };
 
@@ -274,7 +298,7 @@ export class View {
     const preset = this.preset;
     // A multisampled target: without it, post-processing loses the antialiasing and
     // the anime outlines shimmer.
-    const target = new THREE.WebGLRenderTarget(Math.max(1, this.width * this.pixelRatio), Math.max(1, this.height * this.pixelRatio), { type: THREE.HalfFloatType, samples: this.renderer.extensions.has('EXT_color_buffer_float') ? preset.msaa ?? 0 : 0 });
+    const target = new THREE.WebGLRenderTarget(Math.max(1, this.width * this.pixelRatio), Math.max(1, this.height * this.pixelRatio), { type: THREE.HalfFloatType, samples: this.msaaSamples(preset.msaa ?? 0) });
     this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     if (preset.ao) {
@@ -285,6 +309,7 @@ export class View {
     }
     // Threshold above lit white (snow at noon): only emissive things (spells, sparks) glow.
     if (preset.bloom) {
+      this.composer.addPass(new ShaderPass(SanitizeShader));
       this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), 0.55, 0.5, 1.05);
       this.composer.addPass(this.bloomPass);
     }
@@ -314,6 +339,17 @@ export class View {
       pu.uTone.value = tone;
       pu.uSaturation.value = saturation;
     }
+  }
+
+  /**
+   * Multisampling of the post-processing target. Off on iPhones and iPads: the
+   * multisampled half-float buffer is a suspect for black screens there, and their
+   * pixel density hides the jaggies anyway.
+   */
+  msaaSamples(wanted) {
+    if (!wanted || isAppleMobile()) return 0;
+    if (!this.renderer.extensions.has('EXT_color_buffer_float')) return 0;
+    return Math.min(wanted, this.renderer.capabilities.maxSamples ?? 0);
   }
 
   /** Depth of field band (screen fractions from the bottom) and blur radius; `on` false to disable. */

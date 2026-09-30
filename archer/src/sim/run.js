@@ -380,6 +380,18 @@ export class Run {
       this.arena.computeFlow(this.player.x, this.player.z);
     }
     for (const enemy of this.enemies) if (!enemy.dead) this.updateEnemyCommon(enemy, dt);
+    // Safety net: a position that went NaN is put back in the arena instead of breaking the view.
+    const p0 = this.player;
+    if (!Number.isFinite(p0.x) || !Number.isFinite(p0.z)) {
+      p0.x = 0;
+      p0.z = this.arena.halfH - 1.2;
+    }
+    for (const e of this.enemies) {
+      if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) {
+        e.x = 0;
+        e.z = -this.arena.halfH + 2;
+      }
+    }
     this.updateArrows(dt);
     this.updateShots(dt);
     this.updateHazards(dt);
