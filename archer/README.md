@@ -81,11 +81,11 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 - **Entraînement** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
 - **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
 - **Armes et équipement** : chaque arme tire de la même façon quel que soit le héros. Chaque objet et chaque familier est **conseillé** pour certains héros (coche verte dans l’inventaire), avec un bonus par emplacement : arme +12 % d’attaque, armure +10 % de vie, anneau +5 % d’attaque, amulette +4 % d’attaque et de vie, familier +25 % de puissance.
-  - Aren : arc, arc long, cuir, faucon, loup, anneau de rage, chouette.
-  - Kaze : shurikens, lames, tenue d’ombre, serpent, loup, croc, chauve-souris.
-  - Kael : arbalète, arc long, cuir, serpent, faucon, fortune, chouette.
-  - Ilian : bâton, grimoire, robe, faucon, ours, fortune, givrelin, salamandre.
-  - Bran : arbalète, arc, cotte de mailles, ours, vie, rage, salamandre.
+  - Aren : Arc de chasse, Arc long, Tunique de cuir, Anneaux du faucon et du loup, Amulette de rage, familier Chouette.
+  - Kaze : Shurikens, Lames tournoyantes, Tenue de l’ombre, Anneaux du serpent et du loup, Croc de l’ombre, familier Chauve-souris.
+  - Kael : Arbalète, Arc long, Tunique de cuir, Anneaux du serpent et du faucon, Amulette de fortune, familier Chouette.
+  - Ilian : Bâton arcanique, Grimoire de foudre, Robe enchantée, Anneaux du faucon et de l’ours, Amulette de fortune, familiers Esprit du givre et Salamandre.
+  - Bran : Arbalète, Arc de chasse, Cotte de mailles, Anneau de l’ours, Amulettes de vie et de rage, familier Salamandre.
 - **Boutique** : coffre en bois gratuit toutes les 4 h, coffre doré et coffre du familier en gemmes. Les gemmes se gagnent en jouant (aucun achat réel).
 - Un coffre de victoire à chaque chapitre gagné, en plus du butin ramassé en route. Le bouton **Recycler** de l’équipement démonte d’un coup les objets communs en trop.
 
