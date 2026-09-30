@@ -4,6 +4,7 @@ import { ParticleSystem } from './particles.js';
 
 export const COLORS = {
   spark: new THREE.Color(0xfff2b0),
+  soul: new THREE.Color(0xd8f4ff),
   arrow: new THREE.Color(0xfff6d8),
   fire: new THREE.Color(0xff8a2a),
   ice: new THREE.Color(0x8fe0ff),
@@ -194,6 +195,8 @@ export class Fx {
     const arrowGeometry = mergeGeometries([shaft.toNonIndexed(), head.toNonIndexed(), fletch.toNonIndexed()]);
     this.arrowMesh = new THREE.InstancedMesh(arrowGeometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff6e0).multiplyScalar(1.25), toneMapped: false }), 240);
     this.arrowMesh.frustumCulled = false;
+    this.arrowMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
+    this.pillars = [];
     scene.add(this.arrowMesh);
 
     // Kunai: a dark steel blade with a ring pommel (the assassin's throws).
@@ -335,6 +338,7 @@ export class Fx {
 
   clear() {
     this.starList.length = 0;
+    this.pillars.length = 0;
     this.sparks.clear();
     this.puffs.clear();
     for (const h of this.hazardPool) h.active = false;
@@ -382,6 +386,23 @@ export class Fx {
     this.puffs.burst(x, 0.3, z, this.count(big ? 30 : 12), big ? 3 : 1.8, tint, big ? 0.5 : 0.3, 0.8, { upward: 0.6, drag: 2.5, endSize: big ? 1.4 : 0.7 });
     this.sparks.burst(x, 0.5, z, this.count(big ? 40 : 10), big ? 5 : 2.5, COLORS.spark, 0.12, 0.5, { gravity: 4, brightness: 1.6 });
     this.ring(x, z, big ? 3 : 0.9, big ? 0.7 : 0.35, COLORS.spark);
+    // The soul drifts up in slow motes of light.
+    const n = this.count(big ? 18 : 6);
+    for (let i = 0; i < n; i++) {
+      this.sparks.emit(x + (Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.3, 0.9 + Math.random() * 0.8, (Math.random() - 0.5) * 0.3, COLORS.soul, 0.12, 0.9 + Math.random() * 0.5, { endSize: 0.02, drag: 0.6, brightness: 2, fadeIn: 0.2 });
+    }
+    if (big) this.pillar(x, z, COLORS.coin, 1.4, 1.6);
+  }
+
+  /** A column of light (level up, portal opening, boss down). */
+  pillar(x, z, c, duration = 1, width = 1) {
+    if (this.pillars.length >= 6) this.pillars.shift();
+    this.pillars.push({ x, z, color: c.clone(), life: duration, max: duration, width });
+  }
+
+  /** Little dust puffs under running feet. */
+  footstep(x, z, c) {
+    this.puffs.burst(x, 0.05, z, this.count(2), 0.5, c, 0.14, 0.45, { upward: 0.5, drag: 3, endSize: 0.35 });
   }
 
   blast(x, z, radius, c = COLORS.fire) {
@@ -403,6 +424,7 @@ export class Fx {
   }
 
   levelUp(x, z) {
+    this.pillar(x, z, COLORS.coin, 1.1, 1.3);
     this.star(x, 1, z, 2.6, COLORS.coin, 0.4);
     this.sparks.burst(x, 0.4, z, this.count(50), 3, COLORS.coin, 0.16, 1, { upward: 0.95, gravity: -1.5, drag: 1.2, brightness: 1.8 });
     this.ring(x, z, 2, 0.6, COLORS.coin);
@@ -634,6 +656,8 @@ export class Fx {
     }
 
     // Arrows (+ a faint trail); staff and pet shots are glowing orbs, blades spin.
+    const hero = run.player;
+    const arrowTint = hero.burn ? COLORS.fire : hero.frost ? COLORS.ice : hero.poison ? COLORS.poison : hero.bolt ? COLORS.bolt : COLORS.arrow;
     let n = 0;
     let no = 0;
     let nk = 0;
@@ -677,11 +701,15 @@ export class Fx {
         for (let k = 0; k < 3; k++) this.sparks.emit(a.x - a.dx * (0.3 + k * 0.25), Y + (Math.random() - 0.5) * 0.3, a.z - a.dz * (0.3 + k * 0.25), (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 1.2, COLORS.ice, 0.32 - k * 0.06, 0.3, { endSize: 0.04, drag: 2, brightness: 2.2 });
       }
       dummy.updateMatrix();
-      this.arrowMesh.setMatrixAt(n++, dummy.matrix);
-      if ((a.id + Math.floor(t * 60)) % 2 === 0) this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0, 0, COLORS.arrow, 0.08, 0.14, { endSize: 0.02, drag: 0, brightness: 1.1, opacity: 0.6 });
+      this.arrowMesh.setMatrixAt(n, dummy.matrix);
+      // Arrows glow in the colour of the hero's element (fire, ice, poison, lightning).
+      const tint = arrowTint;
+      this.arrowMesh.setColorAt(n++, hdrColor.copy(tint).multiplyScalar(tint === COLORS.arrow ? 1.25 : 2));
+      this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0.1, 0, tint, tint === COLORS.arrow ? 0.09 : 0.13, 0.18, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.75 });
     }
     this.arrowMesh.count = n;
     this.arrowMesh.instanceMatrix.needsUpdate = true;
+    this.arrowMesh.instanceColor.needsUpdate = true;
     this.kunaiMesh.count = nk;
     this.kunaiMesh.instanceMatrix.needsUpdate = true;
     this.heroOrbs.count = no;
@@ -760,7 +788,23 @@ export class Fx {
       else if (p.kind === 'coin' && nc < 300) this.coinMesh.setMatrixAt(nc++, dummy.matrix);
       else if (p.kind === 'heart' && nh < 20) this.heartMesh.setMatrixAt(nh++, dummy.matrix);
     }
-    this.lootMesh.count = this.beamMesh.count = nl;
+    this.lootMesh.count = nl;
+    let nb = nl;
+    for (const pl of this.pillars) {
+      pl.life -= dt;
+      if (pl.life <= 0 || nb >= 16) continue;
+      const k = 1 - pl.life / pl.max;
+      const grow = Math.min(1, k * 6);
+      const fade = 1 - Math.max(0, (k - 0.5) / 0.5);
+      dummy.position.set(pl.x, 0, pl.z);
+      dummy.rotation.set(0, t * 1.5, 0);
+      dummy.scale.set(pl.width * (2.2 + k), 1.6 * grow, pl.width * (2.2 + k));
+      dummy.updateMatrix();
+      this.beamMesh.setMatrixAt(nb, dummy.matrix);
+      this.beamMesh.setColorAt(nb++, hdrColor.copy(pl.color).multiplyScalar(0.95 * fade));
+    }
+    this.pillars = this.pillars.filter((pl) => pl.life > 0);
+    this.beamMesh.count = nb;
     this.runeMesh.count = nr;
     for (const m of [this.lootMesh, this.beamMesh, this.runeMesh]) m.instanceMatrix.needsUpdate = true;
     this.lootMesh.instanceColor.needsUpdate = this.beamMesh.instanceColor.needsUpdate = true;

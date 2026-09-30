@@ -376,6 +376,8 @@ export class Game {
     this.arenaView.build(run.arena, run.theme, run.chapterIndex * 100 + run.room * 7 + 3);
     this.arenaView.openDoor(false);
     if (run.chest) this.arenaView.addChest(run.chest.x, run.chest.z);
+    // Footstep dust takes the colour of the ground.
+    this.dustColor = new THREE.Color(this.arenaView.theme?.dirt ?? 0xd8c8a8).lerp(new THREE.Color(0xffffff), 0.35);
   }
 
   /**
@@ -704,6 +706,10 @@ export class Game {
       },
       onClear: (boss, kind) => {
         this.arenaView.openDoor(true);
+        // The portal wakes up: a column of light and a wave.
+        const doorZ = -this.run.arena.halfH - 0.2;
+        fx.pillar(0, doorZ, new THREE.Color(this.arenaView.theme?.portal ?? 0x8ff8d8), 1.3, 1.5);
+        fx.ring(0, doorZ, 2.4, 0.6, new THREE.Color(this.arenaView.theme?.portal ?? 0x8ff8d8));
         audio.waveCleared();
         if (kind === 'challenge') ui.banner('Défi réussi !', '+3 gemmes · choisis une capacité', 'gold');
         else if (boss) ui.banner('Boss vaincu !', `+${ENDLESS_GEMS} gemmes · le portail est ouvert`, 'gold');
@@ -1112,6 +1118,15 @@ export class Game {
   updateHud() {
     const run = this.run;
     const ui = this.ui;
+    // Dust under running feet.
+    const hero = run.player;
+    if (this.mode === MODE.PLAYING && hero.moving) {
+      this.stepTimer = (this.stepTimer ?? 0) - (this.hudDt ?? 0.016);
+      if (this.stepTimer <= 0) {
+        this.stepTimer = 0.17;
+        this.fx.footstep(hero.x - hero.dirX * 0.2, hero.z - hero.dirZ * 0.2, this.dustColor ??= new THREE.Color(0xd8c8a8));
+      }
+    }
     ui.updateSpells(run.spells.map((_, i) => run.spellState(i)));
     const dt = this.hudDt ?? 0.016;
     ui.tick(dt);

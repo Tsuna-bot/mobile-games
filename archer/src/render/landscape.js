@@ -1141,7 +1141,7 @@ export class Landscape {
       }
     }
     // Bushes and stones along the edge of the play area.
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < Math.round(26 + 16 * this.effects); i++) {
       const side = i % 3;
       let x;
       let z;
