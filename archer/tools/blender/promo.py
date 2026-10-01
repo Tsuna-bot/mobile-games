@@ -24,7 +24,7 @@ scene = bpy.context.scene
 scene.render.resolution_x, scene.render.resolution_y = W, H
 scene.render.line_thickness = H / 420
 scene.render.film_transparent = False
-scene.cycles.samples = 64
+scene.cycles.samples = 128
 
 # Centre stage for the archer, the others around, turned toward the middle.
 LINEUP = [('ranger', -1.12, -0.1, -22), ('assassin', -0.56, -0.05, -12), ('archer', 0, 0, 0), ('knight', 0.56, -0.05, 12), ('mage', 1.12, -0.1, 22)]

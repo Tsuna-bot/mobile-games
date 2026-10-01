@@ -13,6 +13,9 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from outfits import bake_rest, make_armour  # noqa: E402
+
 
 # Lean of the head and turn of the body, per hero, for a little personality.
 POSES = {
@@ -42,7 +45,7 @@ def setup_scene(size):
     scene.camera = cam
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
-    scene.cycles.samples = 48
+    scene.cycles.samples = 128
     scene.cycles.use_denoising = False
     scene.cycles.transparent_max_bounces = 16
     scene.render.film_transparent = True
@@ -51,7 +54,7 @@ def setup_scene(size):
     scene.view_settings.view_transform = 'Standard'
     scene.render.use_freestyle = True
     scene.render.line_thickness_mode = 'ABSOLUTE'
-    scene.render.line_thickness = size / 320
+    scene.render.line_thickness = size / 560
     lineset = scene.view_layers[0].freestyle_settings.linesets[0]
     lineset.select_by_edge_types = True
     lineset.select_silhouette = True
@@ -85,6 +88,10 @@ def anime_materials():
         bsdf.inputs['Emission Strength'].default_value = 0.55
         bsdf.inputs['Roughness'].default_value = 0.8
         bsdf.inputs['Specular IOR Level'].default_value = 0.1
+        # The game's textures are small: smooth (cubic) magnification, not blocky texels.
+        for node in nodes:
+            if node.type == 'TEX_IMAGE':
+                node.interpolation = 'Cubic'
 
 
 def lower_arms(arm):
@@ -118,11 +125,16 @@ def bounds(objs):
     return lo, hi
 
 
-def load_hero(path, hero):
-    """Imports a hero, posed (arms down, turned, head tilted), with anime materials. Returns its objects."""
+def load_hero(path, hero, armour=True):
+    """Imports a hero wearing their fitted armour (outfits.py), posed (arms down, turned,
+    head tilted), with anime materials. Returns its objects."""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.data.objects if o not in before]
+    if armour:
+        # The shown pose becomes the rest pose, so the armour bends with the arms.
+        bake_rest(new)
+        new.append(make_armour(hero, new, bind=True))
     bare = bpy.data.collections['no_outline']
     for o in new:
         if o.type == 'MESH' and o.name.startswith('Icosphere'):
@@ -151,7 +163,7 @@ def render(hero, cam, src, out):
     lo, hi = bounds([o for o in meshes if o.name.startswith(('Face', 'Hair'))])
     # Bust: from the top of the hair down to mid-chest, the face a little above centre.
     top = hi.z + 0.02
-    height = (hi.z - lo.z) * 1.9
+    height = (hi.z - lo.z) * 2.5
     cam.location = ((lo.x + hi.x) / 2, 3, top - height / 2)
     cam.data.ortho_scale = height
     bpy.context.scene.render.filepath = os.path.join(out, f'{hero}.png')

@@ -35,7 +35,7 @@ function capeGeometry(width, length) {
 }
 
 /**
- * A plain float copy of an outfit mesh in its scene's space (positions, normals, colours,
+ * A plain float copy of an outfit mesh in its scene's space (positions, normals, UVs,
  * joints, weights), ready to be moved into a hero's bind space.
  */
 function outfitGeometry(mesh) {
@@ -50,7 +50,7 @@ function outfitGeometry(mesh) {
   };
   g.setAttribute('position', new THREE.BufferAttribute(copy('position', 3), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(copy('normal', 3), 3));
-  g.setAttribute('color', new THREE.BufferAttribute(copy('color', 3), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(copy('uv', 2), 2));
   g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(copy('skinIndex', 4)), 4));
   g.setAttribute('skinWeight', new THREE.BufferAttribute(copy('skinWeight', 4), 4));
   if (src.index) g.setIndex(src.index.clone());
@@ -234,7 +234,9 @@ export class AnimeLibrary {
     // Joint numbers of the armour -> bones of the body's skeleton.
     const skin = geometry.attributes.skinIndex;
     for (let i = 0; i < skin.array.length; i++) skin.array[i] = index[skin.array[i]];
-    const material = patchRim(new THREE.MeshToonMaterial({ name: `${id}_outfit`, vertexColors: true, gradientMap: this.ramp }));
+    const map = node.material.map;
+    if (map) map.anisotropy = 8;
+    const material = patchRim(new THREE.MeshToonMaterial({ name: `${id}_outfit`, map, gradientMap: this.ramp }));
     this.outfits.set(id, { geometry, material, bodyName: body.name });
   }
 

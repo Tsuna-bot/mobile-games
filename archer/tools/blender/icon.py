@@ -53,7 +53,7 @@ def main():
     cam = setup_scene(size)
     scene = bpy.context.scene
     scene.render.film_transparent = False
-    scene.cycles.samples = 96
+    scene.cycles.samples = 128
 
     hero = load_hero(os.path.join(src, 'archer.glb'), 'archer')
     meshes = [o for o in hero if o.type == 'MESH' and not o.hide_render]
