@@ -349,6 +349,9 @@ def make_armour(hero, objs, image=None, bind=False):
     if bind:
         mod = armour.modifiers.new('Armature', 'ARMATURE')
         mod.object = arm
+        # Moves with the hero like the body does.
+        armour.parent = arm
+        armour.matrix_parent_inverse = arm.matrix_world.inverted()
     return armour
 
 
