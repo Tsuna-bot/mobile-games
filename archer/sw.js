@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v34';
+const VERSION = 'aetherfall-v35';
 
 const APP_SHELL = [
   './',
@@ -132,6 +132,7 @@ const APP_SHELL = [
   './assets/anime/assassin.glb',
   './assets/anime/knight.glb',
   './assets/anime/mage.glb',
+  './assets/anime/outfits.glb',
   './assets/anime/ranger.glb',
   './vendor/three/build/three.core.js',
   './vendor/three/build/three.module.js',

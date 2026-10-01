@@ -11,6 +11,7 @@ Crédits :
 - Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
 - Familiers (chauve-souris, chouette, esprit du givre, salamandre) modélisés dans Blender par `tools/blender/pets.py`.
 - Images des objets (armes, armures, anneaux, amulettes, familiers) modélisées et rendues dans Blender par `tools/blender/items.py`, en une seule planche (`assets/icons/items.webp`).
+- Tenues des héros (plastron, gilets de cuir, robe, bandages, brassards) moulées sur chaque corps dans Blender par `tools/blender/outfits.py` et liées au squelette du héros (elles suivent ses mouvements).
 - Portraits des héros, icône de l'app et bannière promo (`promo/feature-1024x500.jpg`) rendus dans Blender à partir des héros VRoid (`portraits.py`, `icon.py`, `promo.py`).
 - Décors de la Cité d'or (obélisques, colonnes lotus, urnes, braseros, sphinx), du Trône céleste (colonnes de marbre à orbe, autels étoilés, arches brisées) et des Îles célestes (nuages, îles flottantes) modélisés dans Blender par `tools/blender/props.py`.
 - Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer, Darkzaitzev et Lucas.
@@ -168,6 +169,8 @@ blender -b -P tools/blender/portraits.py -- /tmp/heroes /tmp/portraits 384   # b
 blender -b -P tools/blender/icon.py -- /tmp/heroes /tmp/icon.png 1024        # icône (réduite en 512 et 192 px dans icons/)
 blender -b -P tools/blender/promo.py -- /tmp/heroes /tmp/pets.glb /tmp/promo.png 2048 1000
 node tools/blender/promo.mjs /tmp/promo.png promo/feature-1024x500.jpg 1024  # titre par-dessus
+blender -b -P tools/blender/outfits.py -- /tmp/heroes /tmp/outfits         # tenues moulées (un JSON par héros)
+node tools/blender/outfits.mjs /tmp/outfits assets/anime/outfits.glb
 ```
 
 Les héros sont rendus sans la tenue fantasy (cape, épaulières) que le jeu leur ajoute en code.

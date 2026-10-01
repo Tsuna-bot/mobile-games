@@ -34,9 +34,34 @@ function capeGeometry(width, length) {
   return geometry;
 }
 
+/**
+ * A plain float copy of an outfit mesh in its scene's space (positions, normals, colours,
+ * joints, weights), ready to be moved into a hero's bind space.
+ */
+function outfitGeometry(mesh) {
+  mesh.updateMatrixWorld(true);
+  const src = mesh.geometry;
+  const g = new THREE.BufferGeometry();
+  const copy = (name, size) => {
+    const a = src.attributes[name];
+    const out = new Float32Array(a.count * size);
+    for (let i = 0; i < a.count; i++) for (let k = 0; k < size; k++) out[i * size + k] = a.getComponent(i, k);
+    return out;
+  };
+  g.setAttribute('position', new THREE.BufferAttribute(copy('position', 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(copy('normal', 3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(copy('color', 3), 3));
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(copy('skinIndex', 4)), 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(copy('skinWeight', 4), 4));
+  if (src.index) g.setIndex(src.index.clone());
+  g.applyMatrix4(mesh.matrixWorld);
+  return g;
+}
+
 export class AnimeLibrary {
   constructor() {
     this.scenes = new Map();
+    this.outfits = new Map();
     this.clips = [];
     this.ramp = toonRamp();
     this.outline = outlineMaterial(0x2a1a2e, 0.0019, true);
@@ -177,7 +202,40 @@ export class AnimeLibrary {
       this.clips = gltf.animations;
       onEach?.();
     }));
+    // Armour fitted to each hero in Blender (tools/blender/outfits.py), skinned like the body.
+    const outfits = loader.loadAsync(`${base}outfits.glb`);
     await Promise.all(jobs);
+    for (const node of [...(await outfits).scene.children]) {
+      if (node.isMesh && this.scenes.has(node.name)) this.registerOutfit(node.name, node);
+    }
+  }
+
+  /**
+   * Moves a hero's armour into the bind space of their body, so that bound to the body's
+   * skeleton it sits on the clothes in the default pose and then bends with them.
+   */
+  registerOutfit(id, node) {
+    const scene = this.scenes.get(id);
+    scene.updateMatrixWorld(true);
+    let body = null;
+    scene.traverse((o) => {
+      if (!body && o.isSkinnedMesh && o.skeleton.bones.some((b) => b.name === 'J_Bip_C_Hips')) body = o;
+    });
+    if (!body) return;
+    const joints = node.userData.joints ?? [];
+    const index = joints.map((name) => body.skeleton.bones.findIndex((b) => b.name === name));
+    if (index.some((i) => i < 0)) return;
+    const geometry = outfitGeometry(node);
+    // Skinned at rest, a body vertex p lands at (bone · boneInverse) · bindMatrix · p, the same
+    // product for every bone: undo it for the armour, made in that rest pose.
+    const hips = body.skeleton.bones.findIndex((b) => b.name === 'J_Bip_C_Hips');
+    const rest = new THREE.Matrix4().multiplyMatrices(body.skeleton.bones[hips].matrixWorld, body.skeleton.boneInverses[hips]).multiply(body.bindMatrix);
+    geometry.applyMatrix4(rest.invert());
+    // Joint numbers of the armour -> bones of the body's skeleton.
+    const skin = geometry.attributes.skinIndex;
+    for (let i = 0; i < skin.array.length; i++) skin.array[i] = index[skin.array[i]];
+    const material = patchRim(new THREE.MeshToonMaterial({ name: `${id}_outfit`, vertexColors: true, gradientMap: this.ramp }));
+    this.outfits.set(id, { geometry, material, bodyName: body.name });
   }
 
   get count() {
@@ -245,6 +303,23 @@ export class AnimeLibrary {
       outline.scale.copy(mesh.scale);
       outline.frustumCulled = false;
       mesh.parent.add(outline);
+    }
+    // The fitted armour, bound to the body's own skeleton (it bends with it).
+    const armour = this.outfits.get(id);
+    if (armour) {
+      const body = model.getObjectByName(armour.bodyName);
+      if (body?.isSkinnedMesh) {
+        for (const material of [armour.material, this.outline]) {
+          const mesh = new THREE.SkinnedMesh(armour.geometry, material);
+          mesh.bind(body.skeleton, body.bindMatrix);
+          mesh.position.copy(body.position);
+          mesh.quaternion.copy(body.quaternion);
+          mesh.scale.copy(body.scale);
+          mesh.frustumCulled = false;
+          mesh.castShadow = material === armour.material;
+          body.parent.add(mesh);
+        }
+      }
     }
     const parts = outfit ? this.dress(model, outfit) : {};
     return { figure, model, face, hand: model.getObjectByName('J_Bip_R_Hand'), cape: parts.cape ?? null };
