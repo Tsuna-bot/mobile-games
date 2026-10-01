@@ -259,6 +259,7 @@ export class Menu {
     } else game.audio.click();
     this.persist();
     this.renderGear();
+    if (act !== 'upgrade') game.refreshMenuPet();
     if (act === 'salvage' || act === 'unequip' || act === 'equip') this.closePopup();
     else this.openItem(uid);
   }

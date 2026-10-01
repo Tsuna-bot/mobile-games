@@ -73,6 +73,11 @@ export class Assets {
       holder.add(child);
       this.register(`n_${child.name}`, holder);
     }
+    // The pets, made in Blender by tools/blender/pets.py: one node per pet (pet_<id>).
+    const pets = bundle?.['pets/pets']
+      ? await loader.parseAsync(Uint8Array.from(atob(bundle['pets/pets']), (c) => c.charCodeAt(0)).buffer, 'assets/pets/')
+      : await loader.loadAsync('assets/pets/pets.glb');
+    for (const child of [...pets.scene.children]) this.register(`pet_${child.name}`, child);
     onProgress?.(1);
   }
 

@@ -6,6 +6,15 @@ import { addOutlines, patchRim, toonCopy } from './surfaces.js';
 
 const TMP = new THREE.Color();
 
+const PET_SCALE = 1.15;
+/** How each pet flies: wing beats per second (radians), swing, and the resting angle. */
+const PET_MOTION = {
+  bat: { flapSpeed: 24, flap: 0.8, lift: 0.1 },
+  owl: { flapSpeed: 11, flap: 0.6, lift: 0.15 },
+  frostling: { flapSpeed: 7, flap: 0.3, lift: 0.1 },
+  salamander: { flapSpeed: 16, flap: 0.65, lift: 0.15 },
+};
+
 /** Frees the bone textures of the skinned meshes under `root` (one per skeleton). */
 function disposeSkeletons(root) {
   const done = new Set();
@@ -260,31 +269,41 @@ export class Actors {
 
   // ------------------------------------------------------------ pet
 
-  /** A small glowing creature with flapping wings. */
-  createPet(color) {
+  /**
+   * The pet's model (tools/blender/pets.py) in toon shading with an outline, its glowing
+   * parts unlit, a faint halo of its colour. Wings flap and tails sway in update().
+   */
+  createPet(def) {
     this.removePet();
     const gear = [];
     const root = new THREE.Group();
-    const bodyMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6, roughness: 0.4 });
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), bodyMaterial);
-    const eyes = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: 0x101018 }));
-    eyes.position.set(0.05, 0.03, 0.11);
-    const eye2 = eyes.clone();
-    eye2.position.x = -0.05;
-    const wingGeometry = new THREE.PlaneGeometry(0.22, 0.14);
-    wingGeometry.translate(0.11, 0, 0);
-    const wingMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
-    const left = new THREE.Mesh(wingGeometry, wingMaterial);
-    const right = new THREE.Mesh(wingGeometry, wingMaterial);
-    right.scale.x = -1;
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const model = this.assets.clone(`pet_${def.id}`);
+    model.position.set(0, 0, 0);
+    model.scale.setScalar(PET_SCALE);
+    const copies = new Map();
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = false;
+      let copy = copies.get(o.material);
+      if (!copy) {
+        copy = o.material.name === 'pet_glow'
+          ? new THREE.MeshBasicMaterial({ name: 'pet_glow', vertexColors: true, toneMapped: false })
+          : toonCopy(o.material);
+        copies.set(o.material, copy);
+        gear.push(copy);
+      }
+      o.material = copy;
+    });
+    addOutlines(model, (o) => o.material.name === 'pet_glow');
+    const part = (suffix) => model.getObjectByName(`${def.id}_${suffix}`) ?? null;
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 8), new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false }));
+    gear.push(halo.geometry, halo.material);
     const fly = new THREE.Group();
-    fly.add(body, eyes, eye2, left, right, halo);
+    fly.add(model, halo);
     root.add(fly);
     root.add(blobShadow(0.12, gear, this.shadowTexture));
-    gear.push(body.geometry, bodyMaterial, eyes.geometry, eyes.material, wingGeometry, wingMaterial, halo.geometry, halo.material);
     this.scene.add(root);
-    this.pet = { root, fly, left, right, halo, gear };
+    this.pet = { root, fly, halo, left: part('wingL'), right: part('wingR'), tail: part('tail'), motion: PET_MOTION[def.id] ?? PET_MOTION.bat, gear };
   }
 
   removePet() {
@@ -500,12 +519,14 @@ export class Actors {
     if (pet && run?.pet) {
       const p = run.pet;
       pet.root.position.set(damp(pet.root.position.x, p.x, 20, dt), 0, damp(pet.root.position.z, p.z, 20, dt));
+      const motion = pet.motion;
       pet.fly.position.y = 0.95 + Math.sin(time * 3.2) * 0.12;
-      const flap = Math.sin(time * 22) * 0.9;
-      pet.left.rotation.z = flap;
-      pet.right.rotation.z = -flap;
+      const flap = Math.sin(time * motion.flapSpeed) * motion.flap + motion.lift;
+      if (pet.left) pet.left.rotation.z = flap;
+      if (pet.right) pet.right.rotation.z = -flap;
+      if (pet.tail) pet.tail.rotation.y = Math.sin(time * 4) * 0.35;
       pet.root.rotation.y = hero ? hero.yaw : 0;
-      pet.halo.material.opacity = 0.18 + Math.sin(time * 5) * 0.06;
+      pet.halo.material.opacity = 0.12 + Math.sin(time * 5) * 0.04;
     }
 
     for (const view of this.enemies.values()) {

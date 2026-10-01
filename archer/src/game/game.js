@@ -242,11 +242,18 @@ export class Game {
     this.loop.start();
   }
 
-  /** The chosen hero stands in the menu scene. */
+  /** The chosen hero stands in the menu scene, their pet (if any) flying at their shoulder. */
   refreshMenuHero() {
     const hero = HEROES[this.save.heroes.selected] ?? HEROES.archer;
     this.actors.createHero(hero);
-    this.actors.removePet();
+    this.refreshMenuPet();
+  }
+
+  refreshMenuPet() {
+    const pet = this.gearStats().pet;
+    if (pet) this.actors.createPet(pet);
+    else this.actors.removePet();
+    this.menuPet = pet ? { x: 0, z: 0 } : null;
   }
 
   /** The play mode picked in the menu, if it is open for the shown chapter. */
@@ -354,7 +361,7 @@ export class Game {
     this.ui.setCombo(0, 0);
     this.runGear = gear;
     this.actors.createHero(gear.hero);
-    if (this.run.pet) this.actors.createPet(this.run.pet.def.color);
+    if (this.run.pet) this.actors.createPet(this.run.pet.def);
     else this.actors.removePet();
     this.buildRoom();
     this.warmShaders();
@@ -1062,10 +1069,18 @@ export class Game {
   renderMenu(dt) {
     // The hero waits on the arena while the menu is open.
     const hero = this.menuHero;
-    const fake = { player: hero, state: 'menu' };
+    const fake = { player: hero, pet: this.menuPet, state: 'menu' };
     // Three-quarter view (the cape shows), turning slowly.
     hero.dirX = 0.5 + Math.sin(this.time * 0.35) * 0.2;
     hero.dirZ = 1;
+    if (this.menuPet) {
+      // Beside the hero's shoulder, a little behind, on the camera's side.
+      const len = Math.hypot(hero.dirX, hero.dirZ);
+      const fx = hero.dirX / len;
+      const fz = hero.dirZ / len;
+      this.menuPet.x = hero.x - fz * 0.48 - fx * 0.1;
+      this.menuPet.z = hero.z + fx * 0.48 - fz * 0.1;
+    }
     this.actors.update(dt, this.time, this.view.camera, fake);
     // Motes of light spiral up around the hero, in the colour of their cape.
     this.menuMotes = (this.menuMotes ?? 0) + dt;

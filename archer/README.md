@@ -8,6 +8,7 @@ Crédits :
 - Arbres, rochers, fougères, fleurs et champignons du **Stylized Nature MegaKit** de Quaternius (CC0), convertis par `tools/convert-nature.mjs` (un seul fichier, textures réduites en WebP, troncs simplifiés).
 - Héros : personnages d’exemple **VRoid** de pixiv ([vroid.com](https://vroid.com)) — HairSample_Male et Sakurada Fumiriya en CC0, AvatarSample_C selon les conditions d’utilisation VRoid (usage libre, y compris commercial) — recolorés et habillés en fantasy (capes, pans de tunique, épaulières). `tools/convert-vroid.mjs` refait la conversion.
 - Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
+- Familiers (chauve-souris, chouette, esprit du givre, salamandre) modélisés dans Blender par `tools/blender/pets.py`.
 - Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer, Darkzaitzev et Lucas.
 
 ## Jouer
@@ -77,7 +78,7 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
   - Armures et amulettes en plus : **Tenue de l'ombre** (esquive, vitesse), **Croc de l'ombre** (dégâts critiques).
   - 4 raretés : Commun, Rare, Épique, Légendaire (niveau max 10 / 20 / 30 / 40).
   - Améliorer avec l’or, **fusionner 3 exemplaires identiques** pour passer à la rareté suivante, démonter pour récupérer de l’or.
-- **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros et tirent tout seuls.
+- **Familiers** : chauve-souris, chouette, esprit du givre, salamandre. Ils volent près du héros (battement d'ailes, queue qui ondule) et tirent tout seuls ; le familier équipé attend aussi à côté du héros sur l'écran d'accueil.
 - **Entraînement** : l’or achète une amélioration au hasard (Force, Vigueur, Agilité, Récupération, Garde, Pillage, Chance, Célérité).
 - **Héros** : Aren (archer), **Kaze (assassin, gratuit)**, Kael (rôdeur), Ilian (mage, flèches de foudre), Bran (chevalier), chacun avec sa tenue, son arme et son bonus.
 - **Armes et équipement** : chaque arme tire de la même façon quel que soit le héros. Chaque objet et chaque familier est **conseillé** pour certains héros (coche verte dans l’inventaire), avec un bonus par emplacement : arme +12 % d’attaque, armure +10 % de vie, anneau +5 % d’attaque, amulette +4 % d’attaque et de vie, familier +25 % de puissance.
@@ -136,6 +137,7 @@ archer/
 ├── assets/kk/              # Modèles KayKit et Quaternius convertis (CC0)
 ├── tools/bot.mjs           # Bot d'équilibrage
 ├── tools/convert-kaykit.mjs # Conversion des packs KayKit
+├── tools/blender/          # Modèles faits dans Blender (familiers) et compression
 └── src/
     ├── data/               # Capacités, monstres, chapitres, équipement, talents, familiers, héros
     ├── sim/                # Arène (grille, collisions, chemins), run (héros, tirs, salles), IA des monstres
@@ -145,6 +147,15 @@ archer/
     ├── ui/                 # Interface, vibrations
     └── game/               # Orchestration et menus
 ```
+
+## Modèles Blender
+
+```bash
+blender -b -P tools/blender/pets.py -- /tmp/pets.glb /tmp/pets.png   # modèles + planche d'aperçu
+node tools/blender/compress.mjs /tmp/pets.glb assets/pets/pets.glb    # meshopt + quantification
+```
+
+Le script de compression demande `@gltf-transform/core`, `@gltf-transform/extensions`, `@gltf-transform/functions` et `meshoptimizer` (npm). L'export glTF de Blender demande numpy.
 
 ## Lancer en local
 
