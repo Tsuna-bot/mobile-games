@@ -32,7 +32,7 @@ const DETAIL = /Face|Eye|Hair|HAIR/;
 const HEROES = {
   archer: { model: 'HairSample_Male', recolor: [[/Tops/, { tint: '#5fa84a' }], [/Bottoms/, { tint: '#7a5634', floor: 0.3 }], [/Shoes/, { tint: '#6a4428' }], [/HAIR/, { tint: '#b0703c', floor: 0.3 }]] },
   assassin: { model: 'AvatarSample_C', recolor: [[/Tops/, { tint: '#8a62d8', floor: 0.2 }], [/Bottoms/, { tint: '#3e2e62', floor: 0.3 }], [/Shoes/, { tint: '#2e2640' }], [/HAIR/, { tint: '#3a3050', floor: 0.35 }]] },
-  ranger: { model: 'Sakurada_Fumiriya', recolor: [[/Tops/, { tint: '#b08a52' }], [/AccessoryNeck/, { tint: '#b83a3a' }], [/Bottoms/, { tint: '#5a4230', floor: 0.3 }], [/Shoes/, { tint: '#4a3420' }], [/HAIR/, { tint: '#3fb0a0', floor: 0.3 }]] },
+  ranger: { model: 'Sakurada_Fumiriya', recolor: [[/Tops/, { tint: '#b08a52' }], [/Accessory/, { tint: '#b83a3a' }], [/Bottoms/, { tint: '#5a4230', floor: 0.3 }], [/Shoes/, { tint: '#4a3420' }], [/HAIR/, { tint: '#3fb0a0', floor: 0.3 }]] },
   mage: { model: 'HairSample_Male', recolor: [[/Tops/, { tint: '#c8b4ff' }], [/Bottoms/, { tint: '#3c3688', floor: 0.3 }], [/Shoes/, { tint: '#34305a' }], [/HAIR/, { tint: '#f0f2ff', floor: 0.55 }]] },
   knight: { model: 'AvatarSample_C', recolor: [[/Tops/, { tint: '#c0d0e8', floor: 0.3 }], [/Bottoms/, { tint: '#46546e', floor: 0.3 }], [/Shoes/, { tint: '#5a4632' }], [/HAIR/, { tint: '#d0602c', floor: 0.3 }]] },
 };
@@ -147,6 +147,8 @@ for (const [hero, { model: name, recolor: rules }] of Object.entries(HEROES)) {
     material.setOcclusionTexture(null);
     material.setMetallicRoughnessTexture(null);
   }
+  // Vertex colours (some sample versions carry them) would darken the textures.
+  for (const mesh of root.listMeshes()) for (const prim of mesh.listPrimitives()) prim.setAttribute('COLOR_0', null);
   // Keep only a few morph targets.
   for (const mesh of root.listMeshes()) {
     const names = mesh.getExtras()?.targetNames;
