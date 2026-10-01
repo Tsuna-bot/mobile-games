@@ -420,7 +420,8 @@ export class Menu {
       const selected = save.heroes.selected === id;
       const viewed = this.heroView === id;
       const level = heroState(save, id).level;
-      const face = badge(`hero-${id}`, 'badge--lg');
+      // Bust rendered in Blender (tools/blender/portraits.py) on a halo of the hero's colour.
+      const face = `<span class="portrait" style="--face:url(assets/heroes/${id}.webp)"></span>`;
       return `<button type="button" class="hero-card${selected ? ' is-selected' : ''}${viewed ? ' is-viewed' : ''}${owned ? '' : ' is-locked'}" data-view-hero="${id}" style="--hero:#${hero.cape.toString(16).padStart(6, '0')}"><span class="hero-card__face">${face}${owned ? `<span class="hero-card__level">${level}</span>` : `<span class="hero-card__level hero-card__level--lock">${icon('lock')}</span>`}</span><b>${hero.name}</b></button>`;
     }).join('');
     for (const card of this.$('heroes').querySelectorAll('[data-view-hero]')) {

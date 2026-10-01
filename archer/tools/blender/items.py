@@ -338,6 +338,7 @@ if PETS_GLB and (not ONLY or ONLY & set(PETS)):
         top = bpy.data.objects.get(name)
         if top and (not ONLY or name in ONLY):
             # glTF import turns Y-up back into Z-up; face the camera three-quarters.
+            top.rotation_mode = 'XYZ'
             top.rotation_euler = (0, 0, math.radians(-20))
             models[name] = top
     for o in bpy.data.objects:

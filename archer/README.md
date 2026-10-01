@@ -10,6 +10,7 @@ Crédits :
 - Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
 - Familiers (chauve-souris, chouette, esprit du givre, salamandre) modélisés dans Blender par `tools/blender/pets.py`.
 - Images des objets (armes, armures, anneaux, amulettes, familiers) modélisées et rendues dans Blender par `tools/blender/items.py`, en une seule planche (`assets/icons/items.webp`).
+- Portraits des héros, icône de l'app et bannière promo (`promo/feature-1024x500.jpg`) rendus dans Blender à partir des héros VRoid (`portraits.py`, `icon.py`, `promo.py`).
 - Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer, Darkzaitzev et Lucas.
 
 ## Jouer
@@ -156,7 +157,15 @@ blender -b -P tools/blender/pets.py -- /tmp/pets.glb /tmp/pets.png   # modèles 
 node tools/blender/compress.mjs /tmp/pets.glb assets/pets/pets.glb    # meshopt + quantification
 blender -b -P tools/blender/items.py -- /tmp/items /tmp/pets.glb 384  # une image par objet (Cycles + contours Freestyle)
 node tools/blender/atlas.mjs /tmp/items assets/icons/items.webp src/ui/itemArt.js 192   # planche + index
+# Héros : d'abord décompresser les .glb (Blender 4.0 ne lit pas meshopt), un par héros.
+node tools/blender/decompress.mjs assets/anime/archer.glb /tmp/heroes/archer.glb
+blender -b -P tools/blender/portraits.py -- /tmp/heroes /tmp/portraits 384   # bustes (recadrés en WebP 192 px dans assets/heroes/)
+blender -b -P tools/blender/icon.py -- /tmp/heroes /tmp/icon.png 1024        # icône (réduite en 512 et 192 px dans icons/)
+blender -b -P tools/blender/promo.py -- /tmp/heroes /tmp/pets.glb /tmp/promo.png 2048 1000
+node tools/blender/promo.mjs /tmp/promo.png promo/feature-1024x500.jpg 1024  # titre par-dessus
 ```
+
+Les héros sont rendus sans la tenue fantasy (cape, épaulières) que le jeu leur ajoute en code.
 
 Le script de compression demande `@gltf-transform/core`, `@gltf-transform/extensions`, `@gltf-transform/functions` et `meshoptimizer` (npm), la planche `sharp`. L'export glTF de Blender demande numpy.
 
