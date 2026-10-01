@@ -51,6 +51,25 @@ void main() {
   gl_FragColor = vec4(vTint * fade * edge * flow * 0.9, 1.0);
 }`;
 
+// Arrow streak: a flat glowing ribbon trailing behind each arrow, brightest at the head.
+const STREAK_VERTEX = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  vUv = uv;
+  vTint = instanceColor;
+  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+}`;
+
+const STREAK_FRAGMENT = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vTint;
+void main() {
+  float along = pow(1.0 - vUv.y, 1.8);
+  float across = 1.0 - abs(vUv.x * 2.0 - 1.0);
+  gl_FragColor = vec4(vTint * along * across * across, 1.0);
+}`;
+
 // Anime hit sparks: camera-facing four-pointed stars, turned by the instance's angle.
 const STAR_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -198,6 +217,16 @@ export class Fx {
     this.arrowMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
     this.pillars = [];
     scene.add(this.arrowMesh);
+    // Behind each arrow: from the head (z = 0) back to the tail (z = -1), lying flat.
+    const streak = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, -0.5);
+    this.streakMesh = new THREE.InstancedMesh(streak, new THREE.ShaderMaterial({
+      vertexShader: STREAK_VERTEX, fragmentShader: STREAK_FRAGMENT,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    }), 240);
+    this.streakMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(240 * 3), 3);
+    this.streakMesh.frustumCulled = false;
+    this.streakMesh.renderOrder = 23;
+    scene.add(this.streakMesh);
 
     // Kunai: a dark steel blade with a ring pommel (the assassin's throws).
     const blade = new THREE.OctahedronGeometry(0.08, 0);
@@ -307,7 +336,7 @@ export class Fx {
       if (!this.floorRings.length) this.ring(0, -99, 0.1, 0.01, COLORS.spark);
       if (!this.bolts.length) this.lightning(0, -99, 0.1, -99);
       this.warmList = [...this.hazardPool.map((h) => h.mesh), ...this.lines.map((l) => l.mesh), ...this.floorRings.map((r) => r.mesh), ...this.bolts.map((b) => b.line),
-        this.lootMesh, this.beamMesh, this.runeMesh, this.starMesh, this.heroOrbs, this.orbMesh, this.kunaiMesh, this.shotCore, this.shotHalo, this.xpMesh, this.coinMesh, this.heartMesh, this.arrowMesh];
+        this.lootMesh, this.beamMesh, this.runeMesh, this.starMesh, this.heroOrbs, this.orbMesh, this.kunaiMesh, this.shotCore, this.shotHalo, this.xpMesh, this.coinMesh, this.heartMesh, this.arrowMesh, this.streakMesh];
       for (const m of this.warmList) {
         m.userData.wasVisible = m.visible;
         m.visible = true;
@@ -651,7 +680,7 @@ export class Fx {
     }
     if (!run) {
       this.lootMesh.count = this.beamMesh.count = this.runeMesh.count = 0;
-      this.kunaiMesh.count = this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
+      this.kunaiMesh.count = this.streakMesh.count = this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
       return;
     }
 
@@ -661,6 +690,7 @@ export class Fx {
     let n = 0;
     let no = 0;
     let nk = 0;
+    let nt = 0;
     for (const a of run.arrows) {
       if (a.kind === 'staff' || a.kind === 'tome' || a.kind === 'pet') {
         if (no >= 120) continue;
@@ -705,11 +735,24 @@ export class Fx {
       // Arrows glow in the colour of the hero's element (fire, ice, poison, lightning).
       const tint = arrowTint;
       this.arrowMesh.setColorAt(n++, hdrColor.copy(tint).multiplyScalar(tint === COLORS.arrow ? 1.25 : 2));
+      if (a.kind !== 'blades' && a.kind !== 'shuriken' && nt < 240) {
+        // A long, heavy shot leaves a longer, wider streak.
+        const k = a.kind === 'gale' ? 2.2 : a.kind === 'longbow' ? 1.4 : a.kind === 'crossbow' ? 1.2 : 1;
+        dummy.position.set(a.x, Y - 0.02, a.z);
+        dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
+        dummy.scale.set(0.15 * k, 1, 1.1 * k);
+        dummy.updateMatrix();
+        this.streakMesh.setMatrixAt(nt, dummy.matrix);
+        this.streakMesh.setColorAt(nt++, hdrColor.copy(tint).multiplyScalar(tint === COLORS.arrow ? 0.9 : 1.4));
+      }
       this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0.1, 0, tint, tint === COLORS.arrow ? 0.09 : 0.13, 0.18, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.75 });
     }
     this.arrowMesh.count = n;
     this.arrowMesh.instanceMatrix.needsUpdate = true;
     this.arrowMesh.instanceColor.needsUpdate = true;
+    this.streakMesh.count = nt;
+    this.streakMesh.instanceMatrix.needsUpdate = true;
+    this.streakMesh.instanceColor.needsUpdate = true;
     this.kunaiMesh.count = nk;
     this.kunaiMesh.instanceMatrix.needsUpdate = true;
     this.heroOrbs.count = no;
