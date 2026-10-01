@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v29';
+const VERSION = 'aetherfall-v30';
 
 const APP_SHELL = [
   './',
@@ -8,6 +8,7 @@ const APP_SHELL = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './assets/icons/items.webp',
   './assets/kk/chars/barbarian.glb',
   './assets/kk/chars/knight.glb',
   './assets/kk/chars/mage.glb',
@@ -183,6 +184,7 @@ const APP_SHELL = [
   './src/sim/run.js',
   './src/ui/haptics.js',
   './src/ui/iconPaths.js',
+  './src/ui/itemArt.js',
   './src/ui/icons.js',
   './src/ui/ui.js',
 ];

@@ -1447,6 +1447,31 @@ button:disabled {
   flex: none;
 }
 
+/* An item's picture from the sprite sheet rendered in Blender (tools/blender/items.py). */
+.art {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background-image: url(assets/icons/items.webp);
+  background-repeat: no-repeat;
+  vertical-align: -0.14em;
+  flex: none;
+}
+
+.item .art.item__ico {
+  width: 72%;
+  height: 72%;
+}
+
+.art--xl {
+  font-size: 120px;
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--rarity, #fff) 55%, transparent));
+}
+
+.toast .art {
+  font-size: 30px;
+}
+
 /* Round badge: coloured light from the top, dark rim, glossy highlight. */
 .badge {
   --a: #ffe28a;

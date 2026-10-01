@@ -1,5 +1,5 @@
 import { writeSave } from '../core/storage.js';
-import { badge, compact, icon } from '../ui/icons.js';
+import { badge, compact, icon, itemArt } from '../ui/icons.js';
 import { BASES, LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
 import { CHAPTERS } from '../data/chapters.js';
@@ -133,7 +133,7 @@ export class Menu {
     const stars = item.stars ? `<span class="item__stars">${icon('star').repeat(item.stars)}</span>` : '';
     const reco = isRecommended(this.save.heroes.selected, item.base) ? `<span class="item__reco" title="Conseillé pour ton héros">${icon('check')}</span>` : '';
     return `<button type="button" class="item${item.rarity === 3 ? ' is-legendary' : ''}" data-uid="${item.uid}" style="--rarity:${rarity.color}" aria-label="${esc(def.name)}">
-      ${slotLabel ? `<span class="item__slot">${slotLabel}</span>` : ''}${icon(def.icon, 'item__ico')}${stars}${reco}<span class="item__level">Niv. ${item.level}</span>${equipped ? `<span class="item__equipped">${icon('check')}</span>` : ''}${canMerge ? `<span class="item__merge">${icon('upgrade')}</span>` : ''}</button>`;
+      ${slotLabel ? `<span class="item__slot">${slotLabel}</span>` : ''}${itemArt(def.icon, 'item__ico')}${stars}${reco}<span class="item__level">Niv. ${item.level}</span>${equipped ? `<span class="item__equipped">${icon('check')}</span>` : ''}${canMerge ? `<span class="item__merge">${icon('upgrade')}</span>` : ''}</button>`;
   }
 
   renderGear() {
@@ -222,7 +222,7 @@ export class Menu {
     } else if (item.rarity >= 2 && stars < MAX_STARS) actions.push(`<button type="button" class="btn btn--full" disabled>${icon('star')} Éveil au niveau ${rarity.cap}</button>`);
     if (equippedSlot !== 'weapon') actions.push(`<button type="button" class="btn btn--ghost btn--full" data-act="salvage">Démonter · +${salvageValue(item)} <i class="coin-icon"></i></button>`);
     this.openPopup(`
-      <span class="popup__icon">${badge(def.icon, 'badge--xl')}</span>
+      <span class="popup__icon">${itemArt(def.icon, 'art--xl')}</span>
       <span class="popup__rarity">${rarity.name} · niveau ${item.level}/${rarity.cap}</span>
       <h3 class="popup__name">${esc(def.name)}</h3>
       ${item.rarity >= 2 ? starRow : ''}
@@ -657,7 +657,7 @@ export class Menu {
     const canMerge = mergePartners(this.save, item.uid).length >= 2;
     this.openPopup(`
       <span class="popup__rarity">${title}</span>
-      <span class="popup__icon">${badge(def.icon, 'badge--xl')}</span>
+      <span class="popup__icon">${itemArt(def.icon, 'art--xl')}</span>
       <span class="popup__rarity">${rarity.name}</span>
       <h3 class="popup__name">${esc(def.name)}</h3>
       <div class="popup__stats">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}${canMerge ? `<span class="next">${icon('upgrade')} Tu peux fusionner 3 exemplaires !</span>` : ''}</div>

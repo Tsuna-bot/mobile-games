@@ -9,6 +9,7 @@ Crédits :
 - Héros : personnages d’exemple **VRoid** de pixiv ([vroid.com](https://vroid.com)) — HairSample_Male et Sakurada Fumiriya en CC0, AvatarSample_C selon les conditions d’utilisation VRoid (usage libre, y compris commercial) — recolorés et habillés en fantasy (capes, pans de tunique, épaulières). `tools/convert-vroid.mjs` refait la conversion.
 - Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
 - Familiers (chauve-souris, chouette, esprit du givre, salamandre) modélisés dans Blender par `tools/blender/pets.py`.
+- Images des objets (armes, armures, anneaux, amulettes, familiers) modélisées et rendues dans Blender par `tools/blender/items.py`, en une seule planche (`assets/icons/items.webp`).
 - Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer, Darkzaitzev et Lucas.
 
 ## Jouer
@@ -137,7 +138,7 @@ archer/
 ├── assets/kk/              # Modèles KayKit et Quaternius convertis (CC0)
 ├── tools/bot.mjs           # Bot d'équilibrage
 ├── tools/convert-kaykit.mjs # Conversion des packs KayKit
-├── tools/blender/          # Modèles faits dans Blender (familiers) et compression
+├── tools/blender/          # Modèles et images faits dans Blender (familiers, objets), compression, planche d'images
 └── src/
     ├── data/               # Capacités, monstres, chapitres, équipement, talents, familiers, héros
     ├── sim/                # Arène (grille, collisions, chemins), run (héros, tirs, salles), IA des monstres
@@ -153,9 +154,11 @@ archer/
 ```bash
 blender -b -P tools/blender/pets.py -- /tmp/pets.glb /tmp/pets.png   # modèles + planche d'aperçu
 node tools/blender/compress.mjs /tmp/pets.glb assets/pets/pets.glb    # meshopt + quantification
+blender -b -P tools/blender/items.py -- /tmp/items /tmp/pets.glb 384  # une image par objet (Cycles + contours Freestyle)
+node tools/blender/atlas.mjs /tmp/items assets/icons/items.webp src/ui/itemArt.js 192   # planche + index
 ```
 
-Le script de compression demande `@gltf-transform/core`, `@gltf-transform/extensions`, `@gltf-transform/functions` et `meshoptimizer` (npm). L'export glTF de Blender demande numpy.
+Le script de compression demande `@gltf-transform/core`, `@gltf-transform/extensions`, `@gltf-transform/functions` et `meshoptimizer` (npm), la planche `sharp`. L'export glTF de Blender demande numpy.
 
 ## Lancer en local
 

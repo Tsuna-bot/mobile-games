@@ -19,7 +19,7 @@ import { SPELLS } from '../data/heroes.js';
 import { addItem, ensureProfile, itemDef, runDrop, runGear } from '../meta/profile.js';
 import { Arena } from '../sim/arena.js';
 import { Menu } from './menu.js';
-import { icon } from '../ui/icons.js';
+import { icon, itemArt } from '../ui/icons.js';
 import { Run, STATE } from '../sim/run.js';
 
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
@@ -806,7 +806,7 @@ export class Game {
       onLoot: (spec) => {
         const rarity = RARITIES[spec.rarity];
         const def = itemDef({ base: spec.base });
-        ui.toast(`${icon(def.icon)}<span><b>${rarity.name}</b> · ${def.name}</span>`, rarity.color);
+        ui.toast(`${itemArt(def.icon)}<span><b>${rarity.name}</b> · ${def.name}</span>`, rarity.color);
         if (spec.rarity >= 2) {
           audio.victory();
           this.haptics.pulse([20, 30, 20, 30, 50]);

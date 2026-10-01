@@ -1,4 +1,5 @@
 import { ICON_PATHS } from './iconPaths.js';
+import { ITEM_ART } from './itemArt.js';
 
 // Vector icons (game-icons.net, CC BY 3.0) installed once as an SVG sprite;
 // `icon()` returns markup that references a symbol and takes the text colour.
@@ -27,6 +28,21 @@ export function installIcons() {
 /** An inline icon; `cls` adds classes (e.g. "ico--lg"). */
 export function icon(name, cls = '') {
   return `<svg class="ico ${cls}" aria-hidden="true" focusable="false"><use href="#i-${name}"></use></svg>`;
+}
+
+const ART_INDEX = new Map(ITEM_ART.ids.map((id, i) => [id, i]));
+
+/**
+ * An item's picture (rendered in Blender, assets/icons/items.webp) sized like an icon;
+ * the vector icon when the item has no picture.
+ */
+export function itemArt(name, cls = '') {
+  const i = ART_INDEX.get(name);
+  if (i === undefined) return icon(name, cls);
+  const { cols, rows } = ITEM_ART;
+  const x = ((i % cols) / (cols - 1)) * 100;
+  const y = (Math.floor(i / cols) / (rows - 1)) * 100;
+  return `<span class="art ${cls}" aria-hidden="true" style="background-size:${cols * 100}% ${rows * 100}%;background-position:${x.toFixed(3)}% ${y.toFixed(3)}%"></span>`;
 }
 
 /** An icon on a round, coloured, lit badge. */
