@@ -249,6 +249,44 @@ function mushroom(random, [dark, light]) {
   return mergeGeometries([stem, cap]);
 }
 
+/**
+ * The meshes of a Blender prop as plain geometries (float position, normal, colour, in the
+ * prop's space) merged into its body and its glowing parts, and its footprint.
+ */
+function blenderParts(model) {
+  model.updateMatrixWorld(true);
+  const body = [];
+  const glow = [];
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    const src = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+    const count = src.attributes.position.count;
+    const position = new Float32Array(count * 3);
+    const normal = new Float32Array(count * 3);
+    const color = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      position.set([src.attributes.position.getX(i), src.attributes.position.getY(i), src.attributes.position.getZ(i)], i * 3);
+      normal.set([src.attributes.normal.getX(i), src.attributes.normal.getY(i), src.attributes.normal.getZ(i)], i * 3);
+      const c = src.attributes.color;
+      color.set(c ? [c.getX(i), c.getY(i), c.getZ(i)] : [1, 1, 1], i * 3);
+    }
+    if (src !== o.geometry) src.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(color, 3));
+    g.applyMatrix4(o.matrixWorld);
+    (/glow/.test(o.material.name) ? glow : body).push(g);
+  });
+  const parts = [body, glow].filter((list) => list.length).map((list, i) => ({ geometry: mergeGeometries(list), glow: i === 1 || !body.length }));
+  const box = new THREE.Box3();
+  for (const { geometry } of parts) {
+    geometry.computeBoundingBox();
+    box.union(geometry.boundingBox);
+  }
+  return { parts, footprint: Math.max(box.max.x - box.min.x, box.max.z - box.min.z, 1e-3) };
+}
+
 const PROPS = {
   '@crystal': (random, theme) => crystalCluster(random, theme.crystal),
   '@blossom': (random, theme) => blossomTree(random, theme.blossom, theme.trunk),
@@ -506,8 +544,8 @@ export const LANDS = {
     water: { deep: 0x3a8ad8, shallow: 0xa8f0ff, foam: 0xffffff, glow: 0.3 },
     blossom: [0xd8e8f8, 0xffffff], trunk: 0x7a6a5a,
     blocks: [['column', 0.75], ['pillar_decorated', 0.85], ['Rock_3_A', 0.95], ['@blossom', 0.9]],
-    edge: [['Bush_1_C', 0.8], ['Rock_1_A', 0.5], ['column', 0.55], ['n_Bush_Common_Flowers', 0.8], ['n_Flower_3_Group', 0.6]],
-    trees: [['@blossom', 2.2], ['@blossom', 2.6], ['pillar_decorated', 1.6], ['column', 1.3], ['Tree_1_B', 2.3], ['n_CommonTree_3', 1.9], ['n_CommonTree_5', 2]],
+    edge: [['%cloud', 1.1], ['Rock_1_A', 0.5], ['column', 0.55], ['n_Bush_Common_Flowers', 0.8], ['%cloud', 0.8], ['n_Flower_3_Group', 0.6]],
+    trees: [['@blossom', 2.2], ['%floating_isle', 1.8], ['%cloud', 2.4], ['pillar_decorated', 1.6], ['%floating_isle', 2.3], ['Tree_1_B', 2.3], ['n_CommonTree_3', 1.9], ['%cloud', 3]],
     treeCount: 50, stone: 0xf0f0f8, portal: 0xa8f0ff, ambience: 'sky', leaves: 0x8ad06a, light: { clouds: 0.5 },
   },
   // Emerald jungle: humid and dense, palms, giant glowing mushrooms, fireflies, mist.
@@ -565,9 +603,9 @@ export const LANDS = {
     flowers: [0xffd050, 0xffffff], flowerDensity: 0.2,
     water: { deep: 0x1a6ab8, shallow: 0x5ad8f0, foam: 0xffffff, glow: 0.3 },
     palm: [0x2f7a3a, 0x9ae060],
-    blocks: [['column', 0.75], ['pillar_decorated', 0.85], ['pillar', 0.9], ['coin_stack_large', 0.6], ['chest_gold', 0.7]],
-    edge: [['column', 0.55], ['banner_red', 0.5], ['coin_stack_large', 0.45], ['Rock_1_A', 0.5], ['n_Bush_Common', 0.7]],
-    trees: [['@palm', 2.2], ['pillar_decorated', 1.7], ['column', 1.4], ['@palm', 1.8], ['pillar', 1.5], ['n_CommonTree_1', 2], ['n_CommonTree_3', 1.8]],
+    blocks: [['%obelisk', 0.72], ['%lotus_column', 0.75], ['%gold_urn', 0.8], ['%brazier', 0.75], ['coin_stack_large', 0.6], ['chest_gold', 0.7]],
+    edge: [['%gold_urn', 0.5], ['%brazier', 0.5], ['banner_red', 0.5], ['coin_stack_large', 0.45], ['Rock_1_A', 0.5], ['n_Bush_Common', 0.7]],
+    trees: [['@palm', 2.2], ['%sphinx', 1.6], ['%obelisk', 1.1], ['%lotus_column', 1.2], ['@palm', 1.8], ['%sphinx', 1.9], ['n_CommonTree_1', 2], ['n_CommonTree_3', 1.8]],
     tint: 0xffe8a0, treeCount: 55, stone: 0xf0d890, portal: 0xffe070, torch: 0xffc040, ambience: 'golden', leaves: 0xe8b830, light: { dapple: 0, clouds: 0.3 },
   },
   // The celestial throne: a white and gold court among the stars, drifting light.
@@ -580,9 +618,9 @@ export const LANDS = {
     flowers: [0xffffff, 0xfff0a0, 0xc8d8ff], flowerDensity: 0.4,
     water: { deep: 0x1a1a5a, shallow: 0x8a9aff, foam: 0xffffff, glow: 1.3 },
     crystal: [0x8a7a3a, 0xfff4c0], crystalGlow: 0.6,
-    blocks: [['pillar_decorated', 0.85], ['column', 0.75], ['@crystal', 0.9], ['pillar', 0.9]],
-    edge: [['@crystal', 0.5], ['column', 0.55], ['rubble_half', 0.9], ['n_Bush_Common', 0.7]],
-    trees: [['pillar_decorated', 1.8], ['@crystal', 2.2], ['@crystal', 2.8], ['column', 1.4], ['pillar', 1.6], ['n_CommonTree_2', 2], ['n_CommonTree_5', 2]],
+    blocks: [['%marble_column', 0.75], ['%star_altar', 0.8], ['@crystal', 0.9], ['%marble_column', 0.72]],
+    edge: [['@crystal', 0.5], ['%star_altar', 0.5], ['rubble_half', 0.9], ['n_Bush_Common', 0.7]],
+    trees: [['%broken_arch', 2.4], ['@crystal', 2.2], ['@crystal', 2.8], ['%marble_column', 1.2], ['%broken_arch', 2], ['n_CommonTree_2', 2], ['n_CommonTree_5', 2]],
     tint: 0xe8e4ff, treeCount: 50, stone: 0xf0ecff, portal: 0xfff0a0, torch: 0xfff0a0, ambience: 'celestial', leaves: 0xeaf0ff,
   },
 };
@@ -1126,6 +1164,7 @@ export class Landscape {
 
     const place = ([name, width], x, z, rotation, scale = 1) => {
       if (name.startsWith('@')) return this.addProcedural(name, width * scale, x, heightAt(x, z) - 0.05, z, rotation, random, theme);
+      if (name.startsWith('%')) return this.addBlender(name.slice(1), width * scale, x, heightAt(x, z) - 0.03, z, rotation);
       const prop = this.toonize(this.assets.fitted(name, width * scale), name.startsWith('n_') ? theme.natureTint ?? null : theme.tint ?? null, /^Rock|rubble/.test(name), theme.leaves ?? null);
       prop.position.set(x, heightAt(x, z) - 0.03, z);
       prop.rotation.y = rotation;
@@ -1215,7 +1254,27 @@ export class Landscape {
     holder.position.set(x, y, z);
     holder.rotation.y = rotation;
     holder.scale.setScalar(width / Math.max(box.max.x - box.min.x, box.max.z - box.min.z, 1e-3));
-    holder.userData.procedural = { geometry, glow: name === '@crystal' || (theme.glowProps ?? []).includes(name) };
+    holder.userData.procedural = [{ geometry, glow: name === '@crystal' || (theme.glowProps ?? []).includes(name) }];
+    this.root.add(holder);
+    return holder;
+  }
+
+  /**
+   * A prop made in Blender (assets/props/props.glb, tools/blender/props.py), merged with the
+   * generated ones: its body in toon shading, its `_glow` parts (flames, orbs) glowing.
+   */
+  addBlender(name, width, x, y, z, rotation) {
+    this.blenderCache ??= new Map();
+    let source = this.blenderCache.get(name);
+    if (!source) {
+      source = blenderParts(this.assets.models.get(`b_${name}`));
+      this.blenderCache.set(name, source);
+    }
+    const holder = new THREE.Object3D();
+    holder.position.set(x, y, z);
+    holder.rotation.y = rotation;
+    holder.scale.setScalar(width / source.footprint);
+    holder.userData.procedural = source.parts.map(({ geometry, glow }) => ({ geometry: geometry.clone(), glow }));
     this.root.add(holder);
     return holder;
   }
@@ -1224,14 +1283,16 @@ export class Landscape {
   mergeProcedural(theme) {
     const groups = new Map();
     for (const holder of [...this.root.children]) {
-      const info = holder.userData.procedural;
-      if (!info) continue;
+      const pieces = holder.userData.procedural;
+      if (!pieces) continue;
       holder.updateMatrix();
       const shadow = !holder.userData.noShadow;
       const outline = !holder.userData.noOutline;
-      const key = `${info.glow}|${shadow}|${outline}`;
-      if (!groups.has(key)) groups.set(key, { glow: info.glow, shadow, outline, parts: [] });
-      groups.get(key).parts.push(info.geometry.applyMatrix4(holder.matrix));
+      for (const { geometry, glow } of pieces) {
+        const key = `${glow}|${shadow}|${outline}`;
+        if (!groups.has(key)) groups.set(key, { glow, shadow, outline, parts: [] });
+        groups.get(key).parts.push(geometry.applyMatrix4(holder.matrix));
+      }
       holder.removeFromParent();
     }
     this.propMaterials ??= new Map();

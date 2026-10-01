@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v31';
+const VERSION = 'aetherfall-v32';
 
 const APP_SHELL = [
   './',
@@ -152,6 +152,7 @@ const APP_SHELL = [
   './vendor/three/examples/jsm/environments/RoomEnvironment.js',
   './assets/nature/nature.glb',
   './assets/pets/pets.glb',
+  './assets/props/props.glb',
   './src/audio/audio.js',
   './src/config.js',
   './src/core/loop.js',

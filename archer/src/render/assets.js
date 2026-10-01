@@ -78,6 +78,11 @@ export class Assets {
       ? await loader.parseAsync(Uint8Array.from(atob(bundle['pets/pets']), (c) => c.charCodeAt(0)).buffer, 'assets/pets/')
       : await loader.loadAsync('assets/pets/pets.glb');
     for (const child of [...pets.scene.children]) this.register(`pet_${child.name}`, child);
+    // Landscape props of the late chapters, also from Blender (tools/blender/props.py): b_<id>.
+    const props = bundle?.['props/props']
+      ? await loader.parseAsync(Uint8Array.from(atob(bundle['props/props']), (c) => c.charCodeAt(0)).buffer, 'assets/props/')
+      : await loader.loadAsync('assets/props/props.glb');
+    for (const child of [...props.scene.children]) this.register(`b_${child.name}`, child);
     onProgress?.(1);
   }
 

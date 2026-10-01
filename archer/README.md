@@ -11,6 +11,7 @@ Crédits :
 - Familiers (chauve-souris, chouette, esprit du givre, salamandre) modélisés dans Blender par `tools/blender/pets.py`.
 - Images des objets (armes, armures, anneaux, amulettes, familiers) modélisées et rendues dans Blender par `tools/blender/items.py`, en une seule planche (`assets/icons/items.webp`).
 - Portraits des héros, icône de l'app et bannière promo (`promo/feature-1024x500.jpg`) rendus dans Blender à partir des héros VRoid (`portraits.py`, `icon.py`, `promo.py`).
+- Décors de la Cité d'or (obélisques, colonnes lotus, urnes, braseros, sphinx), du Trône céleste (colonnes de marbre à orbe, autels étoilés, arches brisées) et des Îles célestes (nuages, îles flottantes) modélisés dans Blender par `tools/blender/props.py`.
 - Icônes de [game-icons.net](https://game-icons.net) (CC BY 3.0) par Lorc, Delapouite, Carl Olsen, Caro Asercion, Sbed, Skoll, Willdabeast, Zeromancer, Darkzaitzev et Lucas.
 
 ## Jouer
@@ -155,6 +156,8 @@ archer/
 ```bash
 blender -b -P tools/blender/pets.py -- /tmp/pets.glb /tmp/pets.png   # modèles + planche d'aperçu
 node tools/blender/compress.mjs /tmp/pets.glb assets/pets/pets.glb    # meshopt + quantification
+blender -b -P tools/blender/props.py -- /tmp/props.glb /tmp/props.png # décors des derniers chapitres
+node tools/blender/compress.mjs /tmp/props.glb assets/props/props.glb
 blender -b -P tools/blender/items.py -- /tmp/items /tmp/pets.glb 384  # une image par objet (Cycles + contours Freestyle)
 node tools/blender/atlas.mjs /tmp/items assets/icons/items.webp src/ui/itemArt.js 192   # planche + index
 # Héros : d'abord décompresser les .glb (Blender 4.0 ne lit pas meshopt), un par héros.
