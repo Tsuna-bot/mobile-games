@@ -1,10 +1,15 @@
 // Converts VRoid sample characters (VRM 0.x, CC0) into light .glb files for Aetherfall:
-// textures resized and turned to WebP, normal maps and most face expressions dropped,
-// hair and cloth pieces sharing a material joined, meshes quantized and meshopt-compressed.
-// The VRM extension (spring bones, MToon) is not kept: the game draws its own toon shading.
+// textures turned to WebP (face, eyes and hair at 1024 px, the rest at 512), normal maps
+// and most face expressions dropped, hair and cloth pieces sharing a material joined,
+// meshes quantized and meshopt-compressed. The VRM extension (spring bones, MToon) is not
+// kept: the game draws its own toon shading. Heroes whose .vrm is missing are skipped.
+// The CC0 samples: opengameart.org/content/vroid-studio-cc0-models; AvatarSample_C:
+// VRoid Hub (pixiv account).
 //
 //   npm i @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions meshoptimizer sharp
-//   node tools/convert-vroid.mjs <folder with the .vrm files>
+//   node tools/convert-vroid.mjs <folder with the .vrm files> [--out=<dir>] [--max=<px>]
+//
+// --max: every texture at that size (e.g. 2048: full-size copies for the Blender renders).
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
@@ -14,7 +19,11 @@ import { dedup, meshopt, prune, quantize, textureCompress, weld } from '@gltf-tr
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
 const SRC = path.resolve(process.argv[2] ?? '.');
-const OUT = new URL('../assets/anime', import.meta.url).pathname;
+const option = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
+const OUT = option('out') ? path.resolve(option('out')) : new URL('../assets/anime', import.meta.url).pathname;
+const MAX = Number(option('max')) || 0;
+// The face, eyes and hair are what close-ups (the menu, the portraits) look at.
+const DETAIL = /Face|Eye|Hair|HAIR/;
 
 // Game hero -> VRoid sample model and a fantasy recolour of its clothes and hair.
 // HairSample_Male and Sakurada_Fumiriya are CC0; AvatarSample_C is free to use
@@ -122,7 +131,12 @@ async function recolor(doc, rules) {
 }
 
 for (const [hero, { model: name, recolor: rules }] of Object.entries(HEROES)) {
-  const doc = await io.read(path.join(SRC, `${name}.vrm`));
+  const source = path.join(SRC, `${name}.vrm`);
+  if (!fs.existsSync(source)) {
+    console.log(hero, name, 'skipped (no .vrm)');
+    continue;
+  }
+  const doc = await io.read(source);
   const root = doc.getRoot();
   await recolor(doc, rules);
   for (const material of root.listMaterials()) {
@@ -154,7 +168,12 @@ for (const [hero, { model: name, recolor: rules }] of Object.entries(HEROES)) {
   await doc.transform(
     prune(),
     weld(),
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [512, 512], quality: 88 }),
+    ...(MAX
+      ? [textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [MAX, MAX], quality: 92 })]
+      : [
+        textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 88, pattern: DETAIL }),
+        textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [512, 512], quality: 88, pattern: new RegExp(`^(?!.*(${DETAIL.source})).*$`) }),
+      ]),
     quantize(),
     meshopt({ encoder: MeshoptEncoder, level: 'high' }),
     prune(),
