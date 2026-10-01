@@ -5,6 +5,7 @@ Roguelite d’aventure en 3D pour mobile (Three.js), dans l’esprit d’Archero
 Crédits :
 - Modèles 3D **KayKit** de Kay Lousberg (CC0) : Adventurers, Skeletons, Dungeon Remastered, Halloween Bits, Medieval Hexagon, Forest Nature Pack ([kaylousberg.itch.io](https://kaylousberg.itch.io), licences dans `assets/kk/`).
 - Monstres animés **Ultimate Monsters** de Quaternius (CC0, [quaternius.com](https://quaternius.com)).
+- Diablotins et puglins du **Bestiary – Dungeon Monsters Kit** de Quaternius (partie gratuite, CC0), animés avec son **Universal Animation Library** (CC0) ; `tools/convert-bestiary.mjs` refait la conversion (modèles allégés, textures 512 px, animations greffées).
 - Arbres, rochers, fougères, fleurs et champignons du **Stylized Nature MegaKit** de Quaternius (CC0), convertis par `tools/convert-nature.mjs` (un seul fichier, textures réduites en WebP, troncs simplifiés).
 - Héros : personnages d’exemple **VRoid** de pixiv ([vroid.com](https://vroid.com)) — HairSample_Male et Sakurada Fumiriya en CC0, AvatarSample_C selon les conditions d’utilisation VRoid (usage libre, y compris commercial) — recolorés et habillés en fantasy (capes, pans de tunique, épaulières). `tools/convert-vroid.mjs` refait la conversion.
 - Animations des héros : **Universal Animation Library** de Quaternius (CC0), adaptées au squelette VRoid.
@@ -140,6 +141,7 @@ archer/
 ├── assets/kk/              # Modèles KayKit et Quaternius convertis (CC0)
 ├── tools/bot.mjs           # Bot d'équilibrage
 ├── tools/convert-kaykit.mjs # Conversion des packs KayKit
+├── tools/convert-bestiary.mjs # Diablotins et puglins du Bestiary + animations
 ├── tools/blender/          # Modèles et images faits dans Blender (familiers, objets), compression, planche d'images
 └── src/
     ├── data/               # Capacités, monstres, chapitres, équipement, talents, familiers, héros

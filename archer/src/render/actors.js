@@ -367,7 +367,8 @@ export class Actors {
     const gear = [];
     const materials = [];
     const skin = skinOf(def, this.theme);
-    const monster = skin.model.startsWith('q_');
+    // Quaternius monsters (q_*, and the Bestiary's b_*) carry their own clips; KayKit characters share theirs.
+    const monster = /^[qb]_/.test(skin.model);
     const model = monster ? this.assets.clone(skin.model) : dressCharacter(this.assets, skin.model, skin.show, skin.attach);
     // Quaternius monsters are fitted to a height; KayKit characters share one scale.
     const height = skin.height ?? 1.3 * def.scale;

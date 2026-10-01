@@ -1,5 +1,5 @@
 // What each monster looks like in each chapter (the simulation does not change):
-// KayKit skeletons and adventurers, Quaternius monsters (q_*). `height` fits the
+// KayKit skeletons and adventurers, Quaternius monsters (q_*, Bestiary imps and puglins b_*). `height` fits the
 // model to that many units; `hover` makes it fly above the floor.
 
 const FOREST = {
@@ -14,17 +14,18 @@ const FOREST = {
 };
 
 const DUNGEON = {
+  zombie: { model: 'b_puglin_red', height: 1 },
   orc: { model: 'q_orc_skull', height: 1.45 },
   keeper: { model: 'q_wizard', height: 1.05 },
   ghost: { model: 'q_ghost_skull', height: 1, hover: true },
   wisp: { model: 'q_bat', height: 0.6, hover: true },
-  vampire: { model: 'q_demon', height: 1.3 },
+  vampire: { model: 'b_imp_red', height: 1.35 },
 };
 
 const GRAVEYARD = {
   ghost: { model: 'q_ghost', height: 1.05, hover: true },
   wisp: { model: 'q_hywirl', height: 0.6, hover: true },
-  vampire: { model: 'q_demon', height: 1.3 },
+  vampire: { model: 'b_imp_blue', height: 1.35 },
   orc: { model: 'q_orc_skull', height: 1.45 },
   keeper: { model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon' },
 };
@@ -43,7 +44,7 @@ const TUNDRA = {
   zombie: { model: 'q_yeti', height: 0.95 },
   orc: { model: 'q_orc_skull', height: 1.45 },
   ghost: { model: 'q_ghost', height: 1.05, hover: true },
-  vampire: { model: 'q_bluedemon', height: 1.3 },
+  vampire: { model: 'b_imp_blue', height: 1.35 },
   keeper: { model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon' },
 };
 
@@ -59,11 +60,11 @@ const SWAMP = {
 };
 
 const VOLCANO = {
-  zombie: { model: 'q_dino', height: 1 },
+  zombie: { model: 'b_puglin_red', height: 1 },
   orc: { model: 'q_orc_skull', height: 1.45 },
   ghost: { model: 'q_ghost_skull', height: 1, hover: true },
   wisp: { model: 'q_bat', height: 0.6, hover: true },
-  vampire: { model: 'q_demon', height: 1.3 },
+  vampire: { model: 'b_imp_red', height: 1.35 },
   keeper: { model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon' },
   bomber: { model: 'q_tribal', height: 1.2 },
 };
@@ -77,11 +78,11 @@ const CITADEL = {
 };
 
 const DESERT = {
-  zombie: { model: 'q_spiky', height: 0.85, tint: 0xffd890 },
+  zombie: { model: 'b_puglin_red', height: 1, tint: 0xffe8c0 },
   orc: { model: 'q_orc_skull', height: 1.45, tint: 0xffe0b0 },
   ghost: { model: 'q_ghost_skull', height: 1, hover: true },
   wisp: { model: 'q_bee', height: 0.6, hover: true },
-  vampire: { model: 'q_demon', height: 1.3, tint: 0xffc890 },
+  vampire: { model: 'b_imp_red', height: 1.35, tint: 0xffe0b0 },
   keeper: { model: 'q_wizard', height: 1.05, tint: 0xffe0a0 },
   bomber: { model: 'q_tribal', height: 1.2 },
 };
@@ -97,12 +98,12 @@ const SAKURA = {
 };
 
 const AUTUMN = {
-  zombie: { model: 'q_mushnub', height: 0.8, tint: 0xffb070 },
+  zombie: { model: 'b_puglin_green', height: 1, tint: 0xffe0b0 },
   skeleton: { model: 'skeleton_rogue', attach: 'crossbow_1handed', aimClip: '1H_Ranged_Shoot', tint: 0xffd8a0 },
   orc: { model: 'q_orc', height: 1.45, tint: 0xffc080 },
   ghost: { model: 'q_ghost', height: 1.05, hover: true, tint: 0xffd8a0 },
   wisp: { model: 'q_bee_evolved', height: 0.65, hover: true },
-  vampire: { model: 'q_demon', height: 1.3 },
+  vampire: { model: 'b_imp_red', height: 1.35 },
   keeper: { model: 'q_wizard', height: 1.05, tint: 0xffb070 },
   bomber: { model: 'rogue', show: ['Throwable'], aimClip: 'Throw', tint: 0xffa060 },
 };
@@ -129,7 +130,7 @@ const SKY = {
 };
 
 const JUNGLE = {
-  zombie: { model: 'q_dino', height: 0.95 },
+  zombie: { model: 'b_puglin_green', height: 1 },
   skeleton: { model: 'q_mushnub_evolved', height: 0.95, tint: 0xd0ff90 },
   orc: { model: 'q_orc', height: 1.45 },
   ghost: { model: 'q_glub', height: 0.8, hover: true },
@@ -146,7 +147,7 @@ const STORM = {
   orc: { model: 'q_orc_skull', height: 1.45, tint: 0xa8c8ff },
   ghost: { model: 'q_ghost', height: 1.05, hover: true, tint: 0xc8e0ff },
   wisp: { model: 'q_hywirl', height: 0.6, hover: true },
-  vampire: { model: 'q_bluedemon', height: 1.3 },
+  vampire: { model: 'b_imp_blue', height: 1.35 },
   keeper: { model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon', tint: 0xa8c8ff },
 };
 
@@ -165,7 +166,7 @@ const GOLDEN = {
   orc: { model: 'skeleton_warrior', attach: 'sword_1handed', aimClip: 'Taunt', tint: 0xffe090 },
   ghost: { model: 'q_ghost_skull', height: 1, hover: true, tint: 0xfff0b0 },
   wisp: { model: 'q_bee', height: 0.6, hover: true },
-  vampire: { model: 'q_demon', height: 1.3, tint: 0xffd890 },
+  vampire: { model: 'b_imp_red', height: 1.35, tint: 0xfff0c8 },
   bomber: { model: 'q_tribal', height: 1.2, tint: 0xffe0b0 },
 };
 

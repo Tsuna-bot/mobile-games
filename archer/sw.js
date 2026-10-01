@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v33';
+const VERSION = 'aetherfall-v34';
 
 const APP_SHELL = [
   './',
@@ -14,6 +14,10 @@ const APP_SHELL = [
   './assets/heroes/ranger.webp',
   './assets/heroes/mage.webp',
   './assets/heroes/knight.webp',
+  './assets/kk/chars/b_imp_blue.glb',
+  './assets/kk/chars/b_imp_red.glb',
+  './assets/kk/chars/b_puglin_green.glb',
+  './assets/kk/chars/b_puglin_red.glb',
   './assets/kk/chars/barbarian.glb',
   './assets/kk/chars/knight.glb',
   './assets/kk/chars/mage.glb',

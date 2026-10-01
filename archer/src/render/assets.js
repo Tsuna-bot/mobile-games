@@ -14,7 +14,9 @@ const CHARACTERS = ['rogue_hooded', 'rogue', 'mage', 'knight', 'barbarian', 'ske
   // Quaternius Ultimate Monsters (CC0), each with its own rig and clips.
   'q_mushnub', 'q_mushnub_evolved', 'q_wizard', 'q_orc', 'q_orc_skull', 'q_demon', 'q_bluedemon', 'q_mushroomking', 'q_tribal',
   'q_ghost', 'q_ghost_skull', 'q_bee', 'q_glub', 'q_hywirl', 'q_dragon', 'q_bat',
-  'q_alien', 'q_alien_blob', 'q_bee_evolved', 'q_dino', 'q_dragon_small', 'q_glub_evolved', 'q_greenblob', 'q_ninja', 'q_pinkblob', 'q_spiky', 'q_squidle', 'q_yeti'];
+  'q_alien', 'q_alien_blob', 'q_bee_evolved', 'q_dino', 'q_dragon_small', 'q_glub_evolved', 'q_greenblob', 'q_ninja', 'q_pinkblob', 'q_spiky', 'q_squidle', 'q_yeti',
+  // Quaternius Bestiary (CC0): imps and puglins animated with the Universal Animation Library (tools/convert-bestiary.mjs).
+  'b_imp_red', 'b_imp_blue', 'b_puglin_red', 'b_puglin_green'];
 const PROPS = [
   // Forest (KayKit Forest Nature Pack).
   'Tree_1_A', 'Tree_1_B', 'Tree_1_C', 'Tree_2_A', 'Tree_3_A', 'Tree_3_B', 'Tree_4_A', 'Tree_4_B', 'Tree_Bare_1_A', 'Tree_Bare_1_B', 'Tree_Bare_2_A',

@@ -86,7 +86,7 @@ export const ENEMIES = {
     blurb: 'Crache des spirales de venin et fait naître des blobs.',
   },
   demonLord: {
-    id: 'demonLord', name: 'Seigneur démon', model: 'q_demon', height: 3.1, ai: 'bossCount', boss: true, summon: 'wisp',
+    id: 'demonLord', name: 'Seigneur démon', model: 'b_imp_red', height: 3.1, ai: 'bossCount', boss: true, summon: 'wisp',
     hp: 6000, speed: 1.2, radius: 0.85, touch: 125, shot: 85, shotSpeed: 5.8, xp: 140, coins: 120, scale: 2.5,
     blurb: 'Se téléporte, lance des éventails de flammes et des diablotins.',
   },
