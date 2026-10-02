@@ -45,8 +45,21 @@ function registerServiceWorker() {
   navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
 }
 
+/** The version saved for offline play (the newest "aetherfall-vN" cache), under the menu. */
+async function showVersion() {
+  try {
+    const versions = (await caches.keys()).map((k) => Number(/^aetherfall-v(\d+)$/.exec(k)?.[1])).filter(Number.isFinite);
+    if (versions.length) document.getElementById('app-version').textContent = `Version ${Math.max(...versions)} · `;
+  } catch {
+    // No cache storage (private mode): no version shown.
+  }
+}
+
 async function boot() {
   window.__archerBooted = true;
+  showVersion();
+  // Once the offline copy is ready (first visit, or right after an update).
+  navigator.serviceWorker?.ready.then(() => setTimeout(showVersion, 1500)).catch(() => {});
   installIcons();
   const ui = new UI(document);
   if (!supportsWebGL2()) {

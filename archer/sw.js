@@ -1,5 +1,5 @@
 // Offline support. Bump VERSION whenever app files change so players get the update.
-const VERSION = 'aetherfall-v44';
+const VERSION = 'aetherfall-v45';
 
 const APP_SHELL = [
   './',
