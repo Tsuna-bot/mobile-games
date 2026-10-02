@@ -28,7 +28,7 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     uResolution: { value: new THREE.Vector2(1, 1) },
-    uContrast: { value: 0.28 },
+    uContrast: { value: 0.34 },
     uSaturation: { value: 1.12 },
     uVignette: { value: 0.55 },
     uShadows: { value: new THREE.Color(0x3a5a9a) },
@@ -307,10 +307,11 @@ export class View {
       this.aoPass.blendIntensity = 0.85;
       this.composer.addPass(this.aoPass);
     }
-    // Threshold above lit white (snow at noon): only emissive things (spells, sparks) glow.
+    // Threshold well above lit white (snow at noon), low strength: only emissive things
+    // (spells, sparks) glow, without a milky veil over bright floors.
     if (preset.bloom) {
       this.composer.addPass(new ShaderPass(SanitizeShader));
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), 0.55, 0.5, 1.05);
+      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(this.width, this.height), 0.35, 0.45, 1.35);
       this.composer.addPass(this.bloomPass);
     }
     this.composer.addPass(new OutputPass());

@@ -92,7 +92,19 @@ export const AMBIENCE = {
   storm: { motes: [[0xd8e8ff, 220, 0.7, -2.6], [0x8ad0ff, 30, 0.8, 0.05]], mist: { color: 0x8a9ab8, opacity: 0.25 } },
   void: { motes: [[0xd08aff, 80, 1, 0.2], [0x6a3ab8, 40, 0.8, 0.06]], mist: { color: 0x6a3a9a, opacity: 0.32 } },
   golden: { motes: [[0xffe070, 80, 0.9, 0.1], [0xffffff, 25, 0.6, 0.05]], shafts: { color: 0xfff0b0, count: 5, opacity: 0.1 } },
-  celestial: { motes: [[0xfff4c0, 90, 1, 0.12], [0xc8d8ff, 50, 0.8, 0.06]], shafts: { color: 0xfff4d8, count: 4, opacity: 0.09 }, mist: { color: 0xb8b8ff, opacity: 0.2 } },
+  celestial: { motes: [[0xfff4c0, 90, 1, 0.12], [0xc8d8ff, 50, 0.8, 0.06]], shafts: { color: 0xfff4d8, count: 4, opacity: 0.09 }, mist: { color: 0xb8b8ff, opacity: 0.12 } },
+  lagoon: { motes: [[0xffffff, 50, 0.8, 0.05], [0xfff0a0, 30, 0.6, 0.08]], shafts: { color: 0xfff4e0, count: 4, opacity: 0.08 } },
+  glowwood: { motes: [[0xd8ff6a, 110, 1, 0.06], [0x9affe0, 50, 0.8, 0.04]], mist: { color: 0x5a8ab0, opacity: 0.25 } },
+  canyon: { motes: [[0xffc890, 80, 0.7, 0.08], [0xffe0c0, 30, 0.5, 0.04]], shafts: { color: 0xffc890, count: 3, opacity: 0.07 } },
+  glacier: { motes: [[0xffffff, 140, 1.1, -0.3], [0xb8f0ff, 50, 0.8, 0.05]], mist: { color: 0x8ab0d8, opacity: 0.22 } },
+  jade: { motes: [[0xffffff, 70, 1, -0.12], [0xd8ffe8, 30, 0.7, 0.05]], mist: { color: 0xd0e8dc, opacity: 0.3 }, shafts: { color: 0xf0fff0, count: 3, opacity: 0.07 } },
+  necropolis: { motes: [[0xff6a6a, 60, 0.9, 0.12], [0xffd0d0, 25, 0.6, 0.05]], mist: { color: 0x8a3a4a, opacity: 0.3 } },
+  forge: { motes: [[0xff9a40, 120, 0.8, 0.5], [0xffd070, 40, 0.6, 0.3]], mist: { color: 0x5a3a2a, opacity: 0.2 } },
+  fungal: { motes: [[0xff9ae8, 120, 1, 0.1], [0xd0a8ff, 60, 0.8, 0.05]], mist: { color: 0x8a5ab0, opacity: 0.3 } },
+  steppe: { motes: [[0xffe0a0, 70, 0.8, 0.05], [0xffffff, 25, 0.6, 0.03]], shafts: { color: 0xffd8a0, count: 4, opacity: 0.09 } },
+  fairy: { motes: [[0xffb0f0, 110, 1.1, 0.1], [0x9ae8ff, 50, 0.8, 0.06]], shafts: { color: 0xffe0f8, count: 3, opacity: 0.07 } },
+  astral: { motes: [[0xd8e0ff, 100, 0.9, 0.08], [0xfff0a0, 40, 0.7, 0.05]], mist: { color: 0x5a6ab8, opacity: 0.2 } },
+  aether: { motes: [[0x8afff0, 130, 1, 0.2], [0xffffff, 40, 0.7, 0.08]], mist: { color: 0x2a8a8a, opacity: 0.25 } },
 };
 
 export class Ambience {
@@ -175,7 +187,7 @@ export class Ambience {
     const geometry = new THREE.PlaneGeometry(halfW * 2 + 6, halfH * 2 + 6);
     geometry.rotateX(-Math.PI / 2);
     const material = new THREE.ShaderMaterial({
-      uniforms: { uColor: { value: new THREE.Color(color) }, uTime: this.time, uOpacity: { value: opacity } },
+      uniforms: { uColor: { value: new THREE.Color(color) }, uTime: this.time, uOpacity: { value: opacity * 0.6 } },
       vertexShader: SHAFT_VERTEX,
       fragmentShader: MIST_FRAGMENT,
       transparent: true,

@@ -4,7 +4,7 @@
 
 import { CONFIG } from '../config.js';
 import { ABILITIES, rollAbilities } from '../data/abilities.js';
-import { ALL_CHAPTERS, ANGEL_AFTER, BOSS_LAYOUT, LAYOUTS } from '../data/chapters.js';
+import { ALL_CHAPTERS, ANGEL_AFTER, BOSS_LAYOUT, ELITE_ROOMS, EXTRA_ANGEL_AFTER, LAYOUTS, ROOMS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
 import { ENDLESS, HEROIC, SPECIAL_ROOMS, eliteChance } from '../data/progression.js';
 import { SPELLS, rankCooldown, rankPower } from '../data/heroes.js';
@@ -27,7 +27,6 @@ const P = CONFIG.player;
 // Assassin tuning: kunai fans and the shadow strike.
 const KUNAI = { damage: 0.4, marks: 3 };
 const SHADOW = { share: 0.2, markedShare: 0.45, bossShare: 0.3, bossHit: 6, range: 6, chain: 3, cooldown: 5, vanish: 0.12, strike: 0.1, untouchable: 1 };
-const ROOMS = 10;
 const SPAWN_DELAY = 0.7;
 const ORB_RADIUS = 1.35;
 const ORB_SPEED = 3.2;
@@ -162,7 +161,7 @@ export class Run {
   /** How deep the run is (loot quality): the chapter, the Endless depth, Heroic higher. */
   get tier() {
     if (this.endless) return Math.min(17, Math.floor(this.roomIndex / 3));
-    return Math.min(20, this.chapterIndex + (this.heroic ? 4 : 0));
+    return Math.min(34, this.chapterIndex + (this.heroic ? 4 : 0));
   }
 
   /** Monster health multiplier of the current room. */
@@ -197,7 +196,7 @@ export class Run {
   }
 
   get xpNeeded() {
-    return Math.round(CONFIG.xp.base * CONFIG.xp.growth ** (this.level - 1));
+    return Math.round(CONFIG.xp.base * (this.endless ? CONFIG.xp.endlessGrowth : CONFIG.xp.growth) ** (this.level - 1));
   }
 
   // ------------------------------------------------------------ rooms
@@ -214,7 +213,8 @@ export class Run {
     const previous = this.roomKind;
     this.roomKind = 'normal';
     this.chest = null;
-    if (!boss && index >= 1 && previous === 'normal') {
+    if (!this.endless && ELITE_ROOMS.includes(index + 1)) this.roomKind = 'challenge';
+    else if (!boss && index >= 1 && previous === 'normal') {
       const r = this.random();
       if (r < SPECIAL_ROOMS.treasure) this.roomKind = 'treasure';
       else if (r < SPECIAL_ROOMS.treasure + SPECIAL_ROOMS.challenge) this.roomKind = 'challenge';
@@ -309,8 +309,8 @@ export class Run {
       this.listener.onWin?.();
       return;
     }
-    // An angel after room 5 (and 8 with the "Ange gardien" talent); in Endless, after each boss.
-    const angel = this.endless ? this.isBossRoom : ANGEL_AFTER.includes(this.room) || (this.player.extraAngel && this.room === 8);
+    // An angel after rooms 8 and 16 (and 21 with the "Ange gardien" talent); in Endless, after each boss.
+    const angel = this.endless ? this.isBossRoom : ANGEL_AFTER.includes(this.room) || (this.player.extraAngel && this.room === EXTRA_ANGEL_AFTER);
     if (angel) {
       this.state = STATE.ANGEL;
       this.choices = rollAbilities(this.taken, this.random, 1, 2).filter((id) => id !== 'heal');

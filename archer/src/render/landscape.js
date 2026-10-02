@@ -536,9 +536,9 @@ export const LANDS = {
   // Sky islands: bright heights above a sea of clouds, white blossoms, sunbeams.
   sky: {
     sky: 0xe4f4ff, skyTop: 0x3a8ae8, fog: 0xd8ecff, fogRange: [26, 66], clouds: 0xffffff,
-    sun: 0xfffaf0, sunIntensity: 2.8, hemi: [0xf0f8ff, 0x7aa8c8], hemiIntensity: 1.2, back: [0xb8e0ff, 1], rim: [0xffffff, 0.55], env: 0.16,
+    sun: 0xfffaf0, sunIntensity: 2.8, hemi: [0xf0f8ff, 0x7aa8c8], hemiIntensity: 1.05, back: [0xb8e0ff, 1], rim: [0xffffff, 0.55], env: 0.16,
     grade: { shadows: 0x3a5a9a, highlights: 0xfff4e0, tone: 0.07, saturation: 1.1 },
-    ground: [0x7ac86a, 0xb0e088], dirt: 0xd8c8a0, rock: 0xc8ccd8, sand: 0xf0ecd8, style: FLOOR_STYLE.grass, court: 0xe0e0e8,
+    ground: [0x7ac86a, 0xb0e088], dirt: 0xd8c8a0, rock: 0xc8ccd8, sand: 0xf0ecd8, style: FLOOR_STYLE.grass, court: 0xbcc0cc,
     hill: 2.4, grass: [0x4a9a5a, 0xe0ffb0], grassHeight: [0.16, 0.3], grassDensity: 0.9,
     flowers: [0xffffff, 0xfff09a, 0xb0d8ff], flowerDensity: 1,
     water: { deep: 0x3a8ad8, shallow: 0xa8f0ff, foam: 0xffffff, glow: 0.3 },
@@ -595,10 +595,10 @@ export const LANDS = {
   },
   // The golden city: gilded courts and columns in the desert sun, palms and banners.
   golden: {
-    sky: 0xffe8b0, skyTop: 0x4a8ae0, fog: 0xf0d8a0, fogRange: [26, 62], clouds: 0xfff8e0,
-    sun: 0xfff0c8, sunIntensity: 3.0, hemi: [0xfff4d8, 0x9a7a40], hemiIntensity: 1.1, back: [0xffd070, 1], rim: [0xfff0b0, 0.6], env: 0.18,
+    sky: 0xffe8b0, skyTop: 0x4a8ae0, fog: 0xd8bc88, fogRange: [26, 62], clouds: 0xfff8e0,
+    sun: 0xfff0c8, sunIntensity: 2.6, hemi: [0xfff4d8, 0x8a6a38], hemiIntensity: 0.95, back: [0xffd070, 1], rim: [0xfff0b0, 0.6], env: 0.18,
     grade: { shadows: 0x4a3a5a, highlights: 0xffe8b0, tone: 0.08, saturation: 1.02 },
-    ground: [0x98a060, 0xc0b888], dirt: 0xb89868, rock: 0xa08a5a, sand: 0xe8d8a8, style: FLOOR_STYLE.grass, court: 0xe0cc98,
+    ground: [0x86904e, 0xaaa274], dirt: 0xb89868, rock: 0xa08a5a, sand: 0xe8d8a8, style: FLOOR_STYLE.grass, court: 0xc4ae7c,
     hill: 3.2, grass: [0x6a7a3a, 0xd8d88a], grassHeight: [0.14, 0.26], grassDensity: 0.45,
     flowers: [0xffd050, 0xffffff], flowerDensity: 0.2,
     water: { deep: 0x1a6ab8, shallow: 0x5ad8f0, foam: 0xffffff, glow: 0.3 },
@@ -611,9 +611,9 @@ export const LANDS = {
   // The celestial throne: a white and gold court among the stars, drifting light.
   celestial: {
     sky: 0x6a6ab8, skyTop: 0x0a0a2a, fog: 0x4a4a8a, fogRange: [18, 52], clouds: 0x9a9ad8, stars: true,
-    sun: 0xfff4e0, sunIntensity: 2.5, hemi: [0xe0e0ff, 0x2a2a4a], hemiIntensity: 1.05, back: [0xffe0a0, 1.3], rim: [0xfff0d0, 0.7], env: 0.14,
+    sun: 0xfff4e0, sunIntensity: 2.5, hemi: [0xe0e0ff, 0x2a2a4a], hemiIntensity: 0.9, back: [0xffe0a0, 1.3], rim: [0xfff0d0, 0.7], env: 0.14,
     grade: { shadows: 0x2a2a6a, highlights: 0xfff0d0, tone: 0.1, saturation: 1.05 },
-    ground: [0x5a5a88, 0x7a7aa8], dirt: 0x8a88a8, rock: 0x6a6a90, sand: 0xa8a8c8, style: FLOOR_STYLE.grass, court: 0xd8d4e8,
+    ground: [0x5a5a88, 0x7a7aa8], dirt: 0x8a88a8, rock: 0x6a6a90, sand: 0xa8a8c8, style: FLOOR_STYLE.grass, court: 0xb0aacc,
     hill: 3.4, grass: [0x3a3a6a, 0xc8c8ff], grassHeight: [0.14, 0.26], grassDensity: 0.4,
     flowers: [0xffffff, 0xfff0a0, 0xc8d8ff], flowerDensity: 0.4,
     water: { deep: 0x1a1a5a, shallow: 0x8a9aff, foam: 0xffffff, glow: 1.3 },
@@ -622,6 +622,188 @@ export const LANDS = {
     edge: [['@crystal', 0.5], ['%star_altar', 0.5], ['rubble_half', 0.9], ['n_Bush_Common', 0.7]],
     trees: [['%broken_arch', 2.4], ['@crystal', 2.2], ['@crystal', 2.8], ['%marble_column', 1.2], ['%broken_arch', 2], ['n_CommonTree_2', 2], ['n_CommonTree_5', 2]],
     tint: 0xe8e4ff, treeCount: 50, stone: 0xf0ecff, portal: 0xfff0a0, torch: 0xfff0a0, ambience: 'celestial', leaves: 0xeaf0ff,
+  },
+
+  // Chapters 19 to 30.
+
+  // An azure lagoon: white sand, turquoise water, palms and corals in the afternoon sun.
+  lagoon: {
+    sky: 0xc8ecf4, skyTop: 0x2a8ad8, fog: 0x9ad0d8, fogRange: [26, 62], clouds: 0xffffff,
+    sun: 0xfff4e0, sunIntensity: 2.5, hemi: [0xe0f8ff, 0x6a8a70], hemiIntensity: 1.0, back: [0x9af0ff, 0.9], rim: [0xfff4e0, 0.5], env: 0.14,
+    grade: { shadows: 0x1a4a7a, highlights: 0xfff0d0, tone: 0.08, saturation: 1.1 },
+    ground: [0x5a9a58, 0x86b468], dirt: 0xc8b088, rock: 0x9a948a, sand: 0xe0d0a0, style: FLOOR_STYLE.grass, court: 0xc8b48c,
+    hill: 2.8, grass: [0x3a7a4a, 0xc0e880], grassHeight: [0.16, 0.3], grassDensity: 0.7,
+    flowers: [0xff8ab0, 0xffe07a, 0xffffff], flowerDensity: 0.5,
+    water: { deep: 0x0a6aa8, shallow: 0x3ae8e0, foam: 0xffffff },
+    palm: [0x2a7a3a, 0x8ad05a], coral: [0xe85a7a, 0xffb0a0],
+    blocks: [['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@coral', 0.85], ['barrel_large', 0.7], ['n_Rock_Medium_2', 0.9]],
+    edge: [['@coral', 0.55], ['Rock_1_A', 0.5], ['n_Bush_Common', 0.8], ['n_Plant_1_Big', 0.8], ['n_Fern_1', 0.6]],
+    trees: [['@palm', 2.2], ['@palm', 2.6], ['@palm', 1.9], ['Rock_2_A', 2], ['n_CommonTree_3', 1.9], ['Tree_2_A', 2.2]],
+    treeCount: 48, stone: 0xd8c8a8, portal: 0x6af0ff, torch: 0xffc070, ambience: 'lagoon', leaves: 0x3a9a4a, light: { clouds: 0.35 },
+  },
+  // Firefly wood: a forest at night, giant glowing mushrooms, blue moonlight.
+  glowwood: {
+    sky: 0x2a4a6a, skyTop: 0x080e22, fog: 0x1e3448, fogRange: [16, 46], clouds: 0x3a5070, stars: true,
+    sun: 0xb8c8ff, sunIntensity: 2.0, hemi: [0x8aa8e8, 0x1a2a24], hemiIntensity: 0.95, back: [0x8affd0, 1.2], rim: [0xb8ffe8, 0.6], env: 0.1,
+    grade: { shadows: 0x102a4a, highlights: 0xd0f0ff, tone: 0.12, saturation: 1.08 },
+    ground: [0x2a4a3e, 0x3e6450], dirt: 0x3e3e34, rock: 0x4a5462, sand: 0x5a6a5a, style: FLOOR_STYLE.grass,
+    hill: 3.2, grass: [0x14302a, 0x5aa888], grassHeight: [0.2, 0.36], grassDensity: 0.9,
+    flowers: [0x9affe0, 0xb8a8ff, 0xffffff], flowerDensity: 0.5,
+    water: { deep: 0x0a2a3a, shallow: 0x3aa8b0, foam: 0xc8fff0, glow: 0.8 },
+    mushroom: [0x3a6ad8, 0x9ae8ff], glowProps: ['@mushroom'], crystalGlow: 0.6,
+    blocks: [['@mushroom', 0.9], ['Rock_3_A', 0.9], ['Bush_1_C', 0.9], ['n_Rock_Medium_1', 0.9]],
+    edge: [['@mushroom', 0.5], ['n_Fern_1', 0.7], ['n_Mushroom_Common', 0.4], ['Bush_1_E', 0.6], ['Rock_1_A', 0.5]],
+    trees: [['@mushroom', 1.8], ['@mushroom', 2.4], ['n_TwistedTree_1', 2.3], ['n_CommonTree_2', 2.1], ['n_TwistedTree_3', 2.2], ['Tree_3_A', 2.4], ['n_Pine_3', 1.8]],
+    tint: 0x8aa0b8, treeCount: 62, stone: 0x7a8aa0, portal: 0x8affd0, torch: 0x9affe0, ambience: 'glowwood', leaves: 0x1e5a4a, natureTint: 0x7a90a8,
+  },
+  // The scarlet canyon: red rock spires and mesas under a dusty sunset.
+  canyon: {
+    sky: 0xf0a878, skyTop: 0x5a4a98, fog: 0xa87868, fogRange: [22, 58], clouds: 0xffd0b0,
+    sun: 0xffc890, sunIntensity: 2.5, hemi: [0xffd8c0, 0x6a3a2a], hemiIntensity: 0.95, back: [0xff9a6a, 1.1], rim: [0xffc890, 0.6], env: 0.12,
+    grade: { shadows: 0x4a2040, highlights: 0xffc080, tone: 0.1, saturation: 0.96 },
+    ground: [0x8a5a44, 0xa47452], dirt: 0x8a4a2a, rock: 0x9a4a32, sand: 0xd09a6a, style: FLOOR_STYLE.grass, court: 0xa8705a,
+    hill: 4.0, grass: [0x6a5a2a, 0xd0b060], grassHeight: [0.14, 0.26], grassDensity: 0.25,
+    flowers: [0xffd050, 0xff7a4a], flowerDensity: 0.1,
+    water: { deep: 0x1a5a8a, shallow: 0x5ac0c8, foam: 0xfff0e0 },
+    spire: [0x7a2e1e, 0xd0784a], cactus: [0x3a6a3a, 0x8ab060],
+    blocks: [['@spire', 0.85], ['Rock_3_A', 0.95], ['Rock_3_C', 0.9], ['@cactus', 0.8], ['n_Rock_Medium_3', 0.9]],
+    edge: [['Rock_1_A', 0.55], ['@cactus', 0.5], ['Rock_3_E', 0.6], ['n_Rock_Medium_2', 0.55], ['n_DeadTree_4', 0.8]],
+    trees: [['@spire', 2], ['@spire', 2.6], ['@spire', 1.6], ['Rock_2_A', 2.4], ['@cactus', 1.4], ['n_DeadTree_1', 2.1], ['Tree_Bare_2_A', 1.8]],
+    tint: 0xe0b098, treeCount: 52, stone: 0xc89070, portal: 0xffb070, torch: 0xff9a40, ambience: 'canyon', natureTint: 0xd8a080, light: { dapple: 0, clouds: 0.3 },
+  },
+  // The boreal glacier: blue ice and snow by night, glowing ice crystals, snowy pines.
+  glacier: {
+    sky: 0x3a5a88, skyTop: 0x0a1230, fog: 0x3a5272, fogRange: [18, 52], clouds: 0x6a80a8, stars: true,
+    sun: 0xc8dcff, sunIntensity: 2.0, hemi: [0xb0c8f0, 0x2a3a50], hemiIntensity: 0.9, back: [0x7ad8ff, 1.2], rim: [0xc8f0ff, 0.6], env: 0.12,
+    grade: { shadows: 0x1a2a5a, highlights: 0xd8f0ff, tone: 0.12, saturation: 1.06 },
+    ground: [0x7088a0, 0x90a8c0], dirt: 0x7a8aa0, rock: 0x5a6a88, sand: 0xa0b4c8, style: FLOOR_STYLE.grass,
+    hill: 3.6, grass: [0x4a6a7a, 0xd8f0ff], grassHeight: [0.12, 0.22], grassDensity: 0.3,
+    flowers: [0x9ae8ff, 0xffffff], flowerDensity: 0.12,
+    water: { deep: 0x2a5aa0, shallow: 0x8ad8f8, foam: 0xffffff, calm: true, glow: 0.4 },
+    pine: [0x1e4038, 0x3a6a58], snow: true, crystal: [0x2a6ab0, 0xb8f4ff], crystalGlow: 0.5,
+    blocks: [['@crystal', 0.9], ['Rock_3_A', 0.95], ['@pine', 0.9], ['Rock_3_B', 0.95]],
+    edge: [['@crystal', 0.5], ['@pine', 0.6], ['Rock_1_A', 0.55], ['n_Rock_Medium_1', 0.55]],
+    trees: [['@pine', 1.6], ['@pine', 2], ['@crystal', 2], ['@crystal', 2.6], ['n_Pine_2', 1.8], ['n_Pine_4', 1.7], ['Rock_2_A', 2]],
+    tint: 0xa8bcd8, treeCount: 60, stone: 0x9ab0cc, portal: 0x9af0ff, torch: 0x9af0ff, ambience: 'glacier', leaves: 0x2e5a58, natureTint: 0xa8bcd8, light: { dapple: 0.1 },
+  },
+  // The jade valley: misty green terraces, jade crystals, white blossoms and pines.
+  jade: {
+    sky: 0xc8e0d0, skyTop: 0x4a8a98, fog: 0x98b8a8, fogRange: [18, 50], clouds: 0xeef8f0,
+    sun: 0xfff4e0, sunIntensity: 2.4, hemi: [0xe0f4e8, 0x3a5a40], hemiIntensity: 1.0, back: [0xa8ffd8, 1], rim: [0xe0fff0, 0.55], env: 0.13,
+    grade: { shadows: 0x1a4a4a, highlights: 0xf0fff0, tone: 0.1, saturation: 1.06 },
+    ground: [0x3e7a4a, 0x5e9a5e], dirt: 0x7a6a4a, rock: 0x6a7a74, sand: 0xb8b498, style: FLOOR_STYLE.grass, court: 0x9aa89c,
+    hill: 3.6, grass: [0x245a34, 0xa8e08a], grassHeight: [0.2, 0.38], grassDensity: 1,
+    flowers: [0xffffff, 0xffd8e8, 0xd0ffa8], flowerDensity: 0.7,
+    water: { deep: 0x1a5a5a, shallow: 0x5ad0b0, foam: 0xf0fff8, calm: true },
+    crystal: [0x1a7a5a, 0x9affd0], crystalGlow: 0.4, blossom: [0xd8e8e0, 0xffffff], trunk: 0x4a3a34, pine: [0x1e4a34, 0x3a7a50],
+    blocks: [['@crystal', 0.9], ['Rock_3_A', 0.95], ['@blossom', 0.9], ['shrine_candles', 0.7], ['pillar', 0.85]],
+    edge: [['@crystal', 0.45], ['n_Fern_1', 0.7], ['n_Bush_Common', 0.8], ['@pine', 0.6], ['Rock_1_A', 0.5]],
+    trees: [['@pine', 1.9], ['@blossom', 2.2], ['@pine', 2.3], ['@crystal', 2], ['n_TwistedTree_2', 2.2], ['n_CommonTree_5', 2], ['Tree_1_C', 2.3]],
+    treeCount: 60, stone: 0xa8c0b0, portal: 0x8affc8, ambience: 'jade', leaves: 0x3a8a5a, flecks: [0xffffff, 0xd8ffe8], fleckAmount: 1.4, light: { clouds: 0.45 },
+  },
+  // The scarlet necropolis: crypts and bones under a blood-red moon.
+  necropolis: {
+    sky: 0x4a2a40, skyTop: 0x12060e, fog: 0x2e1e2c, fogRange: [16, 46], clouds: 0x6a3040, stars: true,
+    sun: 0xffc0c0, sunIntensity: 2.0, hemi: [0xd8a8b8, 0x24141a], hemiIntensity: 0.9, back: [0xff6a7a, 1.0], rim: [0xffa0a8, 0.65], env: 0.1,
+    grade: { shadows: 0x2a0a2a, highlights: 0xffc0b0, tone: 0.12, saturation: 1.02 },
+    ground: [0x3e383e, 0x564c52], dirt: 0x4a3434, rock: 0x5a4a50, sand: 0x6a5054, style: FLOOR_STYLE.grass, court: 0x6e6468, cracks: 0x9a2a3a,
+    hill: 3.4, grass: [0x2a2024, 0x8a6a6a], grassHeight: [0.14, 0.26], grassDensity: 0.35,
+    flowers: [0xff4a5a, 0xffd0d8], flowerDensity: 0.15,
+    water: { deep: 0x3a0610, shallow: 0xb8203a, foam: 0xffa0a8, glow: 1.2 },
+    spire: [0x1e1418, 0x5a3a44],
+    blocks: [['crypt', 0.9], ['gravestone', 0.8], ['grave_A', 0.95], ['coffin_decorated', 0.8], ['@spire', 0.8], ['pillar_decorated', 0.85]],
+    edge: [['ribcage', 0.5], ['skull_candle', 0.45], ['bone_A', 0.5], ['gravemarker_A', 0.5], ['post_skull', 0.6], ['Rock_1_A', 0.5]],
+    trees: [['tree_dead_large', 2.1], ['crypt', 2.6], ['@spire', 2], ['n_DeadTree_3', 2.2], ['n_TwistedTree_4', 2.1], ['tree_dead_medium', 1.8], ['pillar_decorated', 1.6]],
+    tint: 0x9a7a84, treeCount: 54, stone: 0x7a6a72, portal: 0xff5a6a, torch: 0xff5a4a, ambience: 'necropolis', leaves: 0x5a2a34, natureTint: 0x8a6a74,
+  },
+  // The titans' forge: black iron courts, pillars, rivers of molten metal.
+  forge: {
+    sky: 0xa8502a, skyTop: 0x1a0c0c, fog: 0x3e2420, fogRange: [16, 48], clouds: 0x4a2a24,
+    sun: 0xffd0a0, sunIntensity: 2.4, hemi: [0xc8a8a0, 0x1a1210], hemiIntensity: 1.0, back: [0xff7a2a, 1.4], rim: [0xffa860, 0.65], env: 0.1,
+    grade: { shadows: 0x2a1420, highlights: 0xffb060, tone: 0.1, saturation: 1.0 },
+    ground: [0x3a3434, 0x524846], dirt: 0x4a3830, rock: 0x2e2a2a, sand: 0x6a3a26, style: FLOOR_STYLE.grass, court: 0x686060, cracks: 0xff8a2a,
+    hill: 3.8, grass: [0x241e1c, 0x6a5040], grassHeight: [0.12, 0.2], grassDensity: 0.08,
+    flowers: [0xffa040], flowerDensity: 0.04,
+    water: { deep: 0xff5a08, shallow: 0xffb838, foam: 0xfff4a0, glow: 2.2, lava: true },
+    spire: [0x1a1616, 0x5a4440],
+    blocks: [['pillar', 0.9], ['%brazier', 0.75], ['barrel_large', 0.7], ['@spire', 0.85], ['Rock_3_A', 0.95], ['keg_decorated', 0.7]],
+    edge: [['%brazier', 0.5], ['Rock_1_A', 0.55], ['crates_stacked', 0.6], ['torch_lit', 0.5], ['Rock_3_E', 0.6]],
+    trees: [['@spire', 1.8], ['pillar_decorated', 1.6], ['@spire', 2.4], ['pillar', 1.4], ['Rock_2_A', 2.2], ['n_DeadTree_5', 2.1], ['wall', 1.8]],
+    tint: 0x6a5a58, treeCount: 50, stone: 0x5a4e4c, portal: 0xffa040, torch: 0xff8a2a, ambience: 'forge', natureTint: 0x5a4a48, light: { dapple: 0, clouds: 0.25 },
+  },
+  // The spore grotto: a violet twilight, giant purple mushrooms, drifting spores.
+  fungal: {
+    sky: 0x6a4a88, skyTop: 0x140c24, fog: 0x3a2a4e, fogRange: [16, 46], clouds: 0x7a5a9a,
+    sun: 0xf0d8ff, sunIntensity: 2.1, hemi: [0xd0b8f0, 0x241a2a], hemiIntensity: 0.95, back: [0xff8ae0, 1.2], rim: [0xf0b8ff, 0.6], env: 0.11,
+    grade: { shadows: 0x2a1448, highlights: 0xffd8f8, tone: 0.12, saturation: 1.08 },
+    ground: [0x3e3a50, 0x564c68], dirt: 0x4a3a4a, rock: 0x544a64, sand: 0x6a5a78, style: FLOOR_STYLE.grass,
+    hill: 3.2, grass: [0x2a2438, 0xa88ac8], grassHeight: [0.18, 0.34], grassDensity: 0.6,
+    flowers: [0xff9ae8, 0xd0a8ff, 0x9affe8], flowerDensity: 0.4,
+    water: { deep: 0x200a3a, shallow: 0xa04ad8, foam: 0xf0c8ff, glow: 1.1 },
+    mushroom: [0x8a2ab0, 0xff9ae8], glowProps: ['@mushroom'], crystalGlow: 0.55, crystal: [0x5a2a8a, 0xf0b0ff],
+    blocks: [['@mushroom', 0.9], ['@mushroom', 0.85], ['@crystal', 0.9], ['Rock_3_A', 0.9]],
+    edge: [['@mushroom', 0.5], ['n_Mushroom_Laetiporus', 0.45], ['n_Mushroom_Common', 0.4], ['Rock_1_A', 0.5], ['@crystal', 0.45]],
+    trees: [['@mushroom', 2], ['@mushroom', 2.6], ['@mushroom', 1.6], ['@crystal', 2], ['n_TwistedTree_5', 2.1], ['Rock_2_A', 2]],
+    tint: 0x9a88b8, treeCount: 60, stone: 0x7a6a98, portal: 0xff9ae8, torch: 0xe08aff, ambience: 'fungal', leaves: 0x6a3a8a, natureTint: 0x8a78a8,
+  },
+  // The golden steppe: tall grass at sunset, twisted lone trees, old standing stones.
+  steppe: {
+    sky: 0xf0c8a0, skyTop: 0x4a6ac0, fog: 0xb8a080, fogRange: [24, 62], clouds: 0xffe8c8,
+    sun: 0xffe0b8, sunIntensity: 2.5, hemi: [0xf0e8d0, 0x4a4a2a], hemiIntensity: 0.95, back: [0xffb070, 1.1], rim: [0xffd8a0, 0.6], env: 0.12,
+    grade: { shadows: 0x3a2a4a, highlights: 0xffc888, tone: 0.09, saturation: 0.98 },
+    ground: [0x5e7438, 0x7e8c48], dirt: 0x8a6a40, rock: 0x8a8070, sand: 0xc8a870, style: FLOOR_STYLE.grass, court: 0x9a8a70,
+    hill: 2.8, grass: [0x4e6428, 0xd0c060], grassHeight: [0.3, 0.56], grassDensity: 1.2,
+    flowers: [0xffd050, 0xff8a3a, 0xffffff], flowerDensity: 0.5,
+    water: { deep: 0x2a5a80, shallow: 0x6ab0b8, foam: 0xfff0e0 },
+    blocks: [['Rock_3_A', 0.95], ['Rock_3_B', 0.95], ['column', 0.75], ['n_Rock_Medium_1', 0.9], ['Bush_1_A', 0.85]],
+    edge: [['Rock_1_A', 0.55], ['Bush_1_C', 0.7], ['rubble_half', 0.9], ['n_Rock_Medium_2', 0.55], ['n_Plant_7_Big', 0.6]],
+    trees: [['Tree_4_A', 2.2], ['Tree_4_B', 2], ['n_TwistedTree_1', 2.3], ['n_TwistedTree_2', 2.1], ['Rock_2_A', 2.2], ['column', 1.3], ['Tree_Bare_1_B', 2]],
+    treeCount: 40, stone: 0xc0a880, portal: 0xffc060, torch: 0xffa040, ambience: 'steppe', leaves: 0xc8a030, flecks: [0xe8c060, 0xffe0a0], fleckAmount: 1.2, light: { clouds: 0.4 },
+  },
+  // The fairy glade: a violet dusk, pink and lilac blossom, glowing flowers.
+  fairy: {
+    sky: 0xd8a8d8, skyTop: 0x3a3a8a, fog: 0xa080b8, fogRange: [20, 54], clouds: 0xf8e0f8,
+    sun: 0xffe8f8, sunIntensity: 2.3, hemi: [0xf0d8ff, 0x4a3a5a], hemiIntensity: 1.0, back: [0xffa8f0, 1.1], rim: [0xffe0ff, 0.6], env: 0.13,
+    grade: { shadows: 0x3a2a6a, highlights: 0xffe0f8, tone: 0.1, saturation: 1.06 },
+    ground: [0x4a7a5a, 0x6a9a6e], dirt: 0x7a6a6a, rock: 0x8a7c96, sand: 0xc8b0c8, style: FLOOR_STYLE.grass, court: 0xa898b0,
+    hill: 3.2, grass: [0x2e5a4a, 0xc0e8b0], grassHeight: [0.18, 0.34], grassDensity: 0.9,
+    flowers: [0xffa8f0, 0xd8b0ff, 0xffffff, 0x9ae8ff], flowerDensity: 1.3,
+    water: { deep: 0x3a2a8a, shallow: 0x9a8aff, foam: 0xfff0ff, glow: 0.6, calm: true },
+    blossom: [0xb87ae0, 0xffc8f4], trunk: 0x4a3448, crystal: [0x8a5ac0, 0xffd8ff], crystalGlow: 0.5,
+    blocks: [['@blossom', 0.9], ['@crystal', 0.85], ['Rock_3_A', 0.95], ['shrine_candles', 0.7]],
+    edge: [['n_Flower_3_Group', 0.6], ['n_Flower_4_Group', 0.6], ['@crystal', 0.45], ['n_Bush_Common_Flowers', 0.8], ['n_Mushroom_Common', 0.35]],
+    trees: [['@blossom', 2.2], ['@blossom', 2.6], ['@blossom', 1.8], ['n_TwistedTree_3', 2.2], ['@crystal', 1.8], ['n_CommonTree_1', 2]],
+    treeCount: 56, stone: 0xc8b8d8, portal: 0xffb0f0, torch: 0xffb0f0, ambience: 'fairy', leaves: 0xd890e8, flecks: [0xffc0f0, 0xd8c0ff], fleckAmount: 2,
+  },
+  // The astral archipelago: floating isles adrift among the stars, blue crystals.
+  astral: {
+    sky: 0x2a3a7a, skyTop: 0x04061a, fog: 0x1e2a5a, fogRange: [18, 52], clouds: 0x4a5a9a, stars: true,
+    sun: 0xd8e0ff, sunIntensity: 2.1, hemi: [0xb8c8ff, 0x1a1e34], hemiIntensity: 0.95, back: [0x7a9aff, 1.3], rim: [0xc8d8ff, 0.65], env: 0.12,
+    grade: { shadows: 0x101a4a, highlights: 0xe0e8ff, tone: 0.12, saturation: 1.05 },
+    ground: [0x3e4a6e, 0x56648a], dirt: 0x4a4a68, rock: 0x4e5878, sand: 0x7480a0, style: FLOOR_STYLE.grass, court: 0x7a84a8,
+    hill: 2.6, grass: [0x26304e, 0x9ab0e8], grassHeight: [0.14, 0.26], grassDensity: 0.45,
+    flowers: [0xc8d8ff, 0xffffff, 0xffe8a0], flowerDensity: 0.3,
+    water: { deep: 0x060a30, shallow: 0x4a6aff, foam: 0xd8e0ff, glow: 1.4 },
+    crystal: [0x2a3a9a, 0xb8d0ff], crystalGlow: 0.6,
+    blocks: [['@crystal', 0.9], ['%star_altar', 0.8], ['%marble_column', 0.72], ['Rock_3_A', 0.9]],
+    edge: [['%cloud', 0.9], ['@crystal', 0.5], ['rubble_half', 0.9], ['Rock_1_A', 0.5]],
+    trees: [['%floating_isle', 2], ['%floating_isle', 2.5], ['@crystal', 2.2], ['%broken_arch', 2.2], ['@crystal', 2.8], ['%cloud', 2.4]],
+    tint: 0x9aa8d0, treeCount: 46, stone: 0x8a98c0, portal: 0x9ab8ff, torch: 0xa8c0ff, ambience: 'astral', leaves: 0x6a7ac8, natureTint: 0x8a98c0,
+  },
+  // The heart of the Aether, the end of the journey: a cyan rift, broken arches, raw light.
+  aether: {
+    sky: 0x1a5a6a, skyTop: 0x020a14, fog: 0x0e3440, fogRange: [16, 48], clouds: 0x2a7080, stars: true,
+    sun: 0xd0fff8, sunIntensity: 2.1, hemi: [0xa8f0ff, 0x0e1a20], hemiIntensity: 0.95, back: [0x3affe8, 1.4], rim: [0xa8fff4, 0.7], env: 0.12,
+    grade: { shadows: 0x08283a, highlights: 0xd8fff8, tone: 0.12, saturation: 1.06 },
+    ground: [0x22343c, 0x344a54], dirt: 0x2a3a42, rock: 0x1e2c34, sand: 0x3a5a64, style: FLOOR_STYLE.grass, court: 0x4e6a74, cracks: 0x3affe8,
+    hill: 3.8, grass: [0x142228, 0x5ac8c0], grassHeight: [0.12, 0.24], grassDensity: 0.25,
+    flowers: [0x8afff0, 0xffffff], flowerDensity: 0.12,
+    water: { deep: 0x02141e, shallow: 0x1ad8d0, foam: 0xd0fff8, glow: 1.8 },
+    crystal: [0x0a6a7a, 0xa8fff4], spire: [0x0e181e, 0x3a5a64], crystalGlow: 0.65,
+    blocks: [['@crystal', 0.95], ['@spire', 0.85], ['%marble_column', 0.72], ['@crystal', 0.9]],
+    edge: [['@crystal', 0.5], ['@spire', 0.6], ['rubble_half', 0.9], ['Rock_1_A', 0.5]],
+    trees: [['%broken_arch', 2.4], ['@crystal', 2.4], ['@spire', 2.2], ['@crystal', 3], ['%floating_isle', 2], ['@spire', 2.8]],
+    tint: 0x7aa0a8, treeCount: 56, stone: 0x5a8088, portal: 0x6afff0, torch: 0x6afff0, ambience: 'aether', natureTint: 0x6a9098,
   },
 };
 
@@ -1052,7 +1234,7 @@ export class Landscape {
     this.sun.color.setHex(theme.sun);
     this.sun.intensity = theme.sunIntensity;
     // Bright daylight themes were washing out under the toon bands: a touch less exposure.
-    this.scene.userData.exposure = theme.exposure ?? (theme.stars ? 1 : 0.9);
+    this.scene.userData.exposure = theme.exposure ?? (theme.stars ? 0.92 : 0.85);
     this.back.color.setHex(theme.back[0]);
     this.back.intensity = theme.back[1];
     this.heroLightLevel = theme.stars ? 10 : 0;

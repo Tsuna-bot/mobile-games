@@ -16,9 +16,10 @@ export const CONFIG = {
     crit: 0.05,
     critDamage: 2,
   },
-  xp: { base: 26, growth: 1.22 },
+  // Hero levels in a run; chapters are long (25 rooms), so levels come slower there than in Endless.
+  xp: { base: 26, growth: 1.32, endlessGrowth: 1.22 },
   // Global difficulty: monster damage and health multipliers.
-  difficulty: { damage: 0.8, health: 0.85, roomGrowth: 0.05 },
+  difficulty: { damage: 0.8, health: 0.85, roomGrowth: 0.035 },
   pickupRadius: 1.4,
   // Close, tilted view that follows the hero (`halfWidth`: half the width seen at the
   // hero's depth on a portrait phone); the menu frames the hero from up close.

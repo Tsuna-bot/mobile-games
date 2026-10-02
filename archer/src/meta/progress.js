@@ -2,7 +2,7 @@
 // daily missions, achievements, records of the Heroic and Endless modes.
 // Pure functions (no DOM), testable in Node.
 
-import { ALL_CHAPTERS } from '../data/chapters.js';
+import { ALL_CHAPTERS, isWon } from '../data/chapters.js';
 import {
   ACHIEVEMENTS, BRANCHES, DAILY_BONUS, MAX_ACCOUNT_LEVEL, MISSIONS, MISSIONS_PER_DAY, TIER_NEEDS, TREE, TREE_BY_ID, accountXpNeeded, levelReward,
 } from '../data/progression.js';
@@ -40,7 +40,7 @@ export function ensureProgress(save) {
   // later stayed locked. Open everything after the chapters already won.
   if (!Number.isFinite(save.unlocked) || save.unlocked < 0) save.unlocked = 0;
   const opened = save.unlocked;
-  while (save.unlocked < ALL_CHAPTERS.length - 1 && (save.best?.[ALL_CHAPTERS[save.unlocked].id] ?? 0) > 10) save.unlocked++;
+  while (save.unlocked < ALL_CHAPTERS.length - 1 && isWon(save.best?.[ALL_CHAPTERS[save.unlocked].id])) save.unlocked++;
   // The menu shows the newly opened chapter.
   if (save.unlocked > opened) save.chapter = save.unlocked;
   save.unlocked = Math.min(save.unlocked, ALL_CHAPTERS.length - 1);
@@ -134,12 +134,12 @@ export function dayKey(now = Date.now()) {
 }
 
 export function endlessOpen(save) {
-  return (save.best?.[ALL_CHAPTERS[0].id] ?? 0) > 10;
+  return isWon(save.best?.[ALL_CHAPTERS[0].id]);
 }
 
 export function heroicOpen(save, chapterIndex) {
   const chapter = ALL_CHAPTERS[chapterIndex];
-  return Boolean(chapter) && (save.best?.[chapter.id] ?? 0) > 10;
+  return Boolean(chapter) && isWon(save.best?.[chapter.id]);
 }
 
 /** Today's three missions (new ones every day, picked from the day's date). */
@@ -193,8 +193,8 @@ export function claimDailyBonus(save) {
 /** Current value of an achievement's counter. */
 export function achievementValue(save, a) {
   switch (a.stat) {
-    case 'chaptersWon': return ALL_CHAPTERS.filter((c) => (save.best?.[c.id] ?? 0) > 10).length;
-    case 'heroicWon': return ALL_CHAPTERS.filter((c) => (save.best?.[`${c.id}:heroic`] ?? 0) > 10).length;
+    case 'chaptersWon': return ALL_CHAPTERS.filter((c) => isWon(save.best?.[c.id])).length;
+    case 'heroicWon': return ALL_CHAPTERS.filter((c) => isWon(save.best?.[`${c.id}:heroic`])).length;
     case 'endlessBest': return save.endless?.best ?? 0;
     case 'level': return save.account?.level ?? 1;
     case 'heroes': return save.heroes?.owned?.length ?? 0;

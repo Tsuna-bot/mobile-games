@@ -1,5 +1,5 @@
 // Balance bot: plays chapters with the real simulation.
-//   node tools/bot.mjs [runs] [chapter 1..8] [--gear=start|early|mid|late] [--hero=id]
+//   node tools/bot.mjs [runs] [chapter 1..30] [--gear=start|early|mid|late|end] [--hero=id]
 //     [--mode=heroic|endless] [--weapon=bow|crossbow|staff|blades|longbow|shuriken|tome] [--verbose]
 import { Run, STATE } from '../src/sim/run.js';
 import { defaultSave } from '../src/core/storage.js';
@@ -11,7 +11,7 @@ const args = ARGV.slice(2).filter((a) => !a.startsWith('--'));
 const RUNS = Number(args[0] ?? 5);
 const CHAPTER = Number(args[1] ?? 1) - 1;
 const VERBOSE = ARGV.includes('--verbose');
-// --gear=mid / late: typical equipment after ~10 / ~30 runs.
+// --gear=mid / late: typical equipment after ~10 / ~30 runs; end: all legendary, maximum level.
 const GEAR = ARGV.find((a) => a.startsWith('--gear='))?.slice(7);
 // --hero=assassin: plays with another hero.
 const HERO = ARGV.find((a) => a.startsWith('--hero='))?.slice(7);
@@ -53,13 +53,18 @@ function gearPreset(name) {
     if (HERO) save.heroes.selected = HERO;
     return runGear(grow(save));
   }
-  put('bow', late ? 2 : 1, late ? 22 : 10);
-  put('mail', late ? 2 : 1, late ? 20 : 9);
-  put('wolf', late ? 2 : 1, late ? 18 : 8);
-  put('falcon', late ? 1 : 0, late ? 15 : 8);
-  put('rage', late ? 2 : 1, late ? 18 : 7);
-  put('owl', late ? 2 : 1, late ? 15 : 5);
-  const rolls = late ? 45 : 15;
+  if (name === 'end') {
+    // End game: everything legendary at the maximum level.
+    for (const base of ['bow', 'mail', 'wolf', 'falcon', 'rage', 'owl']) put(base, 3, 40);
+  } else {
+    put('bow', late ? 2 : 1, late ? 22 : 10);
+    put('mail', late ? 2 : 1, late ? 20 : 9);
+    put('wolf', late ? 2 : 1, late ? 18 : 8);
+    put('falcon', late ? 1 : 0, late ? 15 : 8);
+    put('rage', late ? 2 : 1, late ? 18 : 7);
+    put('owl', late ? 2 : 1, late ? 15 : 5);
+  }
+  const rolls = name === 'end' ? 90 : late ? 45 : 15;
   const ids = ['strength', 'vigor', 'agility', 'recovery', 'guard', 'looting', 'luck', 'swift'];
   for (let i = 0; i < rolls; i++) save.talents[ids[i % ids.length]] = (save.talents[ids[i % ids.length]] ?? 0) + 1;
   if (HERO) save.heroes.selected = HERO;

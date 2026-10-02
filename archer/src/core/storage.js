@@ -1,16 +1,19 @@
 // Save in localStorage: currencies, progress, settings (and later gear, talents, pets).
 
+import { WON } from '../data/chapters.js';
+
 // The game's first name: kept so existing saves still load.
 export const STORAGE_KEY = 'sagittaire/v1';
 
 export function defaultSave() {
   return {
-    version: 1,
+    // 2: chapters of 25 rooms (version 1 saved a won chapter as room 11).
+    version: 2,
     coins: 0,
     gems: 0,
     unlocked: 0, // highest chapter index unlocked
     chapter: 0, // chapter shown in the menu
-    best: {}, // chapter id -> best room reached (11 = cleared)
+    best: {}, // chapter id -> best room reached (WON = cleared)
     runs: 0,
     kills: 0,
     tutorial: true,
@@ -26,7 +29,10 @@ export function loadSave() {
     const data = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
     if (!data || typeof data !== 'object') return save;
     for (const key of ['coins', 'gems', 'unlocked', 'chapter', 'runs', 'kills']) if (isCount(Number(data[key]))) save[key] = Number(data[key]);
-    for (const [id, room] of Object.entries(data.best ?? {})) if (isCount(Number(room), 99)) save.best[id] = Number(room);
+    const tenRooms = !(Number(data.version) >= 2);
+    for (const [id, room] of Object.entries(data.best ?? {})) {
+      if (isCount(Number(room), 99)) save.best[id] = tenRooms && Number(room) > 10 ? WON : Number(room);
+    }
     if (typeof data.tutorial === 'boolean') save.tutorial = data.tutorial;
     const s = data.settings ?? {};
     for (const key of ['sound', 'music', 'haptics']) if (typeof s[key] === 'boolean') save.settings[key] = s[key];

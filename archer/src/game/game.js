@@ -4,7 +4,7 @@ import { FixedLoop } from '../core/loop.js';
 import { clamp, damp } from '../core/math.js';
 import { writeSave } from '../core/storage.js';
 import { ABILITIES } from '../data/abilities.js';
-import { CHAPTERS, LAYOUTS } from '../data/chapters.js';
+import { CHAPTERS, LAYOUTS, ROOMS, WON, isWon } from '../data/chapters.js';
 import { ENDLESS, HEROIC, runAccountXp } from '../data/progression.js';
 import { addAccountXp, endlessOpen, ensureDaily, heroicOpen, track } from '../meta/progress.js';
 import { Joystick } from '../input/joystick.js';
@@ -23,7 +23,6 @@ import { icon, itemArt } from '../ui/icons.js';
 import { Run, STATE } from '../sim/run.js';
 
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
-const ROOMS = 10;
 const ENDLESS_GEMS = ENDLESS.gemsPerBoss;
 // Kills less than this many seconds apart chain into a combo; shouts at milestones.
 const COMBO_TIME = 2.4;
@@ -286,7 +285,7 @@ export class Game {
       chapterName: mode === 'endless' ? 'Les portails sans fin' : chapter.name,
       best: mode === 'endless'
         ? (save.endless.best ? `Record : salle ${save.endless.best}` : 'Un boss toutes les 5 salles')
-        : best ? (best > ROOMS ? 'Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
+        : best ? (isWon(best) ? 'Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
       locked: mode !== 'endless' && (save.chapter > save.unlocked || heroicLocked),
       lockText: heroicLocked ? 'Termine ce chapitre en Normal' : 'Termine le chapitre précédent',
       canPrev: mode !== 'endless' && save.chapter > 0,
@@ -495,7 +494,7 @@ export class Game {
     let gems = run.gems;
     if (won) gems += (10 + run.chapterIndex * 10) * (run.heroic ? HEROIC.gems : 1) + (this.runGear?.gemBonus ?? 0);
     save.gems += gems;
-    const reached = won ? ROOMS + 1 : run.room;
+    const reached = won ? WON : run.room;
     let record = false;
     let unlocked = false;
     if (run.endless) {

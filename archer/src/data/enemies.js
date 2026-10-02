@@ -147,4 +147,66 @@ export const ENEMIES = {
     hp: 7600, speed: 1.35, radius: 0.9, touch: 150, shot: 95, shotSpeed: 6.2, xp: 300, coins: 300, scale: 2.6,
     blurb: 'Le maître du trône céleste. Toutes les attaques, plus vite.',
   },
+
+  // Bosses of chapters 19 to 30.
+  tideLord: {
+    id: 'tideLord', name: 'Seigneur des marées', model: 'q_glub_evolved', height: 3, hover: true, tint: 0x8af0ff, ai: 'bossKing', boss: true, summon: 'blob',
+    hp: 7800, speed: 1, radius: 0.9, touch: 150, shot: 96, shotSpeed: 5.6, xp: 310, coins: 310, scale: 2.5,
+    blurb: 'Des spirales d’écume et des blobs du lagon.',
+  },
+  elderShroom: {
+    id: 'elderShroom', name: 'Champignon ancestral', model: 'q_mushnub_evolved', height: 3, tint: 0xa8d0ff, ai: 'bossOgre', boss: true,
+    hp: 7600, speed: 1.2, radius: 0.95, touch: 155, shot: 98, shotSpeed: 6.4, dash: 10, blast: 2.2, xp: 320, coins: 320, scale: 2.6,
+    blurb: 'Charge entre les lucioles, frappe le sol et lance des spores.',
+  },
+  puglinChief: {
+    id: 'puglinChief', name: 'Chef puglin', model: 'b_puglin_red', height: 3, ai: 'bossKing', boss: true, summon: 'bomber',
+    hp: 8200, speed: 1.05, radius: 0.9, touch: 155, shot: 98, shotSpeed: 5.8, xp: 330, coins: 330, scale: 2.5,
+    blurb: 'Spirales de pierres et grenadiers en renfort.',
+  },
+  frostWyrm: {
+    id: 'frostWyrm', name: 'Wyverne de givre', model: 'q_dragon', height: 3.2, hover: true, tint: 0xb0e8ff, ai: 'bossCount', boss: true, summon: 'ghost',
+    hp: 8400, speed: 1.35, radius: 0.85, touch: 160, shot: 98, shotSpeed: 6.4, xp: 340, coins: 340, scale: 2.5,
+    blurb: 'Se téléporte dans le blizzard et souffle des éventails de glace.',
+  },
+  jadeBlade: {
+    id: 'jadeBlade', name: 'Lame de jade', model: 'q_ninja', height: 3, tint: 0x9affc8, ai: 'bossFinal', boss: true, summon: 'orc', dash: 11, blast: 2.2,
+    hp: 8600, speed: 1.4, radius: 0.85, touch: 160, shot: 96, shotSpeed: 6.2, xp: 350, coins: 350, scale: 2.5,
+    blurb: 'Un maître d’armes : il enchaîne toutes les attaques.',
+  },
+  lich: {
+    id: 'lich', name: 'Liche pourpre', model: 'skeleton_mage', attach: 'staff', aimClip: 'Spellcast_Summon', tint: 0xff8aa0, ai: 'bossCount', boss: true, summon: 'zombie',
+    hp: 8800, speed: 1.25, radius: 0.85, touch: 165, shot: 100, shotSpeed: 6.2, xp: 360, coins: 360, scale: 2.6,
+    blurb: 'Se téléporte entre les cryptes et relève les morts.',
+  },
+  magmaColossus: {
+    id: 'magmaColossus', name: 'Colosse de magma', model: 'q_yeti', height: 3.3, tint: 0xff9a6a, ai: 'bossOgre', boss: true,
+    hp: 9000, speed: 1.25, radius: 1, touch: 170, shot: 104, shotSpeed: 6.6, dash: 10.5, blast: 2.4, xp: 370, coins: 370, scale: 2.7,
+    blurb: 'Charges brûlantes, frappes au sol et blocs de lave.',
+  },
+  sporeQueen: {
+    id: 'sporeQueen', name: 'Reine des spores', model: 'q_bee_evolved', height: 3, hover: true, tint: 0xf0a8ff, ai: 'bossCount', boss: true, summon: 'wisp',
+    hp: 9000, speed: 1.4, radius: 0.85, touch: 165, shot: 100, shotSpeed: 6.6, xp: 380, coins: 380, scale: 2.5,
+    blurb: 'Vole d’un champignon à l’autre et lâche des nuées.',
+  },
+  beastKing: {
+    id: 'beastKing', name: 'Roi des bêtes', model: 'q_spiky', height: 3, tint: 0xffc070, ai: 'bossOgre', boss: true,
+    hp: 9200, speed: 1.35, radius: 1, touch: 175, shot: 104, shotSpeed: 6.8, dash: 11, blast: 2.4, xp: 390, coins: 390, scale: 2.7,
+    blurb: 'Charge à travers les hautes herbes, frappe et projette des rochers.',
+  },
+  fairyQueen: {
+    id: 'fairyQueen', name: 'Reine des fées', model: 'q_wizard', height: 3, tint: 0xffb0f0, ai: 'bossKing', boss: true, summon: 'ghost',
+    hp: 9400, speed: 1.1, radius: 0.85, touch: 170, shot: 102, shotSpeed: 6, xp: 400, coins: 400, scale: 2.5,
+    blurb: 'Spirales de pétales et esprits de la clairière.',
+  },
+  starWyrm: {
+    id: 'starWyrm', name: 'Wyrm astral', model: 'q_dragon_small', height: 3, hover: true, tint: 0xb0c8ff, ai: 'bossCount', boss: true, summon: 'wisp',
+    hp: 9600, speed: 1.45, radius: 0.85, touch: 175, shot: 104, shotSpeed: 6.8, xp: 420, coins: 420, scale: 2.5,
+    blurb: 'Saute d’île en île en soufflant des éventails d’étoiles.',
+  },
+  aetherLord: {
+    id: 'aetherLord', name: 'Gardien de l’Aether', model: 'q_demon', height: 3.5, tint: 0xd8fffa, ai: 'bossFinal', boss: true, summon: 'vampire', dash: 11.5, blast: 2.5,
+    hp: 10500, speed: 1.45, radius: 0.95, touch: 185, shot: 108, shotSpeed: 6.8, xp: 500, coins: 500, scale: 2.8,
+    blurb: 'Le cœur de l’Aether lui-même. Toutes les attaques, encore plus vite.',
+  },
 };

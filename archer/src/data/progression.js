@@ -52,7 +52,7 @@ export const TREE = [
   { id: 'stride', branch: 'fortune', tier: 2, icon: 'swift', name: 'Foulée', max: 3, text: (n) => `Vitesse +${n * 3} %`, stats: (n) => ({ speedMul: n * 0.03 }) },
   { id: 'wisdom', branch: 'fortune', tier: 3, icon: 'upgrade', name: 'Sagesse', max: 3, text: (n) => `Expérience +${n * 8} %`, stats: (n) => ({ xpMul: n * 0.08 }) },
   { id: 'magnet', branch: 'fortune', tier: 4, icon: 'gold-bag', name: 'Aimant', max: 2, text: (n) => `Rayon de ramassage +${n * 35} %`, stats: (n) => ({ magnet: n * 0.35 }) },
-  { id: 'angel', branch: 'fortune', tier: 5, icon: 'life', name: 'Ange gardien', max: 1, text: () => 'Un deuxième ange après la salle 8', stats: () => ({ extraAngel: 1 }) },
+  { id: 'angel', branch: 'fortune', tier: 5, icon: 'life', name: 'Ange gardien', max: 1, text: () => 'Un ange de plus après la salle 21', stats: () => ({ extraAngel: 1 }) },
 ];
 
 export const TREE_BY_ID = Object.fromEntries(TREE.map((node) => [node.id, node]));
@@ -90,11 +90,11 @@ export const DAILY_BONUS = { chest: 'gold' };
 export const ACHIEVEMENTS = [
   { id: 'slayer', icon: 'attack', name: 'Fléau des monstres', stat: 'kills', goals: [100, 1000, 5000, 20000], gems: [20, 50, 100, 200], text: (g) => `Vaincre ${g} monstres` },
   { id: 'explorer', icon: 'front', name: 'Explorateur', stat: 'rooms', goals: [25, 200, 1000, 3000], gems: [20, 50, 100, 200], text: (g) => `Nettoyer ${g} salles` },
-  { id: 'conqueror', icon: 'crown', name: 'Conquérant', stat: 'chaptersWon', goals: [1, 3, 5, 8, 12, 18], gems: [30, 60, 100, 200, 300, 500], text: (g) => `Gagner ${g} chapitre${g > 1 ? 's' : ''} différent${g > 1 ? 's' : ''}` },
+  { id: 'conqueror', icon: 'crown', name: 'Conquérant', stat: 'chaptersWon', goals: [1, 3, 5, 8, 12, 18, 24, 30], gems: [30, 60, 100, 200, 300, 500, 700, 1000], text: (g) => `Gagner ${g} chapitre${g > 1 ? 's' : ''} différent${g > 1 ? 's' : ''}` },
   { id: 'bossHunter', icon: 'strength', name: 'Tueur de boss', stat: 'bosses', goals: [3, 20, 100], gems: [30, 60, 150], text: (g) => `Vaincre ${g} boss` },
   { id: 'eliteHunter', icon: 'elite', name: 'Chasseur d’élites', stat: 'elites', goals: [10, 100, 500], gems: [20, 50, 120], text: (g) => `Vaincre ${g} monstres d’élite` },
   { id: 'endless', icon: 'infinity', name: 'Sans fin', stat: 'endlessBest', goals: [10, 25, 50], gems: [30, 80, 200], text: (g) => `Atteindre la salle ${g} en mode Infini` },
-  { id: 'heroic', icon: 'heroic', name: 'Héroïque', stat: 'heroicWon', goals: [1, 4, 8, 18], gems: [50, 100, 250, 600], text: (g) => `Gagner ${g} chapitre${g > 1 ? 's' : ''} en Héroïque` },
+  { id: 'heroic', icon: 'heroic', name: 'Héroïque', stat: 'heroicWon', goals: [1, 4, 8, 18, 30], gems: [50, 100, 250, 600, 1000], text: (g) => `Gagner ${g} chapitre${g > 1 ? 's' : ''} en Héroïque` },
   { id: 'collector', icon: 'trophy', name: 'Collectionneur', stat: 'legendaries', goals: [1, 3, 10], gems: [50, 100, 200], text: (g) => `Obtenir ${g} objet${g > 1 ? 's' : ''} légendaire${g > 1 ? 's' : ''}` },
   { id: 'smith', icon: 'upgrade', name: 'Forgeron', stat: 'upgrades', goals: [10, 100, 500], gems: [20, 50, 100], text: (g) => `Améliorer des objets ${g} fois` },
   { id: 'awakened', icon: 'star', name: 'Éveil', stat: 'awakenings', goals: [1, 5, 15], gems: [40, 80, 150], text: (g) => `Éveiller des objets ${g} fois` },
@@ -120,7 +120,8 @@ export const ENDLESS = {
   // Monster damage grows a little faster than in the chapters (health ** 0.62).
   damage: 0.62,
   elites: (roomIndex) => Math.min(0.3, 0.05 + roomIndex * 0.006),
-  bosses: ['ogre', 'skeletonKing', 'count', 'crystal', 'yeti', 'tyrant', 'demonLord', 'shadowMaster', 'sandKing', 'kitsune', 'brigand', 'leviathan', 'skyDragon', 'warlord', 'stormKnight', 'voidEye', 'pharaoh', 'archon'],
+  bosses: ['ogre', 'skeletonKing', 'count', 'crystal', 'yeti', 'tyrant', 'demonLord', 'shadowMaster', 'sandKing', 'kitsune', 'brigand', 'leviathan', 'skyDragon', 'warlord', 'stormKnight', 'voidEye', 'pharaoh', 'archon',
+    'tideLord', 'elderShroom', 'puglinChief', 'frostWyrm', 'jadeBlade', 'lich', 'magmaColossus', 'sporeQueen', 'beastKing', 'fairyQueen', 'starWyrm', 'aetherLord'],
   // Monsters by how early they can appear.
   pool: [['zombie', 0], ['skeleton', 0], ['wisp', 1], ['orc', 2], ['ghost', 3], ['blob', 4], ['keeper', 6], ['vampire', 7], ['bomber', 8]],
   gemsPerBoss: 5,

@@ -2,7 +2,7 @@ import { writeSave } from '../core/storage.js';
 import { badge, compact, icon, itemArt } from '../ui/icons.js';
 import { BASES, LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
-import { CHAPTERS } from '../data/chapters.js';
+import { CHAPTERS, ROOMS, isWon } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
   CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_CLASS_RANK, MAX_HERO_LEVEL, MAX_SPELL_RANK, RECOMMENDED, RECOMMENDED_BONUSES, SPELLS, SPELL_UNLOCK, isRecommended,
@@ -591,10 +591,10 @@ export class Menu {
     const save = this.save;
     const rows = CHAPTERS.map((c, i) => {
       const best = save.best[c.id] ?? 0;
-      const heroic = (save.best[`${c.id}:heroic`] ?? 0) > 10;
+      const heroic = isWon(save.best[`${c.id}:heroic`]);
       const locked = i > save.unlocked;
-      const state = locked ? `${icon('lock')}` : best > 10 ? `${icon('check')}${heroic ? icon('heroic') : ''}` : best ? `${best}/10` : 'Nouveau';
-      return `<button type="button" class="chapter-row${locked ? ' is-locked' : ''}${i === save.chapter ? ' is-current' : ''}${best > 10 ? ' is-done' : ''}" data-chapter="${i}" ${locked ? 'disabled' : ''}>
+      const state = locked ? `${icon('lock')}` : isWon(best) ? `${icon('check')}${heroic ? icon('heroic') : ''}` : best ? `${best}/${ROOMS}` : 'Nouveau';
+      return `<button type="button" class="chapter-row${locked ? ' is-locked' : ''}${i === save.chapter ? ' is-current' : ''}${isWon(best) ? ' is-done' : ''}" data-chapter="${i}" ${locked ? 'disabled' : ''}>
         <span class="chapter-row__num">${i + 1}</span><span class="chapter-row__name">${esc(c.name)}<small>Boss : ${esc(ENEMIES[c.boss]?.name ?? '')}</small></span><span class="chapter-row__state">${state}</span></button>`;
     }).join('');
     this.openPopup(`<h3 class="popup__name">Carte du monde</h3><div class="chapter-list">${rows}</div><div class="popup__actions"><button type="button" class="btn btn--ghost" data-close>Fermer</button></div>`, '#4fb4ff');

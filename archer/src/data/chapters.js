@@ -52,8 +52,19 @@ export const BOSS_LAYOUT = [
   '.#.....#.', '.........', '.........', '.........', '.........',
 ];
 
+/** Rooms per chapter: the last one holds the boss. */
+export const ROOMS = 25;
+/** Best room saved for a chapter won (save.best). */
+export const WON = ROOMS + 1;
+/** Rooms where a pack of elites waits (challenge rooms). */
+export const ELITE_ROOMS = [10, 20];
+
+/** True when a saved record (save.best[id]) means the chapter was won. */
+export const isWon = (best) => (best ?? 0) > ROOMS;
+
 /**
- * rooms[i] = monsters of room i+1: [type, count]... Room 5 holds an elite, room 10 the boss.
+ * rooms[i] = monsters of room i+1: [type, count]... Written as ten-room chapters
+ * (nine waves and the boss), stretched to ROOMS rooms by stretch() below.
  * `hp` scales every monster of the chapter.
  */
 export const ALL_CHAPTERS = [
@@ -212,7 +223,7 @@ export const ALL_CHAPTERS = [
 ];
 
 /**
- * Chapters 9 to 18 follow one pacing: `pool` = four monster types of the chapter
+ * Chapters 9 to 30 follow one pacing: `pool` = four monster types of the chapter
  * (a, b, c, d), rising in pressure, an elite-friendly room 5, the boss in room 10.
  */
 function paced([a, b, c, d], boss, extra = 'wisp') {
@@ -241,10 +252,49 @@ ALL_CHAPTERS.push(
   { id: 'void', name: 'Faille du néant', theme: 'void', hp: 42, boss: 'voidEye', rooms: paced(['skeleton', 'blob', 'ghost', 'vampire'], 'voidEye') },
   { id: 'golden', name: 'Cité d’or', theme: 'golden', hp: 48, boss: 'pharaoh', rooms: paced(['zombie', 'orc', 'bomber', 'vampire'], 'pharaoh') },
   { id: 'celestial', name: 'Trône céleste', theme: 'celestial', hp: 55, boss: 'archon', rooms: paced(['orc', 'keeper', 'vampire', 'blob'], 'archon') },
+  // Chapters 19 to 30: the journey to the heart of the Aether.
+  { id: 'lagoon', name: 'Lagon d’azur', theme: 'lagoon', hp: 62, boss: 'tideLord', rooms: paced(['zombie', 'skeleton', 'blob', 'vampire'], 'tideLord') },
+  { id: 'glowwood', name: 'Bois des lucioles', theme: 'glowwood', hp: 69, boss: 'elderShroom', rooms: paced(['zombie', 'ghost', 'skeleton', 'keeper'], 'elderShroom') },
+  { id: 'canyon', name: 'Canyon écarlate', theme: 'canyon', hp: 77, boss: 'puglinChief', rooms: paced(['zombie', 'orc', 'bomber', 'skeleton'], 'puglinChief') },
+  { id: 'glacier', name: 'Glacier boréal', theme: 'glacier', hp: 86, boss: 'frostWyrm', rooms: paced(['zombie', 'ghost', 'orc', 'keeper'], 'frostWyrm') },
+  { id: 'jade', name: 'Vallée de jade', theme: 'jade', hp: 96, boss: 'jadeBlade', rooms: paced(['skeleton', 'orc', 'ghost', 'vampire'], 'jadeBlade') },
+  { id: 'necropolis', name: 'Nécropole écarlate', theme: 'necropolis', hp: 107, boss: 'lich', rooms: paced(['zombie', 'skeleton', 'keeper', 'vampire'], 'lich') },
+  { id: 'forge', name: 'Forge des titans', theme: 'forge', hp: 119, boss: 'magmaColossus', rooms: paced(['orc', 'bomber', 'zombie', 'keeper'], 'magmaColossus') },
+  { id: 'fungal', name: 'Grotte des spores', theme: 'fungal', hp: 132, boss: 'sporeQueen', rooms: paced(['blob', 'skeleton', 'ghost', 'vampire'], 'sporeQueen') },
+  { id: 'steppe', name: 'Steppe dorée', theme: 'steppe', hp: 146, boss: 'beastKing', rooms: paced(['zombie', 'orc', 'skeleton', 'bomber'], 'beastKing') },
+  { id: 'fairy', name: 'Clairière des fées', theme: 'fairy', hp: 162, boss: 'fairyQueen', rooms: paced(['blob', 'ghost', 'keeper', 'vampire'], 'fairyQueen') },
+  { id: 'astral', name: 'Archipel astral', theme: 'astral', hp: 180, boss: 'starWyrm', rooms: paced(['orc', 'ghost', 'keeper', 'vampire'], 'starWyrm') },
+  { id: 'aether', name: 'Cœur de l’Aether', theme: 'aether', hp: 200, boss: 'aetherLord', rooms: paced(['skeleton', 'orc', 'vampire', 'blob'], 'aetherLord') },
 );
+
+/**
+ * Ten-room chapter -> ROOMS rooms: each wave comes back two or three times, the
+ * second time joined by part of the next wave, the third time a little bigger; rooms get
+ * busier toward the end. The boss closes the chapter.
+ */
+function stretch(rooms) {
+  const waves = rooms.slice(0, -1);
+  const span = (ROOMS - 1) / waves.length;
+  const out = [];
+  for (let i = 0; i < ROOMS - 1; i++) {
+    const w = Math.floor(i / span);
+    const repeat = i - Math.ceil(w * span);
+    let groups = waves[w];
+    if (repeat === 1) groups = [...groups, ...waves[w + 1 < waves.length ? w + 1 : w - 1].slice(1)];
+    const busier = 1 + 0.25 * (i / (ROOMS - 2)) + (repeat >= 2 ? 0.2 : 0);
+    const spec = new Map();
+    for (const [type, n] of groups) spec.set(type, (spec.get(type) ?? 0) + Math.max(1, Math.round(n * busier)));
+    out.push([...spec]);
+  }
+  out.push(rooms[rooms.length - 1]);
+  return out;
+}
+
+for (const chapter of ALL_CHAPTERS) chapter.rooms = stretch(chapter.rooms);
 
 /** Chapters players can pick (the others are still being built). */
 export const CHAPTERS = ALL_CHAPTERS.filter((c) => c.ready !== false);
 
-/** Rooms after which an angel offers a heal or an ability. */
-export const ANGEL_AFTER = [5];
+/** Rooms after which an angel offers a heal or an ability (the "Ange gardien" talent adds one). */
+export const ANGEL_AFTER = [8, 16];
+export const EXTRA_ANGEL_AFTER = 21;
