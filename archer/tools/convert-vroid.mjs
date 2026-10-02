@@ -4,7 +4,7 @@
 // meshes quantized and meshopt-compressed. The VRM extension (spring bones, MToon) is not
 // kept: the game draws its own toon shading. Heroes whose .vrm is missing are skipped.
 // The CC0 samples: opengameart.org/content/vroid-studio-cc0-models; AvatarSample_C:
-// VRoid Hub (pixiv account).
+// VRoid Hub, or the copy in github.com/madjin/vrm-samples (vroid/stable).
 //
 //   npm i @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions meshoptimizer sharp
 //   node tools/convert-vroid.mjs <folder with the .vrm files> [--out=<dir>] [--max=<px>]
