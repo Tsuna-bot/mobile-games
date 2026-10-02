@@ -1804,9 +1804,9 @@ button:disabled {
 /* Mode selector (Normal / Héroïque / Infini). */
 .modes {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1.25fr 1fr;
   gap: 4px;
-  width: min(100%, 360px);
+  width: min(100%, 380px);
   padding: 4px;
   border-radius: 14px;
   background: rgba(14, 18, 40, 0.72);
@@ -1840,8 +1840,43 @@ button:disabled {
   background: linear-gradient(180deg, #e0603a, #8a2020);
 }
 
-.modes button[data-mode='endless'].is-active {
+.modes button[data-mode='daily'].is-active {
+  background: linear-gradient(180deg, #2ac0b0, #146a78);
+}
+
+.modes button {
+  position: relative;
+}
+
+.modes__more.is-active {
   background: linear-gradient(180deg, #9a6aff, #4a2a9a);
+  color: var(--cream);
+}
+
+.modes__more[data-current='heroic'].is-active { background: linear-gradient(180deg, #e0603a, #8a2020); }
+.modes__more[data-current='survival'].is-active { background: linear-gradient(180deg, #ff9a3a, #a2401a); }
+.modes__more[data-current='bossrush'].is-active { background: linear-gradient(180deg, #e8405a, #7a1030); }
+.modes__more[data-current='tower'].is-active { background: linear-gradient(180deg, #7a5ac8, #2a1a5a); }
+
+/* A daily challenge still to win today. */
+.modes__dot {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px rgba(14, 18, 40, 0.8);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+.modes__dot[hidden] {
+  display: none;
+}
+
+@keyframes pulse-dot {
+  50% { transform: scale(1.3); }
 }
 
 .modes button.is-locked {
@@ -1854,6 +1889,97 @@ button:disabled {
 
 .chapter-card[data-mode='endless'] {
   background: linear-gradient(160deg, rgba(160, 110, 255, 0.4), rgba(22, 16, 56, 0.96) 55%);
+}
+.chapter-card[data-mode='daily'] {
+  background: linear-gradient(160deg, rgba(42, 200, 180, 0.42), rgba(10, 30, 44, 0.96) 55%);
+}
+
+.chapter-card[data-mode='survival'] {
+  background: linear-gradient(160deg, rgba(255, 150, 60, 0.42), rgba(44, 18, 12, 0.96) 55%);
+}
+
+.chapter-card[data-mode='bossrush'] {
+  background: linear-gradient(160deg, rgba(232, 64, 90, 0.42), rgba(40, 10, 22, 0.96) 55%);
+}
+
+.chapter-card[data-mode='tower'] {
+  background: linear-gradient(160deg, rgba(122, 90, 200, 0.45), rgba(14, 10, 34, 0.96) 55%);
+}
+
+/* Mode picker. */
+.mode-list {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: 2px;
+}
+
+.mode-card {
+  --mode: #4fb4ff;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  text-align: left;
+  background: linear-gradient(110deg, color-mix(in srgb, var(--mode) 26%, transparent), rgba(255, 255, 255, 0.05));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mode) 40%, transparent);
+}
+
+.mode-card[data-mode='heroic'] { --mode: #ff6a3a; }
+.mode-card[data-mode='daily'] { --mode: #2ac8b4; }
+.mode-card[data-mode='survival'] { --mode: #ff9a3a; }
+.mode-card[data-mode='bossrush'] { --mode: #ff4a64; }
+.mode-card[data-mode='tower'] { --mode: #9a7aff; }
+.mode-card[data-mode='endless'] { --mode: #b07aff; }
+
+.mode-card.is-current {
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.mode-card.is-locked {
+  opacity: 0.5;
+}
+
+.mode-card__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mode) 85%, white), color-mix(in srgb, var(--mode) 70%, black));
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+}
+
+.mode-card__icon .ico {
+  width: 28px;
+  height: 28px;
+  color: #fff;
+}
+
+.mode-card__body b {
+  display: block;
+  font-size: 16px;
+}
+
+.mode-card__body small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.mode-card__body em {
+  display: inline-block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold);
 }
 
 /* Tabs inside a panel (talents, quests). */
@@ -3384,4 +3510,10 @@ button:disabled {
   color: #9ff0a8;
   font-size: 11px;
   margin-left: 4px;
+}
+
+/* The Daily challenge's card lists its three mutations: smaller to fit on one or two lines. */
+.chapter-card[data-mode='daily'] #chapter-name {
+  font-size: 19px;
+  line-height: 1.25;
 }

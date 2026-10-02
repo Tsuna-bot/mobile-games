@@ -38,7 +38,7 @@ export function loadSave() {
     for (const key of ['sound', 'music', 'haptics']) if (typeof s[key] === 'boolean') save.settings[key] = s[key];
     if (['auto', 'low', 'medium', 'high', 'ultra'].includes(s.quality)) save.settings.quality = s.quality;
     // Progression fields (checked and repaired by ensureProfile).
-    for (const key of ['talents', 'heroes', 'inventory', 'equipped', 'nextUid', 'freeChestAt', 'talentRolls', 'gifts', 'account', 'tree', 'stats', 'achievements', 'endless', 'daily', 'heroData', 'runes']) if (data[key] !== undefined) save[key] = data[key];
+    for (const key of ['talents', 'heroes', 'inventory', 'equipped', 'nextUid', 'freeChestAt', 'talentRolls', 'gifts', 'account', 'tree', 'stats', 'achievements', 'endless', 'daily', 'heroData', 'runes', 'modes']) if (data[key] !== undefined) save[key] = data[key];
     if (typeof data.mode === 'string') save.mode = data.mode;
   } catch {
     // Corrupt save: start fresh rather than crash.

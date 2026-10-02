@@ -54,6 +54,11 @@ Les boss deviennent plus agressifs sous la moitié de leur vie.
 
 - **Normal** : les 8 chapitres, l'un après l'autre.
 - **Héroïque** (ouvert chapitre par chapitre, une fois le chapitre gagné en Normal) : monstres 3 fois plus résistants, 60 % plus forts, beaucoup plus d'élites ; meilleur butin (épique et légendaire), gemmes doublées.
+- **Défi du jour** (ouvert après le chapitre 1) : une partie courte de 13 salles, la même toute la journée (paysage, salles et capacités tirés de la date), avec 3 **mutations** : deux malédictions (Colosses, Frénésie, Hordes, Élite, Brutes, Cœur de verre, Sécheresse) et une bénédiction (Fortune, Arsenal, Vampire, Sagesse, Célérité). Rejouable à volonté ; la première victoire du jour fait grimper la **série** (25 gemmes, +10 par jour de série jusqu’à 85). Un point rouge sur le bouton tant qu’il n’est pas gagné.
+- **Survie** (ouvert après le chapitre 1) : 4 minutes dans une arène ouverte, des vagues de plus en plus denses venues des bords, deux boss en chemin (à 1:50 et 3:35). Record de temps.
+- **Ruée des boss** (ouvert après le chapitre 3) : tous les boss déjà battus, l’un après l’autre, chacun chez lui et un peu plus coriace ; un ange et 30 % de vie entre chaque. Record de boss d’affilée.
+- **Tour maudite** (ouvert après le chapitre 5) : les étages de l’Infini, mais après chaque boss il faut choisir une malédiction parmi deux (elles s’accumulent) ; chaque malédiction multiplie les gemmes des boss suivants. Record d’étage.
+- Le bouton **Modes** ouvre la liste de tous les modes avec leur record ; succès et missions du jour dédiés (série de défis, survies, boss d’affilée, étages de la tour).
 - **Infini** (ouvert après le chapitre 1) : des salles sans fin, un boss toutes les 5 salles (les 30 boss à tour de rôle), un ange après chaque boss, le paysage change à chaque boss ; 5 gemmes par boss, un objet à partir de la salle 10 (meilleur plus on va loin). Record gardé.
 - **Monstres d'élite** (dès le chapitre 2) : plus grands, dorés, 2,6 fois plus de vie, frappent plus fort, lâchent 3 fois plus d'or et souvent un cœur.
 - **Salles spéciales** : *salle au trésor* (peu de monstres, un coffre qui explose en pièces d'or) et *salle de défi* (que des élites ; récompense : 3 gemmes et une capacité).

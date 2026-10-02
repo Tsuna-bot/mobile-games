@@ -6,7 +6,8 @@ import { writeSave } from '../core/storage.js';
 import { ABILITIES } from '../data/abilities.js';
 import { CHAPTERS, LAYOUTS, ROOMS, WON, isWon } from '../data/chapters.js';
 import { ENDLESS, HEROIC, runAccountXp } from '../data/progression.js';
-import { addAccountXp, endlessOpen, ensureDaily, heroicOpen, track } from '../meta/progress.js';
+import { addAccountXp, dailyState, ensureDaily, heroicOpen, modeOpen, recordDaily, track } from '../meta/progress.js';
+import { BOSS_RUSH, DAILY_ROOMS, MODES, MUTATIONS, SURVIVAL, TOWER } from '../data/modes.js';
 import { Joystick } from '../input/joystick.js';
 import { Actors } from '../render/actors.js';
 import { Landscape } from '../render/landscape.js';
@@ -24,6 +25,8 @@ import { Run, STATE } from '../sim/run.js';
 
 const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', CHOOSING: 'choosing', DEAD: 'dead', END: 'end' };
 const ENDLESS_GEMS = ENDLESS.gemsPerBoss;
+/** 135 -> "2:15". */
+const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 // Kills less than this many seconds apart chain into a combo; shouts at milestones.
 const COMBO_TIME = 2.4;
 const COMBO_TAGS = { 10: 'Carnage !', 20: 'Déchaîné !', 35: 'Inarrêtable !', 50: 'Légendaire !', 80: 'Divin !' };
@@ -92,6 +95,7 @@ export class Game {
     const ui = this.ui;
     ui.on('btn-play', () => this.startRun(this.save.chapter));
     ui.on('mode', (mode) => this.pickMode(mode));
+    ui.on('btn-modes', () => this.menu.openModes());
     ui.on('btn-prev', () => this.pickChapter(-1));
     ui.on('btn-next', () => this.pickChapter(1));
     ui.on('btn-pause', () => this.pause());
@@ -255,18 +259,64 @@ export class Game {
     this.menuPet = pet ? { x: 0, z: 0 } : null;
   }
 
-  /** The play mode picked in the menu, if it is open for the shown chapter. */
+  /** The play mode picked in the menu, if it is open. */
   currentMode() {
-    const save = this.save;
-    if (save.mode === 'endless' && endlessOpen(save)) return 'endless';
-    if (save.mode === 'heroic') return 'heroic';
-    return 'normal';
+    const mode = this.save.mode;
+    return MODES[mode] && modeOpen(this.save, mode) ? mode : 'normal';
   }
 
-  /** Landscape behind the menu: the shown chapter's (Endless: the last one opened). */
+  /** Landscape behind the menu: the shown chapter's, the Daily challenge's, else the last one opened. */
   menuTheme() {
     const save = this.save;
-    return this.currentMode() === 'endless' ? CHAPTERS[save.unlocked].theme : CHAPTERS[save.chapter].theme;
+    const mode = this.currentMode();
+    if (mode === 'daily') return CHAPTERS[dailyState(save).challenge.chapterIndex].theme;
+    return MODES[mode].chapter ? CHAPTERS[save.chapter].theme : CHAPTERS[save.unlocked].theme;
+  }
+
+  /** Chapters whose boss was beaten: the Boss rush's line-up (at least the first). */
+  rushBosses() {
+    const won = CHAPTERS.map((c, i) => (isWon(this.save.best[c.id]) ? i : -1)).filter((i) => i >= 0);
+    return won.length ? won : [0];
+  }
+
+  /** A mode's record in a few words (mode picker, menu card). */
+  modeRecord(mode) {
+    const save = this.save;
+    const m = save.modes;
+    switch (mode) {
+      case 'normal': return `Chapitre ${Math.min(save.unlocked + 1, CHAPTERS.length)}/${CHAPTERS.length}`;
+      case 'heroic': {
+        const n = CHAPTERS.filter((c) => isWon(save.best[`${c.id}:heroic`])).length;
+        return n ? `${n} chapitre${n > 1 ? 's' : ''} gagné${n > 1 ? 's' : ''}` : '';
+      }
+      case 'daily': {
+        const d = dailyState(save);
+        return d.wonToday ? `Gagné aujourd’hui · série ${d.streak}` : d.streak ? `Série en cours : ${d.streak} jour${d.streak > 1 ? 's' : ''}` : '';
+      }
+      case 'survival': return m.survival.best ? `Record : ${clock(m.survival.best)}` : '';
+      case 'bossrush': return m.bossrush.best ? `Record : ${m.bossrush.best} boss` : '';
+      case 'tower': return m.tower.best ? `Record : étage ${m.tower.best}` : '';
+      case 'endless': return save.endless.best ? `Record : salle ${save.endless.best}` : '';
+      default: return '';
+    }
+  }
+
+  /** Menu card of a mode played outside the chapters: [kicker, name, line below]. */
+  modeCard(mode) {
+    const record = this.modeRecord(mode);
+    switch (mode) {
+      case 'daily': {
+        const d = dailyState(this.save);
+        const names = d.challenge.mutations.map((id) => MUTATIONS[id].name).join(' · ');
+        const kicker = d.wonToday ? `Gagné · série de ${d.streak} jour${d.streak > 1 ? 's' : ''} · reviens demain`
+          : d.streak ? `Série de ${d.streak} jour${d.streak > 1 ? 's' : ''} · +${d.reward} gemmes` : `Défi du jour · +${d.reward} gemmes`;
+        return [kicker, names, `${CHAPTERS[d.challenge.chapterIndex].name} · ${DAILY_ROOMS} salles`];
+      }
+      case 'survival': return ['Survie', 'Tiens 4 minutes', record || 'Des vagues sans fin et deux boss'];
+      case 'bossrush': return ['Ruée des boss', `${this.rushBosses().length} boss d’affilée`, record || 'Un ange entre chaque boss'];
+      case 'tower': return ['Tour maudite', 'Grimpe et maudis-toi', record || 'Une malédiction après chaque boss'];
+      default: return ['Mode Infini', 'Les portails sans fin', record || 'Un boss toutes les 5 salles'];
+    }
   }
 
   refreshMenu() {
@@ -274,24 +324,37 @@ export class Game {
     this.menu.refreshWallet();
     this.menu.refreshBadges();
     const mode = this.currentMode();
+    const info = MODES[mode];
     const chapter = CHAPTERS[save.chapter];
-    const key = mode === 'heroic' ? `${chapter.id}:heroic` : chapter.id;
-    const best = save.best[key];
-    const heroicLocked = mode === 'heroic' && !heroicOpen(save, save.chapter);
+    let kicker;
+    let name;
+    let best;
+    let locked = false;
+    let lockText = '';
+    if (info.chapter) {
+      const key = mode === 'heroic' ? `${chapter.id}:heroic` : chapter.id;
+      const record = save.best[key];
+      const heroicLocked = mode === 'heroic' && !heroicOpen(save, save.chapter);
+      kicker = `Chapitre ${save.chapter + 1}${mode === 'heroic' ? ' · Héroïque' : ''}`;
+      name = chapter.name;
+      best = record ? (isWon(record) ? 'Terminé' : `Record : salle ${record}/${ROOMS}`) : 'Jamais exploré';
+      locked = save.chapter > save.unlocked || heroicLocked;
+      lockText = heroicLocked ? 'Termine ce chapitre en Normal' : 'Termine le chapitre précédent';
+    } else [kicker, name, best] = this.modeCard(mode);
     this.ui.setMenu({
       coins: Math.floor(save.coins),
       gems: save.gems,
-      kicker: mode === 'endless' ? 'Mode Infini' : `Chapitre ${save.chapter + 1}${mode === 'heroic' ? ' · Héroïque' : ''}`,
-      chapterName: mode === 'endless' ? 'Les portails sans fin' : chapter.name,
-      best: mode === 'endless'
-        ? (save.endless.best ? `Record : salle ${save.endless.best}` : 'Un boss toutes les 5 salles')
-        : best ? (isWon(best) ? 'Terminé' : `Record : salle ${best}/${ROOMS}`) : 'Jamais exploré',
-      locked: mode !== 'endless' && (save.chapter > save.unlocked || heroicLocked),
-      lockText: heroicLocked ? 'Termine ce chapitre en Normal' : 'Termine le chapitre précédent',
-      canPrev: mode !== 'endless' && save.chapter > 0,
-      canNext: mode !== 'endless' && save.chapter < CHAPTERS.length - 1,
+      kicker,
+      chapterName: name,
+      best,
+      locked,
+      lockText,
+      canPrev: info.chapter && save.chapter > 0,
+      canNext: info.chapter && save.chapter < CHAPTERS.length - 1,
       mode,
-      modes: { heroic: heroicOpen(save, 0), endless: endlessOpen(save) },
+      modeName: info.name,
+      modes: Object.fromEntries(Object.keys(MODES).map((id) => [id, modeOpen(save, id)])),
+      dailyDue: modeOpen(save, 'daily') && !dailyState(save).wonToday,
     });
   }
 
@@ -313,14 +376,11 @@ export class Game {
 
   pickMode(mode) {
     const save = this.save;
-    if (mode === 'endless' && !endlessOpen(save)) {
+    const info = MODES[mode];
+    if (!info) return;
+    if (!modeOpen(save, mode)) {
       this.audio.denied();
-      this.ui.banner('Mode Infini', 'Termine le chapitre 1 pour l’ouvrir');
-      return;
-    }
-    if (mode === 'heroic' && !heroicOpen(save, 0)) {
-      this.audio.denied();
-      this.ui.banner('Héroïque', 'Termine le chapitre 1 pour l’ouvrir');
+      this.ui.banner(info.name, `Termine le chapitre ${info.opens + 1} pour l’ouvrir`);
       return;
     }
     if (save.mode === mode) return;
@@ -345,16 +405,28 @@ export class Game {
   startRun(chapterIndex) {
     const save = this.save;
     const mode = this.currentMode();
-    if (mode !== 'endless' && chapterIndex > save.unlocked) return;
+    const info = MODES[mode];
+    if (info.chapter && chapterIndex > save.unlocked) return;
     if (mode === 'heroic' && !heroicOpen(save, chapterIndex)) return;
     this.audio.unlock();
     this.audio.click();
     this.fx.clear();
     this.actors.clearEnemies();
     const gear = this.gearStats();
-    // Endless goes through the landscapes of the chapters already opened.
+    // Endless and the Tower go through the landscapes of the chapters already opened;
+    // the other extra modes take their strength from the furthest chapter.
     const themes = CHAPTERS.slice(0, save.unlocked + 1).map((c) => c.theme);
-    this.run = new Run(chapterIndex, gear, this.createListener(), undefined, { mode, themes });
+    const options = { mode, themes, strength: info.chapter ? undefined : save.unlocked };
+    let seed;
+    if (mode === 'daily') {
+      // The same challenge all day: same chapter, mutations and rooms.
+      const { challenge } = dailyState(save);
+      chapterIndex = challenge.chapterIndex;
+      seed = challenge.seed;
+      options.mutations = challenge.mutations;
+    } else if (mode === 'survival') options.theme = themes[Math.floor(Math.random() * themes.length)];
+    else if (mode === 'bossrush') options.bosses = this.rushBosses();
+    this.run = new Run(chapterIndex, gear, this.createListener(), seed, options);
     this.combo = { count: 0, timer: 0 };
     this.bestCombo = 0;
     this.ui.setCombo(0, 0);
@@ -373,7 +445,9 @@ export class Game {
     this.save.runs++;
     writeSave(this.save);
     // The first ability comes for free.
-    setTimeout(() => this.offerChoices('Début de l’aventure', 'Choisis ta capacité de départ'), 450);
+    const mutations = this.run.mutations.map((id) => MUTATIONS[id].name).join(' · ');
+    const kicker = mutations ? `${info.name} · ${mutations}` : info.chapter ? 'Début de l’aventure' : info.name;
+    setTimeout(() => this.offerChoices(kicker, 'Choisis ta capacité de départ'), 450);
   }
 
   buildRoom() {
@@ -418,6 +492,8 @@ export class Game {
     if (!ok) return;
     this.audio.upgrade();
     this.haptics.pulse(HAPTIC.level);
+    // Tower: the boss's angel is followed by a curse to pick (onCurse).
+    if (run.state === STATE.CURSE) return;
     if (run.state === STATE.CHOOSE) {
       this.offerChoices(`Niveau ${run.level}`, 'Choisis une capacité');
       return;
@@ -428,6 +504,28 @@ export class Game {
       this.hintShown = true;
       this.ui.setHint(true);
     }
+  }
+
+  /** Tower: two curses after each boss; each one makes the next floors harder and pays more. */
+  offerCurse() {
+    const run = this.run;
+    if (!run || run.state !== STATE.CURSE) return;
+    this.mode = MODE.CHOOSING;
+    this.joystick.release();
+    const mul = run.rewardMul;
+    const cards = run.choices.map((id) => {
+      const m = MUTATIONS[id];
+      return { id, icon: m.icon, name: m.name, text: `${m.text} Gemmes des boss ×${(mul * m.reward).toFixed(1).replace('.', ',')}.` };
+    });
+    this.ui.showChoices('Tour maudite', 'Choisis ta malédiction', [], run.taken, (id) => this.chooseCurse(id), cards);
+  }
+
+  chooseCurse(id) {
+    if (!this.run?.chooseCurse(id)) return;
+    this.audio.warning(false);
+    this.haptics.pulse(HAPTIC.boss);
+    this.ui.showScreen(null);
+    this.mode = MODE.PLAYING;
   }
 
   /** A spell button: cast if ready (a small shake of the button otherwise). */
@@ -491,30 +589,75 @@ export class Game {
     const coins = Math.floor(run.coins);
     save.coins += coins;
     save.kills += run.kills;
+    ensureDaily(save);
     let gems = run.gems;
-    if (won) gems += (10 + run.chapterIndex * 10) * (run.heroic ? HEROIC.gems : 1) + (this.runGear?.gemBonus ?? 0);
-    save.gems += gems;
-    const reached = won ? WON : run.room;
     let record = false;
     let unlocked = false;
-    if (run.endless) {
-      // The room reached counts once it is cleared.
-      const cleared = run.roomsCleared;
-      record = cleared > (save.endless.best ?? 0);
-      save.endless.best = Math.max(save.endless.best ?? 0, cleared);
-    } else {
-      const key = run.heroic ? `${run.chapter.id}:heroic` : run.chapter.id;
-      record = reached > (save.best[key] ?? 0);
-      save.best[key] = Math.max(save.best[key] ?? 0, reached);
-      if (won && !run.heroic && run.chapterIndex === save.unlocked && save.unlocked < CHAPTERS.length - 1) {
-        save.unlocked++;
-        save.chapter = save.unlocked;
-        unlocked = true;
+    // Lines of the end screen that only this mode has.
+    const extra = [];
+    switch (run.mode) {
+      case 'normal':
+      case 'heroic': {
+        if (won) gems += (10 + run.chapterIndex * 10) * (run.heroic ? HEROIC.gems : 1) + (this.runGear?.gemBonus ?? 0);
+        const reached = won ? WON : run.room;
+        const key = run.heroic ? `${run.chapter.id}:heroic` : run.chapter.id;
+        record = reached > (save.best[key] ?? 0);
+        save.best[key] = Math.max(save.best[key] ?? 0, reached);
+        if (won && !run.heroic && run.chapterIndex === save.unlocked && save.unlocked < CHAPTERS.length - 1) {
+          save.unlocked++;
+          save.chapter = save.unlocked;
+          unlocked = true;
+        }
+        break;
       }
+      case 'endless': {
+        // The room reached counts once it is cleared.
+        const cleared = run.roomsCleared;
+        record = cleared > (save.endless.best ?? 0);
+        save.endless.best = Math.max(save.endless.best ?? 0, cleared);
+        break;
+      }
+      case 'tower': {
+        const floors = run.roomsCleared;
+        record = floors > save.modes.tower.best;
+        save.modes.tower.best = Math.max(save.modes.tower.best, floors);
+        track(save, 'curses', run.mutations.length);
+        if (run.mutations.length) extra.push(`<span class="pill">${icon('skull')} ${run.mutations.length} malédiction${run.mutations.length > 1 ? 's' : ''} · gemmes ×${run.rewardMul.toFixed(1).replace('.', ',')}</span>`);
+        break;
+      }
+      case 'daily': {
+        const result = recordDaily(save, won ? run.roomCount + 1 : run.room, won);
+        if (result.first) {
+          gems += result.gems;
+          track(save, 'dailyWins', 1);
+          extra.push(`<span class="pill pill--gold">${icon('calendar')} Série : ${result.streak} jour${result.streak > 1 ? 's' : ''} · +${result.gems} gemmes</span>`);
+        } else if (won) extra.push(`<span class="pill">${icon('calendar')} Déjà gagné aujourd’hui · nouveau défi demain</span>`);
+        break;
+      }
+      case 'survival': {
+        const seconds = Math.floor(run.survival.time);
+        record = seconds > save.modes.survival.best;
+        save.modes.survival.best = Math.max(save.modes.survival.best, seconds);
+        track(save, 'survivalSeconds', seconds);
+        if (won) {
+          gems += SURVIVAL.gems + run.chapterIndex * 2;
+          track(save, 'survivalWins', 1);
+        }
+        break;
+      }
+      case 'bossrush': {
+        record = run.bossKills > save.modes.bossrush.best;
+        save.modes.bossrush.best = Math.max(save.modes.bossrush.best, run.bossKills);
+        track(save, 'rushBosses', run.bossKills);
+        if (won) gems += 20 + run.roomCount * 3;
+        break;
+      }
+      default:
+        break;
     }
+    save.gems += gems;
     save.tutorial = false;
     // Counters for the missions and achievements.
-    ensureDaily(save);
     track(save, 'runs', 1);
     track(save, 'kills', run.kills);
     track(save, 'rooms', run.roomsCleared);
@@ -556,25 +699,36 @@ export class Game {
     }
     if (record && !won) loot.push(`<span class="pill">${icon('trophy')} Nouveau record</span>`);
     if (unlocked) loot.push(`<span class="pill">${icon('crown')} Chapitre suivant</span>`);
+    loot.push(...extra);
     const done = save.daily?.missions.filter((m) => !m.claimed && m.progress >= (this.menu.missionGoal(m.id) ?? Infinity)).length ?? 0;
     if (done) loot.push(`<span class="pill pill--gold">${icon('quests')} Mission accomplie</span>`);
-    const title = run.endless ? 'Mode Infini' : `Chapitre ${run.chapterIndex + 1}${run.heroic ? ' · Héroïque' : ''} · ${run.chapter.name}`;
+    const [title, subtitle, rows] = this.endSummary(run, won);
     this.ui.showEnd(
       title,
-      run.endless ? `Salle ${run.roomsCleared}` : won ? 'Victoire !' : 'Défaite',
-      [
-        ['Salle', run.endless ? run.room : won ? `${ROOMS}/${ROOMS}` : `${run.room}/${ROOMS}`],
-        ['Niveau', run.level],
-        ['Monstres', run.kills],
-        ['Élites', run.eliteKills],
-        ['Meilleur combo', this.bestCombo ?? 0],
-        ['Butin', run.loot.length],
-      ],
+      subtitle,
+      rows,
       loot.join(''),
     );
     if (won) this.audio.victory();
     else this.audio.defeat();
     this.audio.setIntensity(0);
+  }
+
+  /** End screen of a run: [title, subtitle, stat rows]. */
+  endSummary(run, won) {
+    const common = [['Niveau', run.level], ['Monstres', run.kills], ['Meilleur combo', this.bestCombo ?? 0], ['Butin', run.loot.length]];
+    switch (run.mode) {
+      case 'endless': return ['Mode Infini', `Salle ${run.roomsCleared}`, [['Salle', run.room], ['Élites', run.eliteKills], ...common]];
+      case 'tower': return ['Tour maudite', `Étage ${run.roomsCleared}`, [['Étage', run.room], ['Malédictions', run.mutations.length], ...common]];
+      case 'survival': return ['Survie', won ? 'Tu as tenu !' : `Tenu ${clock(run.survival.time)}`, [['Temps', clock(run.survival.time)], ['Vagues', run.survival.waves], ...common]];
+      case 'bossrush': return ['Ruée des boss', won ? 'Tous les boss sont tombés !' : `${run.bossKills} boss vaincu${run.bossKills > 1 ? 's' : ''}`, [['Boss', `${run.bossKills}/${run.roomCount}`], ...common]];
+      case 'daily': return [`Défi du jour · ${run.chapter.place}`, won ? 'Victoire !' : 'Défaite', [['Salle', `${won ? run.roomCount : run.room}/${run.roomCount}`], ['Mutations', run.mutations.length], ...common]];
+      default: return [
+        `Chapitre ${run.chapterIndex + 1}${run.heroic ? ' · Héroïque' : ''} · ${run.chapter.name}`,
+        won ? 'Victoire !' : 'Défaite',
+        [['Salle', won ? `${ROOMS}/${ROOMS}` : `${run.room}/${ROOMS}`], ['Élites', run.eliteKills], ...common],
+      ];
+    }
   }
 
   // ------------------------------------------------------------ simulation events
@@ -595,7 +749,8 @@ export class Game {
           this.snapCamera = true;
           this.warmShaders();
           if (boss) {
-            ui.banner(this.run.enemies[0]?.def.name ?? 'Boss', this.run.endless ? `Salle ${room}` : 'Le gardien du chapitre', 'danger');
+            const run = this.run;
+            ui.banner(run.enemies[0]?.def.name ?? 'Boss', run.isFinalRoom && !run.bossRush ? 'Le gardien du chapitre' : run.hud()[1], 'danger');
             this.anime(1.4, 0);
             audio.warning(true);
             this.haptics.pulse(HAPTIC.boss);
@@ -718,8 +873,23 @@ export class Game {
         fx.ring(0, doorZ, 2.4, 0.6, new THREE.Color(this.arenaView.theme?.portal ?? 0x8ff8d8));
         audio.waveCleared();
         if (kind === 'challenge') ui.banner('Défi réussi !', '+3 gemmes · choisis une capacité', 'gold');
-        else if (boss) ui.banner('Boss vaincu !', `+${ENDLESS_GEMS} gemmes · le portail est ouvert`, 'gold');
+        else if (boss) {
+          const run = this.run;
+          const gems = run.tower ? Math.round(TOWER.gemsPerBoss * run.rewardMul) : run.bossRush ? BOSS_RUSH.gemsPerBoss : ENDLESS_GEMS;
+          ui.banner('Boss vaincu !', `+${gems} gemmes · le portail est ouvert`, 'gold');
+        }
         else if (kind !== 'treasure') ui.banner('Salle nettoyée !', 'Le portail est ouvert');
+      },
+      onCurse: () => {
+        this.mode = MODE.CHOOSING;
+        this.joystick.release();
+        setTimeout(() => this.offerCurse(), 250);
+      },
+      onMutation: (m) => ui.banner(m.name, m.text, 'danger'),
+      onSurvivalBoss: (def) => {
+        ui.banner(def.name, 'Un boss rejoint la mêlée !', 'danger');
+        audio.warning(true);
+        this.haptics.pulse(HAPTIC.boss);
       },
       onAngel: () => {
         this.mode = MODE.CHOOSING;
@@ -730,7 +900,8 @@ export class Game {
       onWin: () => {
         // Let the boss fall in slow motion, then straight to the rewards.
         this.joystick.release();
-        ui.banner('Victoire !', `${this.run.chapter.name} est libéré`);
+        const done = { survival: 'Tu as tenu 4 minutes !', bossrush: 'Tous les boss sont tombés !', daily: 'Défi du jour réussi !' }[this.run.mode];
+        ui.banner('Victoire !', done ?? `${this.run.chapter.name} est libéré`);
         audio.waveCleared();
         const run = this.run;
         setTimeout(() => {
@@ -1164,8 +1335,7 @@ export class Game {
       if (this.time > this.aura.until || !run.buffs.length && run.player.invulnerable <= 0) this.aura = null;
       else if ((this.auraTick = (this.auraTick ?? 0) + 1) % 14 === 0) this.fx.ring(run.player.x, run.player.z, 1.1, 0.45, this.aura.color);
     }
-    if (run.endless) ui.setRoom('Mode Infini', run.isBossRoom ? `Boss · salle ${run.room}` : `Salle ${run.room}`);
-    else ui.setRoom(`Chapitre ${run.chapterIndex + 1}${run.heroic ? ' · Héroïque' : ''}`, run.room >= ROOMS ? 'Boss !' : `Salle ${run.room}/${ROOMS}`);
+    ui.setRoom(...run.hud());
     ui.setCoins(run.coins);
     ui.setXp(run.level, run.xp / run.xpNeeded);
     const boss = run.enemies.find((e) => e.def.boss && !e.dead);

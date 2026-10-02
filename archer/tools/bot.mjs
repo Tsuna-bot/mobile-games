@@ -1,10 +1,11 @@
 // Balance bot: plays chapters with the real simulation.
 //   node tools/bot.mjs [runs] [chapter 1..30] [--gear=start|early|mid|late|end] [--hero=id]
-//     [--mode=heroic|endless] [--weapon=bow|crossbow|staff|blades|longbow|shuriken|tome] [--verbose]
+//     [--mode=heroic|endless|daily|survival|bossrush|tower] [--weapon=bow|crossbow|staff|blades|longbow|shuriken|tome] [--verbose]
 import { Run, STATE } from '../src/sim/run.js';
 import { defaultSave } from '../src/core/storage.js';
 import { addItem, ensureProfile, equip, runGear } from '../src/meta/profile.js';
 import { heroState } from '../src/meta/heroes.js';
+import { dailyChallenge } from '../src/data/modes.js';
 
 const ARGV = typeof process !== 'undefined' ? process.argv : [];
 const args = ARGV.slice(2).filter((a) => !a.startsWith('--'));
@@ -150,17 +151,30 @@ export function pick(run) {
   return [...run.choices].sort((a, b) => (PREFER.indexOf(a) + 99) % 99 - (PREFER.indexOf(b) + 99) % 99)[0];
 }
 
+/** Run options of a mode, `chapter` being the furthest chapter opened (as in the game). */
+function modeOptions(chapter, mode, seed = 0) {
+  const themes = ['forest', 'dungeon', 'graveyard'];
+  if (mode === 'daily') {
+    const day = `2026-10-${String(1 + (seed % 28)).padStart(2, '0')}`;
+    const c = dailyChallenge(day, chapter);
+    return { mode, strength: chapter, mutations: c.mutations, themes };
+  }
+  if (mode === 'bossrush') return { mode, strength: chapter, bosses: Array.from({ length: chapter + 1 }, (_, i) => i), themes };
+  return { mode, strength: chapter, theme: 'forest', themes };
+}
+
 export function play(chapter, gear = {}, seed = undefined, mode = 'normal') {
   const events = { hits: 0, damageTaken: 0, by: {}, executions: 0 };
   const run = new Run(chapter, gear, {
     onExecute: () => { events.executions++; },
     onPlayerHit: (d, e) => { events.hits++; events.damageTaken += d; const k = e ? `touch:${e.def.id}` : 'shot/zone'; events.by[k] = (events.by[k] ?? 0) + d; },
-  }, seed, { mode, themes: ['forest', 'dungeon', 'graveyard'] });
+  }, seed, modeOptions(chapter, mode, seed));
   run.begin(pick(run));
   let t = 0;
-  const limit = mode === 'endless' ? 5400 : 1800;
+  const limit = mode === 'endless' || mode === 'tower' ? 5400 : 1800;
   while (t < limit && run.state !== STATE.DEAD && run.state !== STATE.WON) {
     if (run.state === STATE.CHOOSE || run.state === STATE.ANGEL) run.choose(pick(run));
+    if (run.state === STATE.CURSE) run.chooseCurse(run.choices[0]);
     if (!NO_SPELLS && run.state === STATE.FIGHT) for (let i = 0; i < run.spells.length; i++) if (run.spells[i].timer <= 0) run.castSpell(i);
     run.step(DT, botInput(run));
     t += DT;

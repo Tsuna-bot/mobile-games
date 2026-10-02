@@ -78,6 +78,10 @@ export const MISSIONS = [
   { id: 'loot', stat: 'loot', goal: 3, text: 'Trouver 3 objets en partie', reward: { coins: 600 } },
   { id: 'runes', stat: 'runes', goal: 5, text: 'Récolter 5 runes', reward: { gems: 15 } },
   { id: 'heroic', stat: 'heroicRooms', goal: 5, text: 'Nettoyer 5 salles en Héroïque', reward: { gems: 20 }, needs: 'heroic' },
+  { id: 'daily', stat: 'dailyWins', goal: 1, text: 'Gagner le défi du jour', reward: { gems: 25 }, needs: 'daily' },
+  { id: 'survival', stat: 'survivalSeconds', goal: 150, text: 'Tenir 2 min 30 en Survie', reward: { coins: 700 }, needs: 'survival' },
+  { id: 'rush', stat: 'rushBosses', goal: 4, text: 'Vaincre 4 boss en Ruée des boss', reward: { gems: 20 }, needs: 'bossrush' },
+  { id: 'curses', stat: 'curses', goal: 2, text: 'Accepter 2 malédictions dans la Tour', reward: { gems: 20 }, needs: 'tower' },
 ];
 
 export const MISSIONS_PER_DAY = 3;
@@ -95,6 +99,10 @@ export const ACHIEVEMENTS = [
   { id: 'eliteHunter', icon: 'elite', name: 'Chasseur d’élites', stat: 'elites', goals: [10, 100, 500], gems: [20, 50, 120], text: (g) => `Vaincre ${g} monstres d’élite` },
   { id: 'endless', icon: 'infinity', name: 'Sans fin', stat: 'endlessBest', goals: [10, 25, 50], gems: [30, 80, 200], text: (g) => `Atteindre la salle ${g} en mode Infini` },
   { id: 'heroic', icon: 'heroic', name: 'Héroïque', stat: 'heroicWon', goals: [1, 4, 8, 18, 30], gems: [50, 100, 250, 600, 1000], text: (g) => `Gagner ${g} chapitre${g > 1 ? 's' : ''} en Héroïque` },
+  { id: 'streak', icon: 'calendar', name: 'Fidèle au poste', stat: 'dailyStreak', goals: [2, 5, 10, 30], gems: [30, 80, 160, 400], text: (g) => `Gagner le défi du jour ${g} jours de suite` },
+  { id: 'survivor', icon: 'quake', name: 'Survivant', stat: 'survivalWins', goals: [1, 5, 20], gems: [40, 90, 200], text: (g) => `Tenir les 4 minutes de la Survie ${g} fois` },
+  { id: 'rush', icon: 'skull', name: 'Ruée sanglante', stat: 'bossRushBest', goals: [5, 12, 20, 30], gems: [30, 70, 150, 300], text: (g) => `Vaincre ${g} boss d’affilée en Ruée des boss` },
+  { id: 'tower', icon: 'crown', name: 'Grimpeur maudit', stat: 'towerBest', goals: [10, 20, 35, 50], gems: [30, 80, 160, 350], text: (g) => `Atteindre l’étage ${g} de la Tour maudite` },
   { id: 'collector', icon: 'trophy', name: 'Collectionneur', stat: 'legendaries', goals: [1, 3, 10], gems: [50, 100, 200], text: (g) => `Obtenir ${g} objet${g > 1 ? 's' : ''} légendaire${g > 1 ? 's' : ''}` },
   { id: 'smith', icon: 'upgrade', name: 'Forgeron', stat: 'upgrades', goals: [10, 100, 500], gems: [20, 50, 100], text: (g) => `Améliorer des objets ${g} fois` },
   { id: 'awakened', icon: 'star', name: 'Éveil', stat: 'awakenings', goals: [1, 5, 15], gems: [40, 80, 150], text: (g) => `Éveiller des objets ${g} fois` },

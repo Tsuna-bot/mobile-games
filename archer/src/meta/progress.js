@@ -6,8 +6,10 @@ import { ALL_CHAPTERS, isWon } from '../data/chapters.js';
 import {
   ACHIEVEMENTS, BRANCHES, DAILY_BONUS, MAX_ACCOUNT_LEVEL, MISSIONS, MISSIONS_PER_DAY, TIER_NEEDS, TREE, TREE_BY_ID, accountXpNeeded, levelReward,
 } from '../data/progression.js';
+import { MODES, dailyChallenge, dailyReward, daysBetween } from '../data/modes.js';
 
-const STAT_KEYS = ['kills', 'rooms', 'wins', 'bosses', 'elites', 'upgrades', 'chests', 'abilities', 'runs', 'legendaries', 'awakenings', 'endlessRooms', 'heroicRooms', 'spells', 'loot', 'runes'];
+const STAT_KEYS = ['kills', 'rooms', 'wins', 'bosses', 'elites', 'upgrades', 'chests', 'abilities', 'runs', 'legendaries', 'awakenings', 'endlessRooms', 'heroicRooms', 'spells', 'loot', 'runes',
+  'dailyWins', 'survivalWins', 'survivalSeconds', 'rushBosses', 'curses'];
 
 /** Fills in the progression fields (new player or older save). */
 export function ensureProgress(save) {
@@ -36,6 +38,17 @@ export function ensureProgress(save) {
   if (!save.endless || typeof save.endless !== 'object') save.endless = { best: 0 };
   if (!Number.isFinite(save.endless.best)) save.endless.best = 0;
   if (!save.daily || typeof save.daily !== 'object') save.daily = null;
+  // Records of the extra modes; the Daily challenge's streak.
+  if (!save.modes || typeof save.modes !== 'object') save.modes = {};
+  const modes = save.modes;
+  for (const id of ['survival', 'bossrush', 'tower']) {
+    if (!modes[id] || typeof modes[id] !== 'object') modes[id] = {};
+    if (!Number.isFinite(modes[id].best) || modes[id].best < 0) modes[id].best = 0;
+  }
+  if (!modes.challenge || typeof modes.challenge !== 'object') modes.challenge = {};
+  const ch = modes.challenge;
+  for (const key of ['streak', 'bestStreak', 'best']) if (!Number.isFinite(ch[key]) || ch[key] < 0) ch[key] = 0;
+  for (const key of ['lastWin', 'day']) if (typeof ch[key] !== 'string') ch[key] = '';
   // A chapter won while it was the last one never opened the next: chapters added
   // later stayed locked. Open everything after the chapters already won.
   if (!Number.isFinite(save.unlocked) || save.unlocked < 0) save.unlocked = 0;
@@ -133,6 +146,40 @@ export function dayKey(now = Date.now()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** True once the chapter a mode asks for has been won (Adventure is always open). */
+export function modeOpen(save, id) {
+  const mode = MODES[id];
+  if (!mode) return false;
+  return mode.opens < 0 || isWon(save.best?.[ALL_CHAPTERS[mode.opens].id]);
+}
+
+/** Today's Daily challenge and where the player stands with it. */
+export function dailyState(save, now = Date.now()) {
+  const day = dayKey(now);
+  const ch = save.modes.challenge;
+  const challenge = dailyChallenge(day, save.unlocked);
+  const wonToday = ch.lastWin === day;
+  // The streak holds while the last win was today or yesterday.
+  const alive = ch.lastWin && daysBetween(ch.lastWin, day) <= 1;
+  return { day, challenge, wonToday, streak: alive ? ch.streak : 0, best: ch.day === day ? ch.best : 0, reward: dailyReward(wonToday ? ch.streak : (alive ? ch.streak : 0) + 1) };
+}
+
+/** Records a Daily challenge run; the first win of the day grows the streak and pays. */
+export function recordDaily(save, room, won, now = Date.now()) {
+  const day = dayKey(now);
+  const ch = save.modes.challenge;
+  if (ch.day !== day) {
+    ch.day = day;
+    ch.best = 0;
+  }
+  ch.best = Math.max(ch.best, room);
+  if (!won || ch.lastWin === day) return { first: false, streak: ch.lastWin === day ? ch.streak : 0, gems: 0 };
+  ch.streak = ch.lastWin && daysBetween(ch.lastWin, day) === 1 ? ch.streak + 1 : 1;
+  ch.lastWin = day;
+  ch.bestStreak = Math.max(ch.bestStreak, ch.streak);
+  return { first: true, streak: ch.streak, gems: dailyReward(ch.streak) };
+}
+
 export function endlessOpen(save) {
   return isWon(save.best?.[ALL_CHAPTERS[0].id]);
 }
@@ -146,7 +193,7 @@ export function heroicOpen(save, chapterIndex) {
 export function ensureDaily(save, now = Date.now()) {
   const day = dayKey(now);
   if (save.daily?.day === day) return save.daily;
-  const pool = MISSIONS.filter((m) => !m.needs || (m.needs === 'endless' ? endlessOpen(save) : heroicOpen(save, 0)));
+  const pool = MISSIONS.filter((m) => !m.needs || modeOpen(save, m.needs));
   // FNV-1a hash of the date, then a well-mixed generator (mulberry32).
   let seed = 2166136261;
   for (const c of day) seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0;
@@ -196,6 +243,9 @@ export function achievementValue(save, a) {
     case 'chaptersWon': return ALL_CHAPTERS.filter((c) => isWon(save.best?.[c.id])).length;
     case 'heroicWon': return ALL_CHAPTERS.filter((c) => isWon(save.best?.[`${c.id}:heroic`])).length;
     case 'endlessBest': return save.endless?.best ?? 0;
+    case 'dailyStreak': return save.modes?.challenge?.bestStreak ?? 0;
+    case 'bossRushBest': return save.modes?.bossrush?.best ?? 0;
+    case 'towerBest': return save.modes?.tower?.best ?? 0;
     case 'level': return save.account?.level ?? 1;
     case 'heroes': return save.heroes?.owned?.length ?? 0;
     case 'heroLevel': return Math.max(1, ...Object.values(save.heroData ?? {}).map((h) => h.level ?? 1));

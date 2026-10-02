@@ -7,6 +7,7 @@ import { ABILITIES, rollAbilities } from '../data/abilities.js';
 import { ALL_CHAPTERS, ANGEL_AFTER, BOSS_LAYOUT, ELITE_ROOMS, EXTRA_ANGEL_AFTER, LAYOUTS, ROOMS } from '../data/chapters.js';
 import { ENEMIES } from '../data/enemies.js';
 import { ENDLESS, HEROIC, SPECIAL_ROOMS, eliteChance } from '../data/progression.js';
+import { BOSS_RUSH, CURSES, DAILY_ANGELS, DAILY_HEALTH, DAILY_ROOMS, MUTATIONS, SURVIVAL, TOWER, rewardMul } from '../data/modes.js';
 import { SPELLS, rankCooldown, rankPower } from '../data/heroes.js';
 import { DROP_CHANCE, rollLoot, runeDrop } from '../data/loot.js';
 import { seededRandom } from '../core/random.js';
@@ -19,6 +20,7 @@ export const STATE = Object.freeze({
   CLEARED: 'cleared', // door open, pickups flying in
   CHOOSE: 'choose', // level up: 1 ability out of 3
   ANGEL: 'angel', // heal or ability
+  CURSE: 'curse', // Tower: a curse to pick after a boss
   DEAD: 'dead',
   WON: 'won',
 });
@@ -42,18 +44,44 @@ const BOOMERANG_OUT = 0.62;
 /**
  * @param chapterIndex which chapter
  * @param gear player stats from equipment and talents: { hp, damage, rate, crit, critDamage, speed, dodge, ... }
- * @param options { mode: 'normal' | 'heroic' | 'endless', themes: landscapes the Endless mode goes through }
+ * @param options {
+ *   mode: 'normal' | 'heroic' | 'endless' | 'daily' | 'survival' | 'bossrush' | 'tower',
+ *   themes: landscapes the Endless mode and the Tower go through,
+ *   strength: chapter index whose monster strength the extra modes use (the furthest opened),
+ *   mutations: curses and blessings (data/modes.js),
+ *   bosses: Boss rush, the chapter indexes whose bosses come one after another,
+ *   theme: Survival, its landscape }
  */
 export class Run {
   constructor(chapterIndex = 0, gear = {}, listener = {}, seed = (Math.random() * 2 ** 31) >>> 0, options = {}) {
     this.mode = options.mode ?? 'normal';
-    this.endless = this.mode === 'endless';
+    // The Tower climbs the Endless floors (with curses after each boss).
+    this.tower = this.mode === 'tower';
+    this.endless = this.mode === 'endless' || this.tower;
     this.heroic = this.mode === 'heroic';
+    this.daily = this.mode === 'daily';
+    this.survival = this.mode === 'survival' ? { time: 0, wave: 1.2, waves: 0, bosses: 0 } : null;
+    this.bossRush = this.mode === 'bossrush';
     this.themes = options.themes?.length ? options.themes : ['forest'];
-    this.chapterIndex = this.endless ? 0 : chapterIndex;
-    this.chapter = this.endless ? { id: 'endless', name: 'Mode Infini', theme: this.themes[0], hp: 1, rooms: [] } : ALL_CHAPTERS[chapterIndex];
+    const strength = Math.min(ALL_CHAPTERS.length - 1, options.strength ?? chapterIndex);
+    this.chapterIndex = this.endless ? 0 : this.daily || this.survival || this.bossRush ? strength : chapterIndex;
+    this.strength = ALL_CHAPTERS[strength].hp;
+    this.bossChapters = this.bossRush ? (options.bosses?.length ? options.bosses : [0]) : null;
+    if (this.endless) this.chapter = { id: this.mode, name: this.tower ? 'Tour maudite' : 'Mode Infini', theme: this.themes[0], hp: 1, rooms: [] };
+    else if (this.survival) this.chapter = { id: 'survival', name: 'Survie', theme: options.theme ?? 'forest', hp: this.strength, rooms: [[]] };
+    else if (this.bossRush) {
+      const rooms = this.bossChapters.map((i) => [[ALL_CHAPTERS[i].boss, 1]]);
+      this.chapter = { id: 'bossrush', name: 'Ruée des boss', theme: ALL_CHAPTERS[this.bossChapters[0]].theme, hp: this.strength, rooms };
+    } else if (this.daily) {
+      // Every other room of the chapter, its boss last: a short run.
+      const base = ALL_CHAPTERS[chapterIndex];
+      this.chapter = { ...base, id: 'daily', name: 'Défi du jour', place: base.name, rooms: base.rooms.filter((_, i) => i % 2 === 0).slice(-DAILY_ROOMS) };
+    } else this.chapter = ALL_CHAPTERS[chapterIndex];
     this.theme = this.chapter.theme;
-    this.roomCount = this.endless ? Infinity : ROOMS;
+    this.roomCount = this.endless ? Infinity : this.chapter.rooms.length;
+    // Mutations: monster multipliers here, the hero's in applyMutation().
+    this.mods = { health: 1, power: 1, tempo: 1, count: 1, elites: 0, heal: 1 };
+    this.mutations = [];
     this.listener = listener;
     // Counters for the rewards, missions and achievements.
     this.gems = 0;
@@ -72,6 +100,7 @@ export class Run {
     this.choices = [];
     this.pendingLevels = 0;
     this.player = this.createPlayer(gear);
+    for (const id of options.mutations ?? []) this.applyMutation(id);
     // Weapons change the shot: rate, speed, piercing, homing, bounces.
     const w = this.player.weapon;
     if (w === 'crossbow') this.player.rateMul *= 0.72;
@@ -105,8 +134,51 @@ export class Run {
     // Archero opens with a free ability.
     this.state = STATE.START;
     this.choices = rollAbilities(this.taken, this.random, 1).filter((id) => id !== 'heal');
-    // Talent "Maître d'armes": more abilities to pick before the first room.
-    this.pendingLevels += gear.startAbilities ?? 0;
+    // Talent "Maître d'armes" and the "Arsenal" blessing: more abilities before the first room.
+    this.pendingLevels += (gear.startAbilities ?? 0) + this.mutations.reduce((n, id) => n + (MUTATIONS[id].abilities ?? 0), 0);
+  }
+
+  /** Adds a curse or a blessing to the run (at the start, or a Tower curse later). */
+  applyMutation(id) {
+    const m = MUTATIONS[id];
+    if (!m) return;
+    this.mutations.push(id);
+    const mods = this.mods;
+    mods.health *= m.health ?? 1;
+    mods.power *= m.power ?? 1;
+    mods.tempo *= m.tempo ?? 1;
+    mods.count *= m.count ?? 1;
+    mods.elites += m.elites ?? 0;
+    if (m.heal != null) mods.heal = m.heal;
+    const p = this.player;
+    if (m.hp) {
+      p.maxHp = Math.max(1, Math.round(p.maxHp * m.hp));
+      p.hp = Math.min(p.hp, p.maxHp);
+    }
+    p.baseDamage *= m.damage ?? 1;
+    p.rateMul *= m.rate ?? 1;
+    p.speedMul *= m.speed ?? 1;
+    p.lifeOnKill += m.lifeOnKill ?? 0;
+    p.xpMul *= m.xp ?? 1;
+    p.coinMul *= m.coins ?? 1;
+  }
+
+  /** Gem multiplier of the run's curses (Daily challenge, Tower). */
+  get rewardMul() {
+    return rewardMul(this.mutations);
+  }
+
+  /** Top of the screen during the run: [mode or chapter, room or time]. */
+  hud() {
+    if (this.survival) {
+      const left = Math.max(0, SURVIVAL.duration - this.survival.time);
+      return ['Survie', `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`];
+    }
+    if (this.tower) return ['Tour maudite', this.isBossRoom ? `Boss · étage ${this.room}` : `Étage ${this.room}`];
+    if (this.endless) return ['Mode Infini', this.isBossRoom ? `Boss · salle ${this.room}` : `Salle ${this.room}`];
+    if (this.bossRush) return ['Ruée des boss', `Boss ${this.room}/${this.roomCount}`];
+    const title = this.daily ? 'Défi du jour' : `Chapitre ${this.chapterIndex + 1}${this.heroic ? ' · Héroïque' : ''}`;
+    return [title, this.isFinalRoom ? 'Boss !' : `Salle ${this.room}/${this.roomCount}`];
   }
 
   createPlayer(gear) {
@@ -155,27 +227,39 @@ export class Run {
   }
 
   get isBossRoom() {
-    return this.endless ? this.room % ENDLESS.bossEvery === 0 : this.roomIndex === ROOMS - 1;
+    if (this.survival) return false;
+    if (this.bossRush) return true;
+    return this.endless ? this.room % (this.tower ? TOWER.bossEvery : ENDLESS.bossEvery) === 0 : this.roomIndex === this.roomCount - 1;
+  }
+
+  /** The last room: clearing it wins the run (never in Endless, the Tower or Survival). */
+  get isFinalRoom() {
+    return !this.endless && !this.survival && this.roomIndex === this.roomCount - 1;
   }
 
   /** How deep the run is (loot quality): the chapter, the Endless depth, Heroic higher. */
   get tier() {
-    if (this.endless) return Math.min(17, Math.floor(this.roomIndex / 3));
+    if (this.endless) return Math.min(17, Math.floor(this.roomIndex / 3)) + (this.tower ? Math.min(6, this.mutations.length) : 0);
     return Math.min(34, this.chapterIndex + (this.heroic ? 4 : 0));
   }
 
   /** Monster health multiplier of the current room. */
   healthScale() {
     const d = CONFIG.difficulty;
-    if (this.endless) return ENDLESS.health(this.roomIndex) * d.health;
-    const base = this.chapter.hp * d.health * (1 + d.roomGrowth * this.roomIndex);
+    const mul = d.health * this.mods.health;
+    if (this.endless) return ENDLESS.health(this.roomIndex) * mul;
+    if (this.survival) return this.strength * SURVIVAL.health(this.survival.time) * mul;
+    if (this.bossRush) return this.strength * BOSS_RUSH.health(this.roomIndex) * mul;
+    // The Daily challenge grows over its 13 rooms as a chapter over its 25.
+    const depth = this.daily ? this.roomIndex * (ROOMS - 1) / (this.roomCount - 1) : this.roomIndex;
+    const base = (this.daily ? this.strength * DAILY_HEALTH : this.chapter.hp) * mul * (1 + d.roomGrowth * depth);
     return this.heroic ? base * HEROIC.health : base;
   }
 
   /** Chance for a room monster to be elite. */
   eliteChance() {
-    if (this.endless) return ENDLESS.elites(this.roomIndex);
-    return this.heroic ? HEROIC.elites : eliteChance(this.chapterIndex);
+    const base = this.endless ? ENDLESS.elites(this.roomIndex) : this.heroic ? HEROIC.elites : eliteChance(this.chapterIndex);
+    return Math.min(0.6, base + this.mods.elites);
   }
 
   /** Endless mode: the monsters of room `index` (a boss every few rooms). */
@@ -196,7 +280,7 @@ export class Run {
   }
 
   get xpNeeded() {
-    return Math.round(CONFIG.xp.base * (this.endless ? CONFIG.xp.endlessGrowth : CONFIG.xp.growth) ** (this.level - 1));
+    return Math.round(CONFIG.xp.base * (this.endless || this.daily ? CONFIG.xp.endlessGrowth : CONFIG.xp.growth) ** (this.level - 1));
   }
 
   // ------------------------------------------------------------ rooms
@@ -204,22 +288,25 @@ export class Run {
   loadRoom(index) {
     this.roomIndex = index;
     const boss = this.isBossRoom;
-    // Endless: the landscape changes after each boss.
+    // Endless and the Tower: the landscape changes after each boss; Boss rush: each boss at home.
     if (this.endless) {
       this.theme = this.themes[Math.floor(index / ENDLESS.bossEvery) % this.themes.length];
+      this.chapter.theme = this.theme;
+    } else if (this.bossRush) {
+      this.theme = ALL_CHAPTERS[this.bossChapters[index]].theme;
       this.chapter.theme = this.theme;
     }
     // Now and then a treasure room or a challenge room (never twice in a row).
     const previous = this.roomKind;
     this.roomKind = 'normal';
     this.chest = null;
-    if (!this.endless && ELITE_ROOMS.includes(index + 1)) this.roomKind = 'challenge';
-    else if (!boss && index >= 1 && previous === 'normal') {
+    if ((this.mode === 'normal' || this.heroic) && ELITE_ROOMS.includes(index + 1)) this.roomKind = 'challenge';
+    else if (!boss && !this.survival && index >= 1 && previous === 'normal') {
       const r = this.random();
       if (r < SPECIAL_ROOMS.treasure) this.roomKind = 'treasure';
       else if (r < SPECIAL_ROOMS.treasure + SPECIAL_ROOMS.challenge) this.roomKind = 'challenge';
     }
-    const layout = boss ? BOSS_LAYOUT : LAYOUTS[Math.floor(this.random() * LAYOUTS.length)];
+    const layout = boss || this.survival ? BOSS_LAYOUT : LAYOUTS[Math.floor(this.random() * LAYOUTS.length)];
     this.arena = new Arena(layout);
     this.layout = layout;
     this.enemies = [];
@@ -245,8 +332,9 @@ export class Run {
     const free = this.arena.freeCells(1, boss ? 5 : 8);
     const elites = this.roomKind === 'challenge' ? 1 : this.eliteChance();
     for (const [type, full] of spec) {
-      // A treasure room is lightly guarded.
-      const count = this.roomKind === 'treasure' ? Math.ceil(full / 2) : full;
+      // A treasure room is lightly guarded; the "Hordes" curse adds monsters (never bosses).
+      const many = ENEMIES[type].boss ? full : Math.round(full * this.mods.count);
+      const count = this.roomKind === 'treasure' ? Math.ceil(many / 2) : many;
       for (let i = 0; i < count; i++) {
         const cell = free.length ? free.splice(Math.floor(this.random() * free.length), 1)[0] : 0;
         const at = this.arena.centerOf(cell);
@@ -255,9 +343,11 @@ export class Run {
       }
     }
     if (this.roomKind === 'treasure') this.chest = this.freeSpotNear(0, -1.5, 0.5);
-    if (p.healOnRoom && index > 0) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.healOnRoom);
-    // Legendary "Renouveau": a heal at the boss's door.
-    if (boss && p.bossHeal) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.bossHeal);
+    const heal = this.mods.heal;
+    if (p.healOnRoom && index > 0) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.healOnRoom * heal);
+    // Legendary "Renouveau": a heal at the boss's door; Boss rush: a breather before each boss.
+    if (boss && p.bossHeal) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.bossHeal * heal);
+    if (this.bossRush && index > 0) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * BOSS_RUSH.heal * heal);
     this.listener.onRoom?.(this.room, boss, this.roomKind);
   }
 
@@ -267,7 +357,7 @@ export class Run {
     const radius = def.radius * (elite ? ELITE.radius : 1);
     if (!def.flying) ({ x, z } = this.freeSpotNear(x, z, radius));
     const scale = this.healthScale() * (elite ? ELITE.health : 1);
-    const power = this.healthScale() ** (this.endless ? ENDLESS.damage : 0.5) * (this.heroic ? HEROIC.damage : 1) * (elite ? ELITE.power : 1);
+    const power = this.healthScale() ** (this.endless ? ENDLESS.damage : 0.5) * (this.heroic ? HEROIC.damage : 1) * (elite ? ELITE.power : 1) * this.mods.power;
     const enemy = {
       id: this.nextId++, def, x, z, radius, dirX: 0, dirZ: 1, elite,
       hp: Math.round(def.hp * scale), maxHp: Math.round(def.hp * scale), power,
@@ -304,13 +394,16 @@ export class Run {
   /** The hero walks through the open door at the top. */
   enterDoor() {
     this.listener.onDoor?.();
-    if (this.isBossRoom && !this.endless) {
+    if (this.isFinalRoom) {
       this.state = STATE.WON;
       this.listener.onWin?.();
       return;
     }
-    // An angel after rooms 8 and 16 (and 21 with the "Ange gardien" talent); in Endless, after each boss.
-    const angel = this.endless ? this.isBossRoom : ANGEL_AFTER.includes(this.room) || (this.player.extraAngel && this.room === EXTRA_ANGEL_AFTER);
+    // An angel after rooms 8 and 16 (and 21 with the "Ange gardien" talent); in Endless, the
+    // Tower and the Boss rush after each boss; in the Daily challenge after rooms 5 and 9.
+    const angel = this.endless || this.bossRush ? this.isBossRoom
+      : this.daily ? DAILY_ANGELS.includes(this.room)
+        : ANGEL_AFTER.includes(this.room) || (this.player.extraAngel && this.room === EXTRA_ANGEL_AFTER);
     if (angel) {
       this.state = STATE.ANGEL;
       this.choices = rollAbilities(this.taken, this.random, 1, 2).filter((id) => id !== 'heal');
@@ -331,6 +424,11 @@ export class Run {
     this.listener.onAbility?.(ability, this.taken[id]);
     this.choices = [];
     if (this.state === STATE.ANGEL) {
+      // Tower: after the boss's angel, a curse.
+      if (this.tower && this.isBossRoom) {
+        this.offerCurse();
+        return true;
+      }
       this.loadRoom(this.roomIndex + 1);
       this.state = STATE.FIGHT;
       return true;
@@ -342,6 +440,27 @@ export class Run {
     }
     // Back to the fight; a room emptied during the choice gets cleared (or won) on the next step.
     this.state = this.enemies.some((e) => !e.dead) || !this.doorOpen ? STATE.FIGHT : STATE.CLEARED;
+    return true;
+  }
+
+  /** Tower: two curses to pick from (new ones first, then they stack). */
+  offerCurse() {
+    const fresh = CURSES.filter((id) => !this.mutations.includes(id));
+    const pool = fresh.length >= 2 ? fresh : [...CURSES];
+    const a = pool.splice(Math.floor(this.random() * pool.length), 1)[0];
+    const b = pool[Math.floor(this.random() * pool.length)];
+    this.state = STATE.CURSE;
+    this.choices = [a, b];
+    this.listener.onCurse?.(this.choices);
+  }
+
+  chooseCurse(id) {
+    if (this.state !== STATE.CURSE || !this.choices.includes(id)) return false;
+    this.applyMutation(id);
+    this.choices = [];
+    this.listener.onMutation?.(MUTATIONS[id]);
+    this.loadRoom(this.roomIndex + 1);
+    this.state = STATE.FIGHT;
     return true;
   }
 
@@ -379,7 +498,11 @@ export class Run {
       this.flowTimer = 0.25;
       this.arena.computeFlow(this.player.x, this.player.z);
     }
-    for (const enemy of this.enemies) if (!enemy.dead) this.updateEnemyCommon(enemy, dt);
+    if (this.survival) this.updateSurvival(dt);
+    if (this.state !== STATE.FIGHT && this.state !== STATE.CLEARED) return;
+    // The "Frénésie" curse: monsters live faster.
+    const enemyDt = dt * this.mods.tempo;
+    for (const enemy of this.enemies) if (!enemy.dead) this.updateEnemyCommon(enemy, enemyDt);
     // Safety net: a position that went NaN is put back in the arena instead of breaking the view.
     const p0 = this.player;
     if (!Number.isFinite(p0.x) || !Number.isFinite(p0.z)) {
@@ -400,17 +523,74 @@ export class Run {
     this.updatePet(dt);
     this.updatePickups(dt);
     if (this.enemies.length && this.enemies.every((e) => e.dead)) this.enemies = [];
-    if (this.state === STATE.FIGHT && !this.enemies.length) this.clearRoom();
+    if (this.state === STATE.FIGHT && !this.enemies.length && !this.survival) this.clearRoom();
     if (this.state === STATE.CLEARED && this.doorOpen) {
       const p = this.player;
       if (p.z < -this.arena.halfH + 0.55 && Math.abs(p.x) < DOOR_HALF) this.enterDoor();
     }
   }
 
+  /**
+   * Survival: waves pour in from the edges of the open arena, denser with time; two
+   * bosses join on the way. Holding until the end of the timer wins.
+   */
+  updateSurvival(dt) {
+    const sv = this.survival;
+    if (this.state !== STATE.FIGHT) return;
+    sv.time += dt;
+    if (sv.time >= SURVIVAL.duration) {
+      for (const item of this.pickups) {
+        if (item.kind === 'coin') this.coins += item.value;
+        else if (item.kind === 'loot' || item.kind === 'rune') this.collect(item);
+      }
+      this.pickups = [];
+      this.shots = [];
+      this.hazards = [];
+      this.pendingLevels = 0;
+      this.state = STATE.WON;
+      this.listener.onWin?.();
+      return;
+    }
+    // A "room" for the counters every tenth of the timer.
+    this.roomsCleared = Math.floor(sv.time / (SURVIVAL.duration / 10));
+    const t = sv.time / SURVIVAL.duration;
+    const alive = this.enemies.filter((e) => !e.dead).length;
+    if (sv.bosses < SURVIVAL.bosses.length && sv.time >= SURVIVAL.bosses[sv.bosses]) {
+      const pool = ENDLESS.bosses.slice(0, Math.max(2, Math.min(ENDLESS.bosses.length, this.chapterIndex + 1)));
+      const boss = pool[Math.floor(this.random() * pool.length)];
+      sv.bosses++;
+      const enemy = this.spawn(boss, 0, -this.arena.halfH + 2.5);
+      enemy.maxHp = enemy.hp = Math.round(enemy.hp * SURVIVAL.bossHealth);
+      this.listener.onSurvivalBoss?.(ENEMIES[boss]);
+    }
+    sv.wave -= dt;
+    if ((sv.wave <= 0 || alive === 0) && alive < SURVIVAL.maxAlive) {
+      // While a boss is up, the waves thin out.
+      const bossUp = this.enemies.some((e) => e.def.boss && !e.dead);
+      sv.wave = (SURVIVAL.every[0] + (SURVIVAL.every[1] - SURVIVAL.every[0]) * t) * (bossUp ? 2 : 1);
+      sv.waves++;
+      const pool = SURVIVAL.pool.filter(([, from]) => sv.waves >= from).map(([type]) => type);
+      const size = Math.round((SURVIVAL.size[0] + (SURVIVAL.size[1] - SURVIVAL.size[0]) * t) * this.mods.count * (bossUp ? 0.5 : 1));
+      const elites = this.eliteChance();
+      // From the edges: top rows and the sides, away from the hero.
+      const cells = this.arena.freeCells(0, this.arena.height - 1).filter((cell) => {
+        const c = this.arena.centerOf(cell);
+        const edge = Math.abs(c.x) > this.arena.halfW - 1.2 || c.z < -this.arena.halfH + 2.2;
+        return edge && (c.x - this.player.x) ** 2 + (c.z - this.player.z) ** 2 > 16;
+      });
+      for (let i = 0; i < size && cells.length; i++) {
+        const cell = cells.splice(Math.floor(this.random() * cells.length), 1)[0];
+        const at = this.arena.centerOf(cell);
+        const type = pool[Math.floor(this.random() * pool.length)];
+        this.spawn(type, at.x, at.z, SPAWN_DELAY + i * 0.08, { elite: this.random() < elites });
+      }
+    }
+  }
+
   clearRoom() {
     this.roomsCleared++;
-    // The boss is down: the chapter is won right away (no door, no last ability).
-    if (this.isBossRoom && !this.endless) {
+    // The last boss is down: the run is won right away (no door, no last ability).
+    if (this.isFinalRoom) {
       for (const item of this.pickups) {
         if (item.kind === 'coin') this.coins += item.value;
         else if (item.kind === 'loot' || item.kind === 'rune') this.collect(item);
@@ -428,13 +608,15 @@ export class Run {
     this.shots = [];
     this.hazards = [];
     this.zones = [];
-    if (this.endless && this.isBossRoom) this.gems += ENDLESS.gemsPerBoss;
+    if (this.tower && this.isBossRoom) this.gems += Math.round(TOWER.gemsPerBoss * this.rewardMul);
+    else if (this.endless && this.isBossRoom) this.gems += ENDLESS.gemsPerBoss;
+    else if (this.bossRush) this.gems += BOSS_RUSH.gemsPerBoss;
     // Treasure: the chest bursts into gold (and a heart).
     if (this.roomKind === 'treasure' && this.chest) {
       const { x, z } = this.chest;
       const value = 6 + this.chapterIndex * 4 + (this.endless ? Math.floor(this.roomIndex / 5) * 4 : 0);
       for (let i = 0; i < 14; i++) this.pickups.push({ id: this.nextId++, kind: 'coin', value: value * this.player.coinMul, x: x + (this.random() - 0.5) * 1.6, z: z + (this.random() - 0.5) * 1.6, magnet: false, view: null });
-      this.pickups.push({ id: this.nextId++, kind: 'heart', value: 0.2, x, z: z + 0.4, magnet: false, view: null });
+      if (this.mods.heal > 0) this.pickups.push({ id: this.nextId++, kind: 'heart', value: 0.2, x, z: z + 0.4, magnet: false, view: null });
       this.listener.onChestOpen?.(this.chest);
       this.chest = null;
     }
@@ -933,7 +1115,7 @@ export class Run {
     const tier = this.endless ? Math.min(7, Math.floor(this.roomIndex / 5)) : this.chapterIndex;
     const coins = Math.max(1, Math.round(enemy.def.coins * (1 + tier * 0.5) * (this.heroic ? 1.5 : 1) * (enemy.elite ? ELITE.coins : 1) * p.coinMul));
     for (let i = 0; i < Math.min(5, coins); i++) drop('coin', coins / Math.min(5, coins));
-    if (this.random() < (enemy.elite ? ELITE.heart : HEART_CHANCE)) drop('heart', 0.12);
+    if (this.mods.heal > 0 && this.random() < (enemy.elite ? ELITE.heart : HEART_CHANCE)) drop('heart', 0.12);
     // Loot: an item now and then (elites often, bosses always, two in the deeper chapters), and runes.
     if (!enemy.minion) {
       const source = enemy.def.boss ? 'boss' : enemy.elite ? 'elite' : 'normal';

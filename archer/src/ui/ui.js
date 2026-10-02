@@ -38,7 +38,7 @@ export class UI {
       return el;
     });
     this.floaterCursor = 0;
-    for (const id of ['btn-pause', 'btn-resume', 'btn-quit', 'btn-revive', 'btn-giveup', 'btn-end', 'btn-play', 'btn-prev', 'btn-next']) {
+    for (const id of ['btn-pause', 'btn-resume', 'btn-quit', 'btn-revive', 'btn-giveup', 'btn-end', 'btn-play', 'btn-prev', 'btn-next', 'btn-modes']) {
       $(id).addEventListener('click', () => this.handlers[id]?.());
     }
     for (const button of doc.querySelectorAll('#modes [data-mode]')) button.addEventListener('click', () => this.handlers.mode?.(button.dataset.mode));
@@ -423,7 +423,7 @@ export class UI {
 
   // ------------------------------------------------------------ menu
 
-  setMenu({ coins, gems, kicker, chapterName, best, locked, lockText, canPrev, canNext, mode, modes }) {
+  setMenu({ coins, gems, kicker, chapterName, best, locked, lockText, canPrev, canNext, mode, modeName, modes, dailyDue }) {
     this.$('menu-coins').textContent = compact(coins);
     this.$('menu-gems').textContent = compact(gems);
     this.$('chapter-kicker').textContent = kicker;
@@ -435,11 +435,19 @@ export class UI {
     this.$('btn-play').disabled = locked;
     this.$('btn-prev').disabled = !canPrev;
     this.$('btn-next').disabled = !canNext;
+    // No chapter arrows for the modes played outside the chapters.
+    for (const id of ['btn-prev', 'btn-next']) this.$(id).style.visibility = canPrev || canNext ? '' : 'hidden';
     for (const button of this.$('modes').querySelectorAll('[data-mode]')) {
       const id = button.dataset.mode;
       button.classList.toggle('is-active', id === mode);
-      button.classList.toggle('is-locked', id !== 'normal' && !modes[id]);
+      button.classList.toggle('is-locked', !modes[id]);
     }
+    // The third button opens the mode picker and shows the other mode being played.
+    const other = mode !== 'normal' && mode !== 'daily';
+    this.$('btn-modes').classList.toggle('is-active', other);
+    this.$('btn-modes').dataset.current = other ? mode : '';
+    this.$('modes-label').textContent = other ? modeName : 'Modes';
+    this.$('daily-dot').hidden = !dailyDue;
   }
 
   renderSettings(settings, hapticsSupported) {

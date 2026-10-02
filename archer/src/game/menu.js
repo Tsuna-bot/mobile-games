@@ -3,6 +3,7 @@ import { badge, compact, icon, itemArt } from '../ui/icons.js';
 import { BASES, LEGENDARY, MAX_STARS, RARITIES, SLOTS, awakenCost, canAwaken, itemStats, setOf, statLines, upgradeCost } from '../data/gear.js';
 import { CHESTS, HEROES, HERO_ORDER, PETS, TALENTS } from '../data/meta.js';
 import { CHAPTERS, ROOMS, isWon } from '../data/chapters.js';
+import { MODES, MODE_ORDER } from '../data/modes.js';
 import { ENEMIES } from '../data/enemies.js';
 import {
   CLASSES, CLASS_LEVEL, CLASS_SWITCH_GEMS, HERO_SPELLS, MAX_CLASS_RANK, MAX_HERO_LEVEL, MAX_SPELL_RANK, RECOMMENDED, RECOMMENDED_BONUSES, SPELLS, SPELL_UNLOCK, isRecommended,
@@ -15,7 +16,7 @@ import {
   runGear, salvage, salvageValue, selectHero, unequip, upgradeItem,
 } from '../meta/profile.js';
 import {
-  achievementState, canLearn, claimAchievement, claimDailyBonus, claimMission, dailyBonusReady, ensureDaily, learn, missionDef, nodeOpen, questsReady,
+  achievementState, canLearn, claimAchievement, claimDailyBonus, claimMission, dailyBonusReady, ensureDaily, learn, missionDef, modeOpen, nodeOpen, questsReady,
   resetTree, treeFree, treePoints, treeSpent,
 } from '../meta/progress.js';
 
@@ -608,6 +609,38 @@ export class Menu {
       });
     }
     card.querySelector('.is-current')?.scrollIntoView({ block: 'center' });
+    this.game.audio.click();
+  }
+
+  // ------------------------------------------------------------ modes
+
+  /** Every way to play, with its record; a tap picks it. */
+  openModes() {
+    const save = this.save;
+    const current = this.game.currentMode();
+    const cards = MODE_ORDER.map((id) => {
+      const m = MODES[id];
+      const open = modeOpen(save, id);
+      const record = open ? this.game.modeRecord(id) : '';
+      const text = open ? m.text : `Termine le chapitre ${m.opens + 1} pour l’ouvrir.`;
+      return `<button type="button" class="mode-card${id === current ? ' is-current' : ''}${open ? '' : ' is-locked'}" data-pick="${id}" data-mode="${id}">
+        <span class="mode-card__icon">${icon(open ? m.icon : 'lock')}</span>
+        <span class="mode-card__body"><b>${esc(m.name)}</b><small>${esc(text)}</small>${record ? `<em>${esc(record)}</em>` : ''}</span></button>`;
+    }).join('');
+    this.openPopup(`<h3 class="popup__name">Modes de jeu</h3><div class="mode-list">${cards}</div><div class="popup__actions"><button type="button" class="btn btn--ghost" data-close>Fermer</button></div>`, '#ffc93c');
+    const card = this.$('popup-card');
+    card.classList.add('popup__card--list');
+    card.querySelector('[data-close]').addEventListener('click', () => this.closePopup());
+    for (const row of card.querySelectorAll('[data-pick]')) {
+      row.addEventListener('click', () => {
+        if (!modeOpen(save, row.dataset.pick)) {
+          this.game.pickMode(row.dataset.pick);
+          return;
+        }
+        this.closePopup();
+        this.game.pickMode(row.dataset.pick);
+      });
+    }
     this.game.audio.click();
   }
 
