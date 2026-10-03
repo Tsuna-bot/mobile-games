@@ -260,7 +260,9 @@ export class Menu {
     } else game.audio.click();
     this.persist();
     this.renderGear();
-    if (act !== 'upgrade') game.refreshMenuPet();
+    // A new weapon (or pet) shows in the hero's hand (or at their shoulder) right away.
+    if (act === 'equip' || act === 'unequip' || act === 'merge') game.refreshMenuHero();
+    else if (act !== 'upgrade') game.refreshMenuPet();
     if (act === 'salvage' || act === 'unequip' || act === 'equip') this.closePopup();
     else this.openItem(uid);
   }

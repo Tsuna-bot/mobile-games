@@ -3,6 +3,7 @@ import { damp } from '../core/math.js';
 import { mergeSkinned } from './batch.js';
 import { skinOf } from '../data/skins.js';
 import { addOutlines, patchRim, toonCopy } from './surfaces.js';
+import { weaponShotGeometries } from './fx.js';
 
 const TMP = new THREE.Color();
 
@@ -115,6 +116,43 @@ const WEAPON_GRIP = {
   sword_1handed: { scale: 0.42, rotation: [0, 0, Math.PI / 2], position: [-0.05, 0, 0] },
 };
 
+// What the hero holds for each equipped weapon: a KayKit model, or one built here.
+const HELD_MODEL = { crossbow: 'crossbow_1handed', staff: 'staff' };
+const HELD_GRIP = {
+  bow: { scale: 1.1, rotation: [0, 0, 1.45], position: [-0.05, 0, 0] },
+  longbow: { scale: 1.5, rotation: [0, 0, 1.45], position: [-0.05, 0, 0] },
+  tome: { scale: 1.1, rotation: [0, 0, 0], position: [-0.08, 0, 0.02] },
+  shuriken: { scale: 1.5, rotation: [Math.PI / 2, 0, 0], position: [-0.1, 0, 0] },
+  blades: { scale: 1.4, rotation: [Math.PI / 2, 0, 0], position: [-0.12, 0, 0] },
+};
+
+/** A bow (wood limbs, a pale string), a spell book, or a shuriken / glaive held in the hand. */
+function heldProp(weapon) {
+  const group = new THREE.Group();
+  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...extra });
+  if (weapon === 'bow' || weapon === 'longbow') {
+    // Built along Y like the KayKit staff (same grip): limbs bowing forward, string behind.
+    const R = 0.32;
+    const arc = Math.PI * 0.82;
+    const limbs = new THREE.Mesh(new THREE.TorusGeometry(R, 0.017, 6, 28, arc).rotateZ(-arc / 2).translate(-R, 0, 0), mat(weapon === 'longbow' ? 0x3a2416 : 0x6a4426));
+    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 2 * R * Math.sin(arc / 2), 4), mat(0xf0e8d8));
+    string.position.x = R * Math.cos(arc / 2) - R;
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.1, 6), mat(0x2a1a10));
+    group.add(limbs, string, grip);
+  } else if (weapon === 'tome') {
+    const cover = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.26), mat(0x4a2a7a));
+    const pages = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.04, 0.24), mat(0xf4ecd0));
+    pages.position.x = 0.012;
+    const rune = new THREE.Mesh(new THREE.CircleGeometry(0.05, 6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffe070).multiplyScalar(1.6), toneMapped: false }));
+    rune.position.y = 0.027;
+    group.add(cover, pages, rune);
+  } else {
+    const geometry = weaponShotGeometries()[weapon];
+    group.add(new THREE.Mesh(geometry, mat(0xd8e0ee, { metalness: 0.85, roughness: 0.25 })));
+  }
+  return group;
+}
+
 // KayKit characters are ~2.5 units tall: this brings them to ~1.3.
 const CHARACTER_SCALE = 0.52;
 
@@ -195,7 +233,8 @@ export class Actors {
 
   // ------------------------------------------------------------ hero
 
-  createHero(def) {
+  /** `weapon`: the equipped weapon (bow, staff, shuriken...): the hero holds it. */
+  createHero(def, weapon = null) {
     if (this.hero) this.removeHero();
     const root = new THREE.Group();
     const body = new THREE.Group();
@@ -204,10 +243,12 @@ export class Actors {
     const anime = def.anime && this.assets.anime.has(def.anime) ? this.assets.anime.create(def.anime, ANIME_HEIGHT, def.outfit) : null;
     const figure = anime ? anime.figure : dressCharacter(this.assets, def.model, def.show, def.attach);
     body.add(figure);
-    // Anime heroes hold a KayKit weapon in the right hand.
-    if (anime && def.weapon3d && anime.hand) {
-      const weapon = this.assets.clone(def.weapon3d);
-      const grip = WEAPON_GRIP[def.weapon3d] ?? WEAPON_GRIP.default;
+    // Anime heroes hold their equipped weapon in the right hand (the assassin, their knife).
+    const held = def.id === 'assassin' || !weapon ? null : weapon;
+    const model = held ? HELD_MODEL[held] : def.weapon3d;
+    if (anime && anime.hand && (model || HELD_GRIP[held])) {
+      const weapon = model ? this.assets.clone(model) : heldProp(held);
+      const grip = model ? WEAPON_GRIP[model] ?? WEAPON_GRIP.default : HELD_GRIP[held];
       weapon.scale.setScalar(grip.scale);
       weapon.rotation.set(...grip.rotation);
       weapon.position.set(...grip.position);

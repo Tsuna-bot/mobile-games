@@ -248,7 +248,7 @@ export class Game {
   /** The chosen hero stands in the menu scene, their pet (if any) flying at their shoulder. */
   refreshMenuHero() {
     const hero = HEROES[this.save.heroes.selected] ?? HEROES.archer;
-    this.actors.createHero(hero);
+    this.actors.createHero(hero, this.gearStats().weapon);
     this.refreshMenuPet();
   }
 
@@ -431,7 +431,7 @@ export class Game {
     this.bestCombo = 0;
     this.ui.setCombo(0, 0);
     this.runGear = gear;
-    this.actors.createHero(gear.hero);
+    this.actors.createHero(gear.hero, gear.weapon);
     if (this.run.pet) this.actors.createPet(this.run.pet.def);
     else this.actors.removePet();
     this.buildRoom();

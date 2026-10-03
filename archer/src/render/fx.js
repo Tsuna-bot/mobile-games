@@ -27,6 +27,7 @@ const SHOT_GLOW = { orb: 0xff3a9a, arrow: 0xffc070, bone: 0xd8f0ff, rock: 0xff8a
 const RARITY_COLORS = [0xd8e0ea, 0x4fb4ff, 0xc070ff, 0xffc93c];
 const ORB_COLORS = { fire: 0xff8a2a, ice: 0x8fe0ff, bolt: 0xc9a0ff };
 const Y = 0.55;
+const WHITE = new THREE.Color(1, 1, 1);
 // Above 1: these glow through the bloom pass.
 const HDR = { core: 2.2, halo: 1.5, orb: 2.4 };
 
@@ -50,6 +51,61 @@ void main() {
   float flow = 0.7 + 0.3 * sin(vUv.y * 18.0 - uTime * 5.0);
   gl_FragColor = vec4(vTint * fade * edge * flow * 0.9, 1.0);
 }`;
+
+/** A flat star of `points` branches (outer / inner radius) with a hole: the shuriken. */
+function starShape(points, outer, inner, hole) {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < points * 2; i++) {
+    const a = (i / (points * 2)) * Math.PI * 2 + Math.PI / 4;
+    const r = i % 2 ? inner : outer;
+    if (i) shape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else shape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const h = new THREE.Path();
+  h.absarc(0, 0, hole, 0, Math.PI * 2, true);
+  shape.holes.push(h);
+  return shape;
+}
+
+/** Thin flat piece from a 2D shape, lying in the ground plane, centred. */
+function flatPiece(shape, depth) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: depth * 0.4, bevelSize: depth * 0.4, bevelSegments: 1, curveSegments: 8 });
+  g.center();
+  g.rotateX(-Math.PI / 2);
+  return g.toNonIndexed();
+}
+
+/**
+ * The hero's projectile models, one per weapon (the bow keeps the classic arrow):
+ * long arrow, crossbow bolt, shuriken, twin-bladed glaive and the tome's sigil.
+ */
+export function weaponShotGeometries() {
+  const tube = (r, length, z, sides = 6) => new THREE.CylinderGeometry(r, r, length, sides).rotateX(Math.PI / 2).translate(0, 0, z).toNonIndexed();
+  const cone = (r, length, z, sides) => new THREE.ConeGeometry(r, length, sides).rotateX(Math.PI / 2).translate(0, 0, z).toNonIndexed();
+  const vane = (w, length, z, angle) => new THREE.BoxGeometry(w, 0.008, length).rotateZ(angle).translate(0, 0, z).toNonIndexed();
+  // Longbow: a long shaft, a wide flat broadhead, long double vanes.
+  const broadhead = new THREE.ConeGeometry(0.075, 0.2, 4).rotateX(Math.PI / 2).scale(1, 0.35, 1).translate(0, 0, 0.5).toNonIndexed();
+  const longbow = mergeGeometries([tube(0.016, 0.85, 0.02), broadhead, vane(0.13, 0.2, -0.32, 0), vane(0.13, 0.2, -0.32, Math.PI / 2)]);
+  // Crossbow bolt: short and thick, a square pyramid tip, short stiff vanes.
+  const crossbow = mergeGeometries([tube(0.03, 0.36, 0, 6), cone(0.065, 0.13, 0.24, 4), tube(0.04, 0.03, 0.16, 6), vane(0.1, 0.09, -0.15, 0), vane(0.1, 0.09, -0.15, Math.PI / 2)]);
+  // Shuriken: a four-branched steel star.
+  const shuriken = flatPiece(starShape(4, 0.2, 0.055, 0.03), 0.018);
+  // Twin blades: two curved blades around a hub, spinning like a glaive.
+  const blade = new THREE.Shape();
+  blade.moveTo(0.04, -0.03);
+  blade.quadraticCurveTo(0.2, -0.06, 0.27, 0.07);
+  blade.quadraticCurveTo(0.16, 0.0, 0.04, 0.03);
+  blade.lineTo(0.04, -0.03);
+  const half = flatPiece(blade, 0.014);
+  half.translate(0.13, 0, 0);
+  const other = half.clone().rotateY(Math.PI);
+  const hub = new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10).toNonIndexed();
+  const blades = mergeGeometries([half, other, hub]);
+  // Tome: a golden sigil, a six-pointed star in a ring.
+  const ring = new THREE.RingGeometry(0.14, 0.17, 24).rotateX(-Math.PI / 2).toNonIndexed();
+  const sigil = mergeGeometries([ring, flatPiece(starShape(6, 0.13, 0.065, 0.025), 0.01)]);
+  return { longbow, crossbow, shuriken, blades, sigil };
+}
 
 // Arrow streak: a flat glowing ribbon trailing behind each arrow, brightest at the head.
 const STREAK_VERTEX = /* glsl */ `
@@ -242,6 +298,27 @@ export class Fx {
     this.kunaiMesh.frustumCulled = false;
     scene.add(this.kunaiMesh);
 
+    // The other weapons' projectiles (instance colour: white, or the hero's element).
+    const shots = weaponShotGeometries();
+    // Bright steel: it must read against any floor, seen from above.
+    const steel = () => new THREE.MeshStandardMaterial({ color: 0xf0f4ff, metalness: 0.6, roughness: 0.3, emissive: 0x8a96b4, emissiveIntensity: 0.75 });
+    this.weaponShots = {
+      longbow: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff0d0).multiplyScalar(1.2), toneMapped: false }),
+      crossbow: new THREE.MeshStandardMaterial({ color: 0xe0b878, metalness: 0.4, roughness: 0.4, emissive: 0x8a6030, emissiveIntensity: 0.7 }),
+      shuriken: steel(),
+      blades: steel(),
+      sigil: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffe070).multiplyScalar(2.2), toneMapped: false, side: THREE.DoubleSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+    };
+    for (const [id, material] of Object.entries(this.weaponShots)) {
+      const mesh = new THREE.InstancedMesh(shots[id], material, 160);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(160 * 3).fill(1), 3);
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      if (id === 'sigil') mesh.renderOrder = 24;
+      scene.add(mesh);
+      this.weaponShots[id] = mesh;
+    }
+
     // Monster shots: a bright core and an additive halo.
     const sphere = new THREE.SphereGeometry(1, 12, 8);
     this.shotCore = new THREE.InstancedMesh(sphere, new THREE.MeshBasicMaterial({ toneMapped: false }), 300);
@@ -336,7 +413,8 @@ export class Fx {
       if (!this.floorRings.length) this.ring(0, -99, 0.1, 0.01, COLORS.spark);
       if (!this.bolts.length) this.lightning(0, -99, 0.1, -99);
       this.warmList = [...this.hazardPool.map((h) => h.mesh), ...this.lines.map((l) => l.mesh), ...this.floorRings.map((r) => r.mesh), ...this.bolts.map((b) => b.line),
-        this.lootMesh, this.beamMesh, this.runeMesh, this.starMesh, this.heroOrbs, this.orbMesh, this.kunaiMesh, this.shotCore, this.shotHalo, this.xpMesh, this.coinMesh, this.heartMesh, this.arrowMesh, this.streakMesh];
+        this.lootMesh, this.beamMesh, this.runeMesh, this.starMesh, this.heroOrbs, this.orbMesh, this.kunaiMesh, this.shotCore, this.shotHalo, this.xpMesh, this.coinMesh, this.heartMesh, this.arrowMesh, this.streakMesh,
+        ...Object.values(this.weaponShots)];
       for (const m of this.warmList) {
         m.userData.wasVisible = m.visible;
         m.visible = true;
@@ -681,20 +759,44 @@ export class Fx {
     if (!run) {
       this.lootMesh.count = this.beamMesh.count = this.runeMesh.count = 0;
       this.kunaiMesh.count = this.streakMesh.count = this.arrowMesh.count = this.shotCore.count = this.shotHalo.count = this.xpMesh.count = this.coinMesh.count = this.heartMesh.count = this.orbMesh.count = this.heroOrbs.count = 0;
+      for (const mesh of Object.values(this.weaponShots)) mesh.count = 0;
       return;
     }
 
-    // Arrows (+ a faint trail); staff and pet shots are glowing orbs, blades spin.
+    // Each weapon shows its own projectile: arrows (bow, wind arrow), long arrows, crossbow
+    // bolts, spinning shurikens and blades, the staff's orbs, the tome's sigils, kunai.
     const hero = run.player;
     const arrowTint = hero.burn ? COLORS.fire : hero.frost ? COLORS.ice : hero.poison ? COLORS.poison : hero.bolt ? COLORS.bolt : COLORS.arrow;
+    const elemental = arrowTint !== COLORS.arrow;
+    // Steel and wood keep their colour, only tinted by an element.
+    const solidTint = elemental ? hdrColor.copy(arrowTint).lerp(WHITE, 0.45).clone() : WHITE;
+    const ws = this.weaponShots;
+    const counts = { longbow: 0, crossbow: 0, shuriken: 0, blades: 0, sigil: 0 };
     let n = 0;
     let no = 0;
     let nk = 0;
     let nt = 0;
+    const streak = (a, k, tint) => {
+      if (nt >= 240) return;
+      dummy.position.set(a.x, Y - 0.02, a.z);
+      dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
+      dummy.scale.set(0.15 * k, 1, 1.1 * k);
+      dummy.updateMatrix();
+      this.streakMesh.setMatrixAt(nt, dummy.matrix);
+      this.streakMesh.setColorAt(nt++, hdrColor.copy(tint).multiplyScalar(tint === COLORS.arrow ? 0.9 : 1.4));
+    };
+    const put = (id, color) => {
+      const i = counts[id];
+      if (i >= 160) return;
+      dummy.updateMatrix();
+      ws[id].setMatrixAt(i, dummy.matrix);
+      ws[id].setColorAt(i, color);
+      counts[id]++;
+    };
     for (const a of run.arrows) {
       if (a.kind === 'staff' || a.kind === 'tome' || a.kind === 'pet') {
         if (no >= 120) continue;
-        const size = a.kind === 'pet' ? 0.9 : a.kind === 'tome' ? 1.45 : 1.3;
+        const size = a.kind === 'pet' ? 0.9 : a.kind === 'tome' ? 0.85 : 1.3;
         dummy.position.set(a.x, Y, a.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.setScalar(size * (1 + Math.sin(t * 25 + a.id) * 0.12));
@@ -702,6 +804,13 @@ export class Fx {
         this.heroOrbs.setMatrixAt(no, dummy.matrix);
         color.setHex(a.kind === 'pet' ? a.color : a.kind === 'tome' ? 0xffe066 : 0xb890ff);
         this.heroOrbs.setColorAt(no++, hdrColor.copy(color).multiplyScalar(HDR.orb));
+        if (a.kind === 'tome') {
+          // The tome's sigil turns around its spark, crackling.
+          dummy.rotation.set(0, t * 6 + a.id, 0);
+          dummy.scale.setScalar(1.15);
+          put('sigil', elemental && arrowTint !== COLORS.bolt ? hdrColor.copy(arrowTint).lerp(WHITE, 0.3) : WHITE);
+          if ((a.id + Math.floor(t * 30)) % 3 === 0) this.sparks.emit(a.x, Y, a.z, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 3, COLORS.bolt, 0.12, 0.15, { endSize: 0.02, drag: 4, brightness: 2.4 });
+        }
         this.sparks.emit(a.x, Y, a.z, 0, 0, 0, color, a.kind === 'pet' ? 0.2 : 0.3, 0.22, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.8 });
         continue;
       }
@@ -715,17 +824,27 @@ export class Fx {
         if ((a.id + Math.floor(t * 60)) % 2 === 0) this.sparks.emit(a.x - a.dx * 0.2, Y, a.z - a.dz * 0.2, 0, 0, 0, COLORS.shadow, 0.1, 0.16, { endSize: 0.02, drag: 0, brightness: 1.4, opacity: 0.7 });
         continue;
       }
-      if (n >= 240) break;
       dummy.position.set(a.x, Y, a.z);
-      if (a.kind === 'blades' || a.kind === 'shuriken') {
-        // Spinning blades; shurikens a little bigger, spinning faster.
-        dummy.rotation.set(0, t * (a.kind === 'shuriken' ? 32 : 25) + a.id, Math.PI / 2);
-        if (a.kind === 'shuriken') dummy.scale.set(1.2, 0.8, 0.8);
-        else dummy.scale.set(1, 0.6, 0.6);
-      } else {
-        dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
-        dummy.scale.setScalar(a.kind === 'crossbow' ? 1.35 : a.kind === 'longbow' ? 1.55 : a.kind === 'gale' ? 3.2 : 1);
+      if (a.kind === 'shuriken' || a.kind === 'blades') {
+        // Flat, spinning fast; a glint of steel (or of the element) behind.
+        dummy.rotation.set(0, -t * (a.kind === 'shuriken' ? 30 : 22) - a.id, 0);
+        dummy.scale.setScalar(a.kind === 'shuriken' ? 1.35 : 1.4);
+        put(a.kind, solidTint);
+        if ((a.id + Math.floor(t * 60)) % 2 === 0) this.sparks.emit(a.x, Y, a.z, 0, 0, 0, elemental ? arrowTint : COLORS.soul, 0.1, 0.14, { endSize: 0.02, drag: 0, brightness: 1.6, opacity: 0.6 });
+        continue;
       }
+      if (a.kind === 'longbow' || a.kind === 'crossbow') {
+        dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
+        dummy.scale.setScalar(a.kind === 'longbow' ? 1.15 : 1.35);
+        put(a.kind, a.kind === 'longbow' ? hdrColor.copy(arrowTint).multiplyScalar(elemental ? 1.6 : 1).clone() : solidTint);
+        streak(a, a.kind === 'longbow' ? 1.4 : 1.15, arrowTint);
+        this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0.1, 0, arrowTint, elemental ? 0.13 : 0.09, 0.18, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.75 });
+        continue;
+      }
+      // The bow's arrows and the wind arrow.
+      if (n >= 240) continue;
+      dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
+      dummy.scale.setScalar(a.kind === 'gale' ? 3.2 : 1);
       // The wind arrow: a thick cyan wake.
       if (a.kind === 'gale') {
         for (let k = 0; k < 3; k++) this.sparks.emit(a.x - a.dx * (0.3 + k * 0.25), Y + (Math.random() - 0.5) * 0.3, a.z - a.dz * (0.3 + k * 0.25), (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 1.2, COLORS.ice, 0.32 - k * 0.06, 0.3, { endSize: 0.04, drag: 2, brightness: 2.2 });
@@ -733,19 +852,14 @@ export class Fx {
       dummy.updateMatrix();
       this.arrowMesh.setMatrixAt(n, dummy.matrix);
       // Arrows glow in the colour of the hero's element (fire, ice, poison, lightning).
-      const tint = arrowTint;
-      this.arrowMesh.setColorAt(n++, hdrColor.copy(tint).multiplyScalar(tint === COLORS.arrow ? 1.25 : 2));
-      if (a.kind !== 'blades' && a.kind !== 'shuriken' && nt < 240) {
-        // A long, heavy shot leaves a longer, wider streak.
-        const k = a.kind === 'gale' ? 2.2 : a.kind === 'longbow' ? 1.4 : a.kind === 'crossbow' ? 1.2 : 1;
-        dummy.position.set(a.x, Y - 0.02, a.z);
-        dummy.rotation.set(0, Math.atan2(a.dx, a.dz), 0);
-        dummy.scale.set(0.15 * k, 1, 1.1 * k);
-        dummy.updateMatrix();
-        this.streakMesh.setMatrixAt(nt, dummy.matrix);
-        this.streakMesh.setColorAt(nt++, hdrColor.copy(tint).multiplyScalar(tint === COLORS.arrow ? 0.9 : 1.4));
-      }
-      this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0.1, 0, tint, tint === COLORS.arrow ? 0.09 : 0.13, 0.18, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.75 });
+      this.arrowMesh.setColorAt(n++, hdrColor.copy(arrowTint).multiplyScalar(elemental ? 2 : 1.25));
+      streak(a, a.kind === 'gale' ? 2.2 : 1, arrowTint);
+      this.sparks.emit(a.x - a.dx * 0.25, Y, a.z - a.dz * 0.25, 0, 0.1, 0, arrowTint, elemental ? 0.13 : 0.09, 0.18, { endSize: 0.02, drag: 0, brightness: 1.5, opacity: 0.75 });
+    }
+    for (const [id, mesh] of Object.entries(ws)) {
+      mesh.count = counts[id];
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
     }
     this.arrowMesh.count = n;
     this.arrowMesh.instanceMatrix.needsUpdate = true;
